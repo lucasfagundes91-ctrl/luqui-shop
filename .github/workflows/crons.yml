@@ -1,0 +1,54 @@
+name: Cron Diário LuquiShop
+
+on:
+  schedule:
+    # Horários em UTC (Brasil = UTC-3)
+    # 11:00 UTC = 08:00 BR — aniversariantes (cliente acorda com cupom)
+    - cron: "0 11 * * *"
+    # 13:00 UTC = 10:00 BR — email pós-compra (pedir avaliação de quem comprou há 7 dias)
+    - cron: "0 13 * * *"
+    # 17:00 UTC = 14:00 BR — carrinho abandonado (gente que ficou ontem sem finalizar)
+    - cron: "0 17 * * *"
+  # Permite disparar manualmente pelo painel do GitHub
+  workflow_dispatch:
+    inputs:
+      cron:
+        description: "Qual cron rodar (aniversariantes / email-pos-compra / carrinho-abandonado / todos)"
+        required: true
+        default: "todos"
+
+jobs:
+  run-crons:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Identifica o cron baseado no horário
+        id: which
+        run: |
+          HORA_UTC=$(date -u +%H)
+          if [ "${{ github.event.schedule }}" = "0 11 * * *" ]; then
+            echo "rota=aniversariantes" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.schedule }}" = "0 13 * * *" ]; then
+            echo "rota=email-pos-compra" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.schedule }}" = "0 17 * * *" ]; then
+            echo "rota=carrinho-abandonado" >> $GITHUB_OUTPUT
+          else
+            echo "rota=${{ github.event.inputs.cron }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Dispara cron aniversariantes
+        if: steps.which.outputs.rota == 'aniversariantes' || steps.which.outputs.rota == 'todos'
+        run: |
+          curl -sS --fail "https://www.luquibrinquedos.com.br/cron/aniversariantes?token=${{ secrets.CRON_TOKEN }}" \
+            -H "User-Agent: LuquiShop-Cron/1.0" || exit 1
+
+      - name: Dispara cron email pós-compra
+        if: steps.which.outputs.rota == 'email-pos-compra' || steps.which.outputs.rota == 'todos'
+        run: |
+          curl -sS --fail "https://www.luquibrinquedos.com.br/cron/email-pos-compra?token=${{ secrets.CRON_TOKEN }}" \
+            -H "User-Agent: LuquiShop-Cron/1.0" || exit 1
+
+      - name: Dispara cron carrinho abandonado
+        if: steps.which.outputs.rota == 'carrinho-abandonado' || steps.which.outputs.rota == 'todos'
+        run: |
+          curl -sS --fail "https://www.luquibrinquedos.com.br/cron/carrinho-abandonado?token=${{ secrets.CRON_TOKEN }}" \
+            -H "User-Agent: LuquiShop-Cron/1.0" || exit 1
