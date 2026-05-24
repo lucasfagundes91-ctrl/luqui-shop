@@ -25,15 +25,9 @@
   .topo{ background:#fff; border-bottom:1px solid var(--linha); }
   .topo .container{ max-width:1200px; margin:0 auto; padding:14px 16px;
     display:flex; align-items:center; gap:18px; }
-  .logo{ display:flex; align-items:center; gap:6px; flex:none; }
-  .logo-img{
-    background:#FFC700; padding:8px 16px; border-radius:14px;
-    color:#1652C7; font-weight:900; font-size:30px; letter-spacing:-1px;
-    font-family:'Comic Sans MS','Marker Felt',sans-serif;
-    box-shadow:0 4px 0 #E0A800; line-height:.9;
-  }
-  .logo-img small{ display:block; font-size:11px; font-weight:700; letter-spacing:2px;
-    color:#1652C7; opacity:.85; margin-top:2px;}
+  .logo{ display:flex; align-items:center; gap:6px; flex:none;
+    text-decoration:none; }
+  .logo svg{ display:block; height:64px; width:auto; }
   .busca{ flex:1; position:relative; }
   .busca input{ width:100%; padding:14px 50px 14px 20px; border-radius:30px;
     border:2px solid var(--linha); font-size:14px; outline:none;
@@ -193,11 +187,30 @@
 <!-- TOPO -->
 <header class="topo">
   <div class="container">
-    <a href="/" class="logo">
-      <div class="logo-img">
-        Luqui
-        <small>BRINQUEDOS</small>
-      </div>
+    <a href="/" class="logo" aria-label="Luqui Brinquedos">
+      <svg viewBox="0 0 240 84" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Luqui Brinquedos">
+        <defs>
+          <linearGradient id="luqAm" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#FFD400"/>
+            <stop offset="100%" stop-color="#FFA800"/>
+          </linearGradient>
+        </defs>
+        <!-- "Luqui" cursivo amarelo com contorno azul + sombra -->
+        <g transform="translate(8 0)">
+          <text x="0" y="50" font-family="'Comic Sans MS','Marker Felt','Brush Script MT',cursive"
+                font-size="58" font-weight="900" fill="#1652C7"
+                style="paint-order:stroke;stroke:#1652C7;stroke-width:10px;stroke-linejoin:round">Luqui</text>
+          <text x="0" y="50" font-family="'Comic Sans MS','Marker Felt','Brush Script MT',cursive"
+                font-size="58" font-weight="900" fill="url(#luqAm)">Luqui</text>
+          <!-- Sorriso embaixo do "i" -->
+          <circle cx="148" cy="20" r="4" fill="#1652C7"/>
+          <path d="M 145 28 Q 152 36 159 28" stroke="#1652C7" stroke-width="3" fill="none" stroke-linecap="round"/>
+        </g>
+        <!-- "BRINQUEDOS" embaixo, azul espaçado -->
+        <text x="120" y="76" font-family="'Arial Black','Helvetica',sans-serif" text-anchor="middle"
+              font-size="13" font-weight="900" fill="#1652C7"
+              letter-spacing="3.5">BRINQUEDOS</text>
+      </svg>
     </a>
     <form class="busca" action="/buscar" method="get">
       <input name="q" placeholder="o que você procura?" autocomplete="off"
@@ -262,8 +275,8 @@
 <footer class="footer">
   <div class="container">
     <div>
-      <div class="logo-img" style="display:inline-block;margin-bottom:14px">
-        Luqui<small>BRINQUEDOS</small>
+      <div style="display:inline-block;margin-bottom:14px;background:#FFC700;padding:6px 14px;border-radius:10px;font-family:'Comic Sans MS','Marker Felt',cursive;font-size:24px;font-weight:900;color:#1652C7;line-height:1">
+        Luqui<div style="font-size:9px;letter-spacing:2px;font-family:Arial,sans-serif">BRINQUEDOS</div>
       </div>
       <p style="font-size:13px;color:#cbd5e1;line-height:1.6">
         A loja de brinquedos da família.<br>

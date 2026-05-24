@@ -872,6 +872,111 @@ def admin_planos():
     return render_template('admin_planos.html', planos=planos)
 
 
+def _envio_config_por_plano(slug):
+    """Quantidade de brinquedos e livros que cada plano envia por mês."""
+    cfgs = {
+        'smart-mensal':     {'brinquedos': 1, 'livros': 0, 'extras': 'marca página'},
+        'smart-anual':      {'brinquedos': 1, 'livros': 0, 'extras': 'marca página'},
+        'essencial-mensal': {'brinquedos': 1, 'livros': 1, 'extras': 'marca página + material'},
+        'essencial-anual':  {'brinquedos': 1, 'livros': 1, 'extras': 'marca página + material'},
+        'premium-mensal':   {'brinquedos': 2, 'livros': 2, 'extras': 'marca página + material + 1 evento'},
+        'premium-anual':    {'brinquedos': 2, 'livros': 2, 'extras': 'marca página + material + 1 evento'},
+    }
+    return cfgs.get(slug, {'brinquedos': 1, 'livros': 0, 'extras': ''})
+
+
+@app.route('/admin/clube/envio-mensal')
+@requer_admin
+def admin_clube_envio():
+    """Tela pra preparar e despachar a Caixa Misteriosa do mês."""
+    referencia = request.args.get('mes') or datetime.now(SP_TZ).strftime('%Y-%m')
+    ativos = db_execute("""
+        SELECT a.id AS assinatura_id, a.proximo_envio, a.ultimo_envio,
+               p.slug AS plano_slug, p.nome AS plano_nome, p.preco_mensal,
+               c.id AS cliente_id, c.nome AS cliente_nome,
+               c.email, c.telefone, c.endereco, c.numero, c.complemento,
+               c.bairro, c.cidade, c.uf, c.cep,
+               (SELECT COUNT(*) FROM clube_envios e
+                  WHERE e.assinatura_id=a.id AND e.referencia_mes=%s) AS ja_enviou
+          FROM clube_assinaturas a
+          JOIN clube_planos p ON p.id=a.plano_id
+          JOIN clientes_site c ON c.id=a.cliente_id
+         WHERE a.status='ativa'
+         ORDER BY a.proximo_envio NULLS FIRST, c.nome
+    """, [referencia], fetch='all') or []
+    # Enriquece com config de quantidade
+    for a in ativos:
+        a['envio_cfg'] = _envio_config_por_plano(a['plano_slug'])
+    return render_template('admin_clube_envio.html',
+                           assinantes=ativos, referencia=referencia)
+
+
+@app.route('/api/clube/envio/registrar', methods=['POST'])
+@requer_admin
+def clube_envio_registrar():
+    """Registra o envio de UM assinante no mês. Marca clube_envios + atualiza
+    proximo_envio + dá baixa de estoque no PDV Pro pra cada produto."""
+    d = request.get_json() or {}
+    aid = int(d.get('assinatura_id') or 0)
+    referencia = (d.get('referencia_mes') or
+                  datetime.now(SP_TZ).strftime('%Y-%m'))
+    itens = d.get('itens') or []  # [{produto_id, descricao, preco}]
+    if not aid or not itens:
+        return jsonify({'erro': 'Faltam dados'}), 400
+    ass = db_execute("SELECT * FROM clube_assinaturas WHERE id=%s",
+                     [aid], fetch='one')
+    if not ass or ass['status'] != 'ativa':
+        return jsonify({'erro': 'Assinatura não ativa'}), 400
+    # Insere envios + baixa estoque PDV Pro
+    descricao_total = ', '.join(i.get('descricao', '?') for i in itens)
+    db_execute("""INSERT INTO clube_envios
+        (assinatura_id, referencia_mes, descricao, observacao)
+        VALUES (%s,%s,%s,%s)""",
+        [aid, referencia, descricao_total[:500],
+         d.get('observacao') or 'Caixa Misteriosa do mês'])
+    # Atualiza assinatura
+    db_execute("""UPDATE clube_assinaturas SET ultimo_envio=CURRENT_DATE,
+                  proximo_envio=CURRENT_DATE + INTERVAL '30 days'
+                  WHERE id=%s""", [aid])
+    # Dá baixa no PDV Pro como "venda interna"
+    if PDVPRO_API_KEY:
+        try:
+            cli = db_execute("""SELECT c.* FROM clientes_site c
+                JOIN clube_assinaturas a ON a.cliente_id=c.id
+                WHERE a.id=%s""", [aid], fetch='one') or {}
+            payload = {
+                'pedido_id': f'clube-{aid}-{referencia}',
+                'cliente': {'nome': cli.get('nome'), 'email': cli.get('email'),
+                            'cpf': cli.get('cpf'), 'telefone': cli.get('telefone')},
+                'itens': [{'produto_id': i['produto_id'],
+                           'descricao': i.get('descricao'),
+                           'preco_unitario': 0,  # brinde do clube
+                           'quantidade': 1,
+                           'subtotal': 0} for i in itens],
+                'total': 0, 'desconto': 0, 'frete': 0,
+                'forma_pagto': 'bonus_clube',
+            }
+            requests.post(PDVPRO_URL + '/api/integracao/pedido',
+                          json=payload,
+                          headers={'X-API-Key': PDVPRO_API_KEY}, timeout=15)
+        except Exception as e:
+            log.error("baixa estoque clube: %s", e)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/integracao/buscar-produto')
+@requer_admin
+def admin_buscar_produto():
+    """Proxy do admin pra buscar produtos no PDV Pro (autocomplete na tela
+    de envio do clube)."""
+    q = (request.args.get('q') or '').strip()
+    if len(q) < 2:
+        return jsonify({'produtos': []})
+    rs = pdv_get('/api/integracao/produtos',
+                 {'busca': q, 'limite': 10, 'apenas_vitrine': '0'}, ttl=10)
+    return jsonify({'produtos': (rs or {}).get('produtos', [])[:10]})
+
+
 # ─── Asaas ────────────────────────────────────────────────────────────────────
 def _asaas_headers():
     return {'access_token': ASAAS_API_KEY,

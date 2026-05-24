@@ -1,0 +1,160 @@
+{% extends "admin_base.html" %}
+{% set pagina = 'assinantes' %}
+{% block titulo %}Envio Mensal — Clube Luqui{% endblock %}
+{% block conteudo %}
+<h2>🎁 Caixa Misteriosa — Envio Mensal</h2>
+
+<div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px">
+  <div>
+    <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Mês de referência</label>
+    <input type="month" value="{{ referencia }}"
+           onchange="location.href='/admin/clube/envio-mensal?mes='+this.value"
+           style="padding:8px;border:1px solid #E2E8F0;border-radius:8px;margin-left:10px">
+  </div>
+  <div style="font-size:13px;color:#64748B">
+    {{ assinantes|length }} assinante(s) ativo(s) ·
+    {{ assinantes|selectattr('ja_enviou')|list|length }} já enviado(s) neste mês
+  </div>
+</div>
+
+{% if not assinantes %}
+  <div class="card" style="text-align:center;padding:50px;color:#64748B">
+    Nenhum assinante ativo ainda. Quando alguém assinar o Clube pelo site, aparece aqui.
+  </div>
+{% else %}
+  {% for a in assinantes %}
+  <div class="card" id="ass-{{ a.assinatura_id }}" style="border-left:6px solid {{ '#16A34A' if a.ja_enviou else '#FFC700' }}">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px;margin-bottom:14px">
+      <div>
+        <h3 style="color:#1652C7">{{ a.cliente_nome }}
+          <span style="font-size:13px;color:#64748B;font-weight:normal">— {{ a.plano_nome }}</span>
+        </h3>
+        <div style="font-size:12px;color:#64748B;margin-top:4px">
+          📧 {{ a.email }} · 📱 {{ a.telefone or '—' }}<br>
+          📍 {{ a.endereco }}, {{ a.numero }}{% if a.complemento %} ({{ a.complemento }}){% endif %} — {{ a.bairro }} — {{ a.cidade }}/{{ a.uf }} — CEP {{ a.cep or '—' }}
+        </div>
+      </div>
+      <div style="text-align:right;font-size:12px">
+        {% if a.ja_enviou %}
+          <span class="pill verde">✓ ENVIADO ESTE MÊS</span>
+        {% else %}
+          <span class="pill amarelo">PENDENTE</span>
+        {% endif %}
+        <div style="margin-top:6px;color:#64748B">
+          Último envio: {{ a.ultimo_envio.strftime('%d/%m/%Y') if a.ultimo_envio else 'nunca' }}<br>
+          Próximo programado: {{ a.proximo_envio.strftime('%d/%m/%Y') if a.proximo_envio else '—' }}
+        </div>
+      </div>
+    </div>
+
+    <div style="background:#FEF3C7;color:#92400E;padding:10px;border-radius:8px;font-size:13px;margin-bottom:14px">
+      📦 <b>Vai na caixa:</b>
+      {{ a.envio_cfg.brinquedos }} brinquedo(s){% if a.envio_cfg.livros %} + {{ a.envio_cfg.livros }} livro(s){% endif %}
+      {% if a.envio_cfg.extras %}+ {{ a.envio_cfg.extras }}{% endif %}
+    </div>
+
+    {% if not a.ja_enviou %}
+      <h4 style="margin-bottom:8px;font-size:13px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Itens da caixa</h4>
+      <div id="busca-{{ a.assinatura_id }}" style="position:relative">
+        <input type="text" placeholder="Buscar produto no estoque (digite nome ou código)..."
+               oninput="buscarProd({{ a.assinatura_id }}, this.value)"
+               style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;font-size:14px">
+        <div id="resultados-{{ a.assinatura_id }}"
+             style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px;max-height:300px;overflow-y:auto;z-index:5;display:none;box-shadow:0 8px 24px rgba(0,0,0,.1)"></div>
+      </div>
+      <div id="selecionados-{{ a.assinatura_id }}" style="margin-top:14px"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <input type="text" id="obs-{{ a.assinatura_id }}" placeholder="Observação (opcional)"
+               style="flex:1;padding:10px;border:1px solid #E2E8F0;border-radius:8px;font-size:13px">
+        <button onclick="confirmarEnvio({{ a.assinatura_id }})"
+                style="background:#16A34A;color:#fff;border:0;padding:12px 24px;border-radius:8px;font-weight:700;cursor:pointer">
+          ✓ Confirmar envio
+        </button>
+      </div>
+    {% else %}
+      <p style="color:#64748B;font-size:13px">
+        ℹ️ Envio deste mês já registrado. Veja em <a href="/admin/assinantes" style="color:#1652C7;font-weight:600">Assinantes</a>.
+      </p>
+    {% endif %}
+  </div>
+  {% endfor %}
+{% endif %}
+
+<script>
+const SELEC = {};
+let buscaTimer = null;
+
+async function buscarProd(aid, termo){
+  termo = termo.trim();
+  const box = document.getElementById('resultados-'+aid);
+  if(termo.length < 2){ box.style.display='none'; return; }
+  clearTimeout(buscaTimer);
+  buscaTimer = setTimeout(async ()=>{
+    try {
+      const r = await fetch('/api/integracao/buscar-produto?q='+encodeURIComponent(termo));
+      const d = await r.json();
+      const lista = d.produtos || [];
+      if(!lista.length){
+        box.innerHTML = '<div style="padding:10px;color:#64748B;font-size:13px">Nenhum produto encontrado</div>';
+      } else {
+        box.innerHTML = lista.map(p=>`
+          <div style="padding:10px;border-bottom:1px solid #E2E8F0;cursor:pointer;font-size:13px"
+               onmouseover="this.style.background='#F8FAFC'" onmouseout="this.style.background='#fff'"
+               onclick='adicionarItem(${aid}, ${JSON.stringify(p).replace(/'/g,"&#39;")})'>
+            <b>${p.descricao}</b>
+            <div style="font-size:11px;color:#64748B">Cód.: ${p.codigo_barras || '—'} · estoque: ${p.estoque_atual}</div>
+          </div>
+        `).join('');
+      }
+      box.style.display='block';
+    } catch(e){ console.error(e); }
+  }, 250);
+}
+
+function adicionarItem(aid, prod){
+  if(!SELEC[aid]) SELEC[aid] = [];
+  if(SELEC[aid].some(p=>p.id === prod.id)) return;
+  SELEC[aid].push(prod);
+  renderSelecionados(aid);
+  document.getElementById('resultados-'+aid).style.display='none';
+  document.querySelector('#busca-'+aid+' input').value = '';
+}
+
+function removerItem(aid, pid){
+  SELEC[aid] = (SELEC[aid] || []).filter(p=>p.id !== pid);
+  renderSelecionados(aid);
+}
+
+function renderSelecionados(aid){
+  const box = document.getElementById('selecionados-'+aid);
+  const lista = SELEC[aid] || [];
+  if(!lista.length){ box.innerHTML = '<p style="color:#64748B;font-size:12px">Nenhum item selecionado ainda</p>'; return; }
+  box.innerHTML = lista.map(p=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;background:#EFF6FF;padding:8px 12px;border-radius:8px;margin-bottom:6px;font-size:13px">
+      <span>📦 ${p.descricao}</span>
+      <button onclick="removerItem(${aid},${p.id})" style="background:none;color:#DC2626;font-size:18px;cursor:pointer">×</button>
+    </div>
+  `).join('');
+}
+
+async function confirmarEnvio(aid){
+  const itens = SELEC[aid] || [];
+  if(!itens.length){ alert('Adicione pelo menos 1 item antes de confirmar.'); return; }
+  if(!confirm('Confirmar envio de '+itens.length+' item(ns)? Vai dar baixa de estoque no PDV Pro.')) return;
+  try {
+    const r = await fetch('/api/clube/envio/registrar', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        assinatura_id: aid,
+        referencia_mes: '{{ referencia }}',
+        itens: itens.map(p=>({produto_id: p.id, descricao: p.descricao})),
+        observacao: document.getElementById('obs-'+aid).value,
+      }),
+    });
+    const d = await r.json();
+    if(d.erro){ alert(d.erro); return; }
+    location.reload();
+  } catch(e){ alert('Erro: '+e.message); }
+}
+</script>
+{% endblock %}
