@@ -5,7 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block titulo %}Luqui Brinquedos — Aqui você compra brincando{% endblock %}</title>
 <meta name="description" content="{% block descricao %}A loja de brinquedos da família — pelúcias, jogos, bonecas, hot wheels, lego e muito mais. Loja física em Cascavel/PR.{% endblock %}">
-<link rel="icon" href="/static/favicon.ico">
+<link rel="icon" type="image/png" href="/static/favicon.png">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<meta property="og:title" content="Luqui Brinquedos — Aqui você compra brincando">
+<meta property="og:description" content="Loja de brinquedos da família. Pelúcias, jogos, Hot Wheels, Lego, Pokémon e muito mais. Cascavel/PR — envio pra todo Brasil.">
+<meta property="og:image" content="https://www.luquibrinquedos.com.br/static/logo.png">
+<meta property="og:url" content="https://www.luquibrinquedos.com.br/">
+<meta property="og:type" content="website">
 <style>
   :root{
     --azul:#1652C7; --azul-d:#0E3D9E; --azul-c:#3B82F6;
@@ -27,7 +33,8 @@
     display:flex; align-items:center; gap:18px; }
   .logo{ display:flex; align-items:center; gap:6px; flex:none;
     text-decoration:none; }
-  .logo svg{ display:block; height:64px; width:auto; }
+  .logo img{ display:block; height:64px; width:auto; }
+  @media (max-width:600px){ .logo img{ height:48px; } }
   .busca{ flex:1; position:relative; }
   .busca input{ width:100%; padding:14px 50px 14px 20px; border-radius:30px;
     border:2px solid var(--linha); font-size:14px; outline:none;
@@ -214,29 +221,7 @@ gtag('config', '{{ GOOGLE_TAG_ID }}');
 <header class="topo">
   <div class="container">
     <a href="/" class="logo" aria-label="Luqui Brinquedos">
-      <svg viewBox="0 0 240 84" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Luqui Brinquedos">
-        <defs>
-          <linearGradient id="luqAm" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#FFD400"/>
-            <stop offset="100%" stop-color="#FFA800"/>
-          </linearGradient>
-        </defs>
-        <!-- "Luqui" cursivo amarelo com contorno azul + sombra -->
-        <g transform="translate(8 0)">
-          <text x="0" y="50" font-family="'Comic Sans MS','Marker Felt','Brush Script MT',cursive"
-                font-size="58" font-weight="900" fill="#1652C7"
-                style="paint-order:stroke;stroke:#1652C7;stroke-width:10px;stroke-linejoin:round">Luqui</text>
-          <text x="0" y="50" font-family="'Comic Sans MS','Marker Felt','Brush Script MT',cursive"
-                font-size="58" font-weight="900" fill="url(#luqAm)">Luqui</text>
-          <!-- Sorriso embaixo do "i" -->
-          <circle cx="148" cy="20" r="4" fill="#1652C7"/>
-          <path d="M 145 28 Q 152 36 159 28" stroke="#1652C7" stroke-width="3" fill="none" stroke-linecap="round"/>
-        </g>
-        <!-- "BRINQUEDOS" embaixo, azul espaçado -->
-        <text x="120" y="76" font-family="'Arial Black','Helvetica',sans-serif" text-anchor="middle"
-              font-size="13" font-weight="900" fill="#1652C7"
-              letter-spacing="3.5">BRINQUEDOS</text>
-      </svg>
+      <img src="/static/logo.png" alt="Luqui Brinquedos">
     </a>
     <form class="busca" action="/buscar" method="get">
       <input name="q" placeholder="o que você procura?" autocomplete="off"
@@ -301,9 +286,8 @@ gtag('config', '{{ GOOGLE_TAG_ID }}');
 <footer class="footer">
   <div class="container">
     <div>
-      <div style="display:inline-block;margin-bottom:14px;background:#FFC700;padding:6px 14px;border-radius:10px;font-family:'Comic Sans MS','Marker Felt',cursive;font-size:24px;font-weight:900;color:#1652C7;line-height:1">
-        Luqui<div style="font-size:9px;letter-spacing:2px;font-family:Arial,sans-serif">BRINQUEDOS</div>
-      </div>
+      <img src="/static/logo.png" alt="Luqui Brinquedos"
+           style="height:60px;width:auto;background:#fff;padding:8px 12px;border-radius:10px;margin-bottom:14px">
       <p style="font-size:13px;color:#cbd5e1;line-height:1.6">
         A loja de brinquedos da família.<br>
         Aqui você compra brincando! 🎈

@@ -10,8 +10,10 @@
   .erro{background:#FEE2E2;color:#991B1B;padding:10px;border-radius:8px;margin-bottom:14px;font-size:13px}
 </style></head><body>
 <div class="box">
-  <h2>🎁 LuquiShop Admin</h2>
-  <p class="sub">Acesso restrito.</p>
+  <img src="/static/logo.png" alt="Luqui Brinquedos"
+       style="height:64px;width:auto;display:block;margin:0 auto 14px">
+  <h2 style="text-align:center;font-size:14px;color:#64748B;letter-spacing:2px">ADMIN</h2>
+  <p class="sub" style="text-align:center">Acesso restrito.</p>
   {% if erro %}<div class="erro">{{ erro }}</div>{% endif %}
   <form method="post">
     <input name="email" type="email" placeholder="E-mail" required autofocus>
