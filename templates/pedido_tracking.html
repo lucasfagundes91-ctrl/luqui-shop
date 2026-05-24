@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block titulo %}Pedido #{{ p.id }} — Acompanhar{% endblock %}
+{% block conteudo %}
+<div style="max-width:820px;margin:30px auto;padding:0 16px">
+  <a href="/minha-conta" style="color:var(--mut);font-size:13px">← Minha conta</a>
+  <div style="background:#fff;padding:30px;border-radius:18px;margin-top:14px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px;margin-bottom:24px">
+      <div>
+        <h1 style="font-size:24px">Pedido #{{ p.id }}</h1>
+        <div style="color:var(--mut);font-size:13px">Feito em {{ p.criado_em.strftime('%d/%m/%Y %H:%M') if p.criado_em else '' }}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:12px;color:var(--mut)">TOTAL</div>
+        <div style="color:var(--verde);font-weight:900;font-size:24px;line-height:1">{{ rs(p.total) }}</div>
+      </div>
+    </div>
+
+    {% if p.status == 'cancelado' %}
+      <div style="background:#FEE2E2;color:#991B1B;padding:14px;border-radius:10px;margin-bottom:20px">
+        ❌ <b>Pedido cancelado</b>
+      </div>
+    {% elif p.status == 'aguardando_pagto' %}
+      <div style="background:#FEF3C7;color:#92400E;padding:14px;border-radius:10px;margin-bottom:20px">
+        ⏳ <b>Aguardando pagamento</b> ·
+        <a href="/pedido/{{ p.id }}/pagamento" style="color:#1652C7;font-weight:700">Pagar agora →</a>
+      </div>
+    {% else %}
+    <!-- TIMELINE -->
+    <div style="position:relative;padding:20px 0">
+      <div style="position:absolute;top:34px;left:30px;right:30px;height:3px;background:var(--linha);z-index:0"></div>
+      {% set idx_atual = status_timeline.index(p.status) if p.status in status_timeline else -1 %}
+      <div style="position:absolute;top:34px;left:30px;height:3px;background:var(--verde);z-index:1;
+                  width:calc(({{ idx_atual }} / {{ status_timeline|length - 1 }}) * (100% - 60px))"></div>
+      <div style="display:grid;grid-template-columns:repeat({{ status_timeline|length }},1fr);position:relative;z-index:2">
+        {% for s in status_timeline %}
+          {% set i = loop.index0 %}
+          {% set done = i <= idx_atual %}
+          <div style="text-align:center">
+            <div style="width:30px;height:30px;border-radius:50%;margin:0 auto 8px;
+                        background:{{ 'var(--verde)' if done else '#fff' }};
+                        border:3px solid {{ 'var(--verde)' if done else 'var(--linha)' }};
+                        color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900">
+              {{ '✓' if done else (i+1) }}
+            </div>
+            <div style="font-size:11px;font-weight:{{ '700' if done else '500' }};color:{{ 'var(--txt)' if done else 'var(--mut)' }};line-height:1.2">
+              {{ status_labels[s] }}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if p.melhorenvio_rastreio %}
+    <div style="background:#EFF6FF;padding:14px;border-radius:10px;margin:20px 0">
+      <b>📮 Código de rastreio:</b>
+      <code style="background:#fff;padding:4px 10px;border-radius:4px;margin-left:6px;font-size:13px">{{ p.melhorenvio_rastreio }}</code>
+    </div>
+    {% endif %}
+
+    <h3 style="margin:24px 0 14px">Itens</h3>
+    <div style="background:#F8FAFC;border-radius:10px;padding:14px">
+      {% for i in itens %}
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--linha);font-size:13px">
+        <span>{{ i.quantidade|int }}× {{ i.descricao }}</span>
+        <span><b>{{ rs(i.subtotal) }}</b></span>
+      </div>
+      {% endfor %}
+      <div style="display:flex;justify-content:space-between;padding:10px 0 0;font-weight:700">
+        <span>Total</span><span style="color:var(--verde)">{{ rs(p.total) }}</span>
+      </div>
+    </div>
+
+    <div style="margin-top:24px;padding:14px;background:#F8FAFC;border-radius:10px;font-size:13px">
+      <b>📍 Endereço de entrega:</b><br>
+      {{ p.endereco }}, {{ p.numero }}{% if p.complemento %} ({{ p.complemento }}){% endif %} — {{ p.bairro }}<br>
+      {{ p.cidade }}/{{ p.uf }} — CEP {{ p.cep or '—' }}
+    </div>
+
+    <div style="text-align:center;margin-top:20px;font-size:13px;color:var(--mut)">
+      Dúvidas? <a href="https://wa.me/{{ whatsapp_loja() }}?text=Sobre%20o%20pedido%20%23{{ p.id }}" target="_blank" style="color:var(--azul);font-weight:700">WhatsApp (45) 99111-9800</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

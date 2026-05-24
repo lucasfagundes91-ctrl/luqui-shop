@@ -1,5 +1,27 @@
 {% extends "base.html" %}
 {% block titulo %}{{ p.descricao }} — Luqui Brinquedos{% endblock %}
+{% block descricao %}{{ p.descricao_longa or p.descricao }} — Compre na Luqui Brinquedos. Frete pra todo Brasil, 12x sem juros, 5% off no PIX.{% endblock %}
+{% block extra_head %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Product",
+  "name": {{ p.descricao|tojson }},
+  "description": {{ (p.descricao_longa or p.descricao)|tojson }},
+  {% if p.foto_url %}"image": {{ p.foto_url|tojson }},{% endif %}
+  "sku": {{ (p.codigo_barras or p.id|string)|tojson }},
+  "brand": {"@type":"Brand","name":"Luqui Brinquedos"},
+  "offers": {
+    "@type": "Offer",
+    "url": "https://www.luquibrinquedos.com.br/produto/{{ p.id }}",
+    "priceCurrency": "BRL",
+    "price": {{ (p.preco_promo or p.preco_venda) }},
+    "availability": "{{ 'https://schema.org/InStock' if (p.estoque_atual and p.estoque_atual|float > 0) else 'https://schema.org/OutOfStock' }}",
+    "seller": {"@type":"Organization","name":"Luqui Brinquedos"}
+  }
+}
+</script>
+{% endblock %}
 {% block conteudo %}
 
 <div style="max-width:1200px;margin:20px auto 40px;padding:0 16px">
@@ -62,6 +84,82 @@
       <div style="white-space:pre-line;line-height:1.6;color:var(--txt)">{{ p.descricao_longa }}</div>
     </div>
   {% endif %}
+
+  <!-- Avaliações -->
+  <div style="background:#fff;padding:30px;border-radius:18px;margin-top:20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:14px">
+      <h3>⭐ Avaliações de quem comprou</h3>
+      {% if media_estrelas %}
+        <div style="font-size:13px"><b style="font-size:18px;color:#F59E0B">{{ media_estrelas }} ★</b> · {{ avaliacoes|length }} avaliação(ões)</div>
+      {% endif %}
+    </div>
+
+    {% if avaliacoes %}
+      {% for a in avaliacoes %}
+      <div style="border-top:1px solid var(--linha);padding:14px 0">
+        <div style="display:flex;justify-content:space-between;font-size:13px">
+          <b>{{ a.cliente_nome or 'Cliente Luqui' }}</b>
+          <span style="color:#F59E0B;font-size:15px">{{ '★' * a.estrelas }}<span style="opacity:.3">{{ '★' * (5 - a.estrelas) }}</span></span>
+        </div>
+        {% if a.titulo %}<div style="font-weight:700;margin:6px 0">{{ a.titulo }}</div>{% endif %}
+        <div style="color:var(--txt);line-height:1.5">{{ a.comentario }}</div>
+        <div style="font-size:11px;color:var(--mut);margin-top:6px">{{ a.criado_em.strftime('%d/%m/%Y') if a.criado_em else '' }}</div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p style="color:var(--mut);text-align:center;padding:20px">Ainda sem avaliações. Seja o primeiro a avaliar!</p>
+    {% endif %}
+
+    <details style="margin-top:20px;padding:14px;background:#F8FAFC;border-radius:10px">
+      <summary style="cursor:pointer;font-weight:700;color:var(--azul)">✍️ Deixar minha avaliação</summary>
+      <div style="margin-top:14px">
+        <div style="margin-bottom:10px">
+          <label style="font-size:12px;color:var(--mut);font-weight:700">Nota *</label>
+          <div id="aval-estrelas" style="font-size:28px;cursor:pointer;color:#F59E0B">
+            {% for i in range(1,6) %}<span data-v="{{ i }}" style="opacity:.3" onclick="setEstrelas({{ i }})">★</span>{% endfor %}
+          </div>
+        </div>
+        <input id="aval-titulo" placeholder="Título (opcional)"
+               style="width:100%;padding:10px;border:1px solid var(--linha);border-radius:8px;margin-bottom:8px">
+        <textarea id="aval-comentario" placeholder="Conta como foi sua experiência..." rows="4" required
+                  style="width:100%;padding:10px;border:1px solid var(--linha);border-radius:8px;resize:vertical"></textarea>
+        <button onclick="enviarAvaliacao()" class="btn btn-amarelo" style="padding:12px 24px;margin-top:10px">
+          Enviar avaliação
+        </button>
+        <p style="font-size:11px;color:var(--mut);margin-top:8px">
+          Sua avaliação será publicada após aprovação (instantâneo se você já comprou esse produto).
+        </p>
+      </div>
+    </details>
+  </div>
 </div>
+
+<script>
+let estrelas = 5;
+function setEstrelas(n){
+  estrelas = n;
+  document.querySelectorAll('#aval-estrelas span').forEach(s=>{
+    s.style.opacity = parseInt(s.dataset.v) <= n ? '1' : '.3';
+  });
+}
+setEstrelas(5);
+async function enviarAvaliacao(){
+  const com = document.getElementById('aval-comentario').value.trim();
+  if(!com){ toast('Escreve algo antes de enviar','err'); return; }
+  try {
+    const r = await fetch('/api/produto/{{ p.id }}/avaliacao', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        estrelas, comentario: com,
+        titulo: document.getElementById('aval-titulo').value.trim()
+      })
+    });
+    const d = await r.json();
+    if(d.erro){ toast(d.erro,'err'); return; }
+    toast(d.aprovado_auto ? '✓ Avaliação publicada!' : '✓ Avaliação enviada (aguardando moderação)');
+    setTimeout(()=>location.reload(), 1200);
+  } catch(e){ toast('Erro: '+e.message,'err'); }
+}
+</script>
 
 {% endblock %}

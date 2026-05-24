@@ -11,20 +11,96 @@
   </div>
 
   {% if assinatura %}
-    <div style="background:linear-gradient(135deg,#1652C7,#3FA89C);color:#fff;padding:24px;border-radius:18px;margin-bottom:24px">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px">
+    <div style="background:linear-gradient(135deg,#1652C7,#3FA89C);color:#fff;padding:24px;border-radius:18px;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px">
         <div>
           <div style="font-size:12px;letter-spacing:2px;opacity:.9">CLUBE LUQUI</div>
           <h3 style="font-family:'Comic Sans MS',sans-serif;font-size:30px;color:var(--amarelo);text-shadow:2px 2px 0 #0E3D9E">{{ assinatura.plano_nome }}</h3>
           <p style="font-size:13px;margin-top:6px">
-            {{ rs(assinatura.preco_mensal) }}/mês ·
-            Status: <b style="text-transform:uppercase">{{ assinatura.status }}</b>
-            {% if assinatura.proximo_envio %} · Próximo envio: {{ assinatura.proximo_envio.strftime('%d/%m/%Y') }}{% endif %}
+            {{ rs(assinatura.preco_mensal) }}/mês · Status:
+            <b style="text-transform:uppercase">{{ assinatura.status }}</b>
+            {% if assinatura.proximo_envio %}<br>📦 Próximo envio: {{ assinatura.proximo_envio.strftime('%d/%m/%Y') }}{% endif %}
           </p>
         </div>
-        <a href="/clube" class="btn btn-amarelo">Trocar plano</a>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+          {% if assinatura.status == 'ativa' %}
+            <button onclick="pausarClube()" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer">⏸ Pausar 1 mês</button>
+          {% elif assinatura.status == 'pausada' %}
+            <button onclick="reativarClube()" style="background:var(--amarelo);color:var(--azul);border:0;padding:8px 16px;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer">▶ Reativar</button>
+          {% endif %}
+          <button onclick="abrirTrocaPlano()" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer">🔄 Trocar plano</button>
+          <button onclick="cancelarClube()" style="background:rgba(220,38,38,.2);color:#fff;border:1px solid rgba(255,255,255,.3);padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer">Cancelar</button>
+        </div>
       </div>
     </div>
+
+    <!-- Histórico de envios -->
+    {% if envios %}
+    <div style="background:#fff;border-radius:14px;padding:18px;margin-bottom:24px">
+      <h4 style="margin-bottom:10px">📦 Caixas Misteriosas recebidas</h4>
+      <div style="display:grid;gap:8px">
+        {% for e in envios %}
+        <div style="display:flex;justify-content:space-between;padding:10px;background:#F8FAFC;border-radius:8px;font-size:13px">
+          <span><b>{{ e.referencia_mes }}</b> · {{ e.descricao or 'Caixa do mês' }}</span>
+          <span style="color:var(--mut)">{{ e.enviado_em.strftime('%d/%m/%Y') if e.enviado_em else '' }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Modal de troca de plano -->
+    <div id="modal-trocar" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:center;justify-content:center;padding:20px">
+      <div style="background:#fff;border-radius:18px;padding:24px;max-width:480px;width:100%;max-height:80vh;overflow-y:auto">
+        <h3 style="margin-bottom:14px">Trocar de plano</h3>
+        <p style="font-size:12px;color:var(--mut);margin-bottom:14px">Sua assinatura atual será cancelada e uma nova começa no plano escolhido.</p>
+        {% for p in planos %}
+          {% if p.slug != assinatura.plano_slug %}
+          <button onclick="trocarPlano('{{ p.slug }}')"
+                  style="display:block;width:100%;text-align:left;padding:14px;border:1px solid var(--linha);border-radius:10px;margin-bottom:8px;background:#fff;cursor:pointer">
+            <b>{{ p.nome }}</b>
+            <span style="color:var(--verde);font-weight:900;margin-left:6px">{{ rs(p.preco_mensal) }}/mês</span>
+            <div style="font-size:11px;color:var(--mut);margin-top:3px">{{ p.beneficios_json|length }} benefício(s)</div>
+          </button>
+          {% endif %}
+        {% endfor %}
+        <button onclick="document.getElementById('modal-trocar').style.display='none'"
+                style="background:none;border:0;color:var(--mut);font-size:13px;margin-top:10px;cursor:pointer">Cancelar</button>
+      </div>
+    </div>
+
+    <script>
+    async function pausarClube(){
+      if(!confirm('Pausar sua assinatura por 30 dias?')) return;
+      const r=await fetch('/api/clube/pausar',{method:'POST'});
+      const d=await r.json();
+      if(d.erro){ alert(d.erro); return; }
+      location.reload();
+    }
+    async function reativarClube(){
+      const r=await fetch('/api/clube/reativar',{method:'POST'});
+      if((await r.json()).ok) location.reload();
+    }
+    function abrirTrocaPlano(){
+      document.getElementById('modal-trocar').style.display='flex';
+    }
+    async function trocarPlano(slug){
+      if(!confirm('Trocar pro plano "'+slug+'"?')) return;
+      const r=await fetch('/api/clube/trocar-plano',{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({plano_slug:slug})
+      });
+      const d=await r.json();
+      if(d.erro){ alert(d.erro); return; }
+      alert('Troca feita! Confirme o pagamento da nova mensalidade.');
+      location.reload();
+    }
+    async function cancelarClube(){
+      if(!confirm('Tem certeza que quer cancelar? Você perde os benefícios do plano.')) return;
+      const r=await fetch('/api/clube/cancelar',{method:'POST'});
+      if((await r.json()).ok){ alert('Assinatura cancelada.'); location.reload(); }
+    }
+    </script>
   {% else %}
     <a href="/clube" style="display:block;background:#fef3c7;color:#92400e;padding:14px;border-radius:10px;margin-bottom:24px;font-weight:600;text-align:center">
       🎁 Você ainda não tem assinatura do Clube Luqui. Conhecer planos →
@@ -44,11 +120,12 @@
         <tbody>
         {% for p in pedidos %}
           <tr style="border-top:1px solid var(--linha);font-size:13px">
-            <td style="padding:12px"><b>#{{ p.id }}</b></td>
+            <td style="padding:12px"><a href="/pedido/{{ p.id }}/tracking" style="color:var(--azul);font-weight:700">#{{ p.id }}</a></td>
             <td style="padding:12px">{{ p.criado_em.strftime('%d/%m/%Y') if p.criado_em else '—' }}</td>
             <td style="padding:12px;text-align:right;font-weight:700">{{ rs(p.total) }}</td>
             <td style="padding:12px">
               <span style="background:#EFF6FF;color:var(--azul);padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700">{{ p.status }}</span>
+              <a href="/pedido/{{ p.id }}/tracking" style="font-size:11px;color:var(--mut);margin-left:6px">acompanhar →</a>
             </td>
           </tr>
         {% endfor %}

@@ -1,0 +1,84 @@
+{% extends "admin_base.html" %}
+{% set pagina = 'cupons' %}
+{% block titulo %}Cupons — LuquiShop{% endblock %}
+{% block conteudo %}
+<h2>🎟️ Cupons de desconto</h2>
+
+<div class="card">
+  <h3 style="margin-bottom:14px">{{ '✏️ Editar cupom' if request.args.get('edit') else '➕ Novo cupom' }}</h3>
+  {% set ed = (cupons|selectattr('id','equalto',request.args.get('edit',0)|int)|list|first) if request.args.get('edit') else None %}
+  <form method="post" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+    {% if ed %}<input type="hidden" name="id" value="{{ ed.id }}">{% endif %}
+    <div>
+      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Código *</label>
+      <input name="codigo" required value="{{ ed.codigo if ed else '' }}" placeholder="PRIMEIRO10"
+             style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px;text-transform:uppercase">
+    </div>
+    <div>
+      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Tipo *</label>
+      <select name="tipo" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
+        <option value="pct" {% if ed and ed.tipo=='pct' %}selected{% endif %}>Percentual (%)</option>
+        <option value="rs" {% if ed and ed.tipo=='rs' %}selected{% endif %}>Valor fixo (R$)</option>
+      </select>
+    </div>
+    <div>
+      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Valor *</label>
+      <input name="valor" type="number" step="0.01" required value="{{ ed.valor if ed else '' }}" placeholder="10"
+             style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
+    </div>
+    <div>
+      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Compra mínima (R$)</label>
+      <input name="valor_min" type="number" step="0.01" value="{{ ed.valor_min if ed else '0' }}"
+             style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
+    </div>
+    <div>
+      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Máx. de usos (vazio = ilimitado)</label>
+      <input name="usos_max" type="number" value="{{ ed.usos_max if ed and ed.usos_max else '' }}"
+             style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
+    </div>
+    <div>
+      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Válido até</label>
+      <input name="valido_ate" type="date" value="{{ ed.valido_ate if ed and ed.valido_ate else '' }}"
+             style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;grid-column:1/-1">
+      <label><input type="checkbox" name="ativo" {% if (ed and ed.ativo) or not ed %}checked{% endif %}> Cupom ativo</label>
+    </div>
+    <div style="grid-column:1/-1;display:flex;gap:10px;justify-content:flex-end">
+      {% if ed %}<a href="/admin/cupons" class="pill cinza" style="padding:10px 18px;text-decoration:none">Cancelar</a>{% endif %}
+      <button type="submit" style="background:#16A34A;color:#fff;border:0;padding:12px 24px;border-radius:8px;font-weight:700;cursor:pointer">
+        {{ 'Salvar' if ed else '➕ Criar cupom' }}
+      </button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h3 style="margin-bottom:14px">Cupons cadastrados</h3>
+  {% if cupons %}
+  <table>
+    <thead><tr><th>Código</th><th>Desconto</th><th>Compra mín.</th><th>Usos</th><th>Validade</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for c in cupons %}
+      <tr>
+        <td><code style="background:#FEF3C7;padding:3px 8px;border-radius:4px;font-weight:700">{{ c.codigo }}</code></td>
+        <td><b>{{ c.valor }}{{ '%' if c.tipo == 'pct' else ' R$' }}</b></td>
+        <td>{{ rs(c.valor_min) if c.valor_min and c.valor_min|float > 0 else '—' }}</td>
+        <td>{{ c.usos }}{% if c.usos_max %} / {{ c.usos_max }}{% endif %}</td>
+        <td>{{ c.valido_ate.strftime('%d/%m/%Y') if c.valido_ate else 'Sem prazo' }}</td>
+        <td><span class="pill {{ 'verde' if c.ativo else 'cinza' }}">{{ 'ativo' if c.ativo else 'inativo' }}</span></td>
+        <td>
+          <a href="/admin/cupons?edit={{ c.id }}" class="pill azul" style="text-decoration:none">Editar</a>
+          <form method="post" action="/admin/cupons/{{ c.id }}/excluir" style="display:inline" onsubmit="return confirm('Excluir esse cupom?')">
+            <button class="pill" style="background:#FEE2E2;color:#991B1B;border:0;cursor:pointer">Excluir</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:#64748B">Nenhum cupom criado ainda. Crie acima — ex.: PRIMEIRO10 com 10% off pra primeira compra.</p>
+  {% endif %}
+</div>
+{% endblock %}

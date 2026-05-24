@@ -5,24 +5,51 @@
 <div class="card">
   {% if pedidos %}
     <table>
-      <thead><tr><th>#</th><th>Cliente</th><th>WhatsApp</th><th>Cidade/UF</th><th>Data</th><th>Forma</th><th>Total</th><th>Status</th></tr></thead>
+      <thead><tr><th>#</th><th>Cliente</th><th>Cidade</th><th>Data</th><th>Total</th><th>Status</th><th>Atualizar</th></tr></thead>
       <tbody>
         {% for p in pedidos %}
           <tr>
-            <td><b>#{{ p.id }}</b></td>
-            <td>{{ p.nome or '—' }}<br><small style="color:#64748B">{{ p.email }}</small></td>
-            <td>{{ p.telefone or '—' }}</td>
-            <td>{{ p.cidade or '—' }}{% if p.uf %}/{{ p.uf }}{% endif %}</td>
+            <td><b>#{{ p.id }}</b><br><a href="/pedido/{{ p.id }}/tracking" target="_blank" style="font-size:11px;color:#1652C7">tracking</a></td>
+            <td>{{ p.nome or '—' }}<br><small style="color:#64748B">{{ p.email }} · {{ p.telefone or '—' }}</small></td>
+            <td>{{ p.cidade or '—' }}/{{ p.uf or '' }}</td>
             <td>{{ p.criado_em.strftime('%d/%m %H:%M') if p.criado_em else '—' }}</td>
-            <td><span class="pill azul">{{ p.forma_pagto or '—' }}</span></td>
-            <td><b>{{ rs(p.total) }}</b></td>
-            <td><span class="pill {{ 'verde' if p.status == 'pago' else 'amarelo' }}">{{ p.status }}</span></td>
+            <td><b>{{ rs(p.total) }}</b><br><span style="font-size:11px;color:#64748B">{{ p.forma_pagto }}</span></td>
+            <td><span class="pill {{ 'verde' if p.status in ('pago','entregue') else 'amarelo' if p.status == 'aguardando_pagto' else 'azul' }}">{{ p.status }}</span></td>
+            <td>
+              <select onchange="atualizarStatus({{ p.id }}, this.value, this)" style="font-size:12px;padding:4px;border:1px solid #E2E8F0;border-radius:4px">
+                <option value="">Mudar pra...</option>
+                <option value="preparando">📦 Preparando</option>
+                <option value="enviado">🚚 Enviado</option>
+                <option value="entregue">✓ Entregue</option>
+                <option value="cancelado">❌ Cancelar</option>
+              </select>
+            </td>
           </tr>
         {% endfor %}
       </tbody>
     </table>
   {% else %}
-    <p style="color:#64748B">Nenhum pedido cadastrado ainda. Os pedidos aparecem aqui depois que o checkout for finalizado pelo cliente.</p>
+    <p style="color:#64748B">Nenhum pedido cadastrado ainda.</p>
   {% endif %}
 </div>
+<script>
+async function atualizarStatus(pid, novo, sel){
+  if(!novo) return;
+  let rastreio = null;
+  if(novo === 'enviado'){
+    rastreio = prompt('Código de rastreio (Correios/transportadora):', '');
+    if(rastreio === null){ sel.value=''; return; }
+  }
+  if(!confirm('Confirmar status "'+novo+'" pro pedido #'+pid+'? (cliente recebe WhatsApp)')){ sel.value=''; return; }
+  try {
+    const r = await fetch('/api/admin/pedido/'+pid+'/status', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({status: novo, rastreio: rastreio}),
+    });
+    const d = await r.json();
+    if(d.erro){ alert(d.erro); sel.value=''; return; }
+    location.reload();
+  } catch(e){ alert('Erro: '+e.message); }
+}
+</script>
 {% endblock %}

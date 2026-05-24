@@ -228,6 +228,27 @@ def init_db():
         "ALTER TABLE banners ADD COLUMN IF NOT EXISTS cor_fundo VARCHAR(20) DEFAULT '#4FB8FF'",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_codigo VARCHAR(40)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_desconto NUMERIC(10,2) DEFAULT 0",
+        # Newsletter (opt-in pra promoções)
+        """CREATE TABLE IF NOT EXISTS newsletter (
+            id SERIAL PRIMARY KEY,
+            email VARCHAR(160) UNIQUE NOT NULL,
+            nome VARCHAR(160),
+            ativo BOOLEAN DEFAULT TRUE,
+            criado_em TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        # Avaliações de produto
+        """CREATE TABLE IF NOT EXISTS avaliacoes (
+            id SERIAL PRIMARY KEY,
+            produto_pdv_id INT NOT NULL,
+            cliente_id INT REFERENCES clientes_site(id),
+            pedido_id INT REFERENCES pedidos(id),
+            estrelas INT NOT NULL CHECK (estrelas BETWEEN 1 AND 5),
+            titulo VARCHAR(120),
+            comentario TEXT,
+            aprovado BOOLEAN DEFAULT FALSE,
+            criado_em TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_avaliacoes_produto ON avaliacoes(produto_pdv_id, aprovado)",
     ]
     for ddl in ddls:
         try:
@@ -670,6 +691,115 @@ def _render_pagina_legal(slug):
                            carrinho=carrinho_ler())
 
 
+@app.route('/sobre')
+def pag_sobre():
+    return render_template('sobre.html',
+                           categorias=listar_categorias(),
+                           cliente=cliente_logado(),
+                           carrinho=carrinho_ler())
+
+
+@app.route('/api/produto/<int:pid>/avaliacao', methods=['POST'])
+def avaliacao_criar(pid):
+    c = cliente_logado()
+    d = request.get_json() or {}
+    estrelas = max(1, min(5, int(d.get('estrelas') or 0)))
+    titulo = (d.get('titulo') or '')[:120]
+    comentario = (d.get('comentario') or '')[:2000]
+    if not comentario.strip():
+        return jsonify({'erro': 'Escreve algo no comentário'}), 400
+    # Auto-aprova se o cliente já comprou esse produto
+    aprovado = False
+    pedido_id = None
+    if c:
+        ja = db_execute("""SELECT pi.pedido_id FROM pedido_itens pi
+            JOIN pedidos p ON p.id=pi.pedido_id
+            WHERE pi.produto_pdv_id=%s AND p.cliente_id=%s AND p.status='pago'
+            LIMIT 1""", [pid, c['id']], fetch='one')
+        if ja:
+            aprovado = True
+            pedido_id = ja['pedido_id']
+    db_execute("""INSERT INTO avaliacoes
+        (produto_pdv_id, cliente_id, pedido_id, estrelas, titulo, comentario, aprovado)
+        VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+        [pid, c['id'] if c else None, pedido_id, estrelas,
+         titulo or None, comentario, aprovado])
+    return jsonify({'ok': True, 'aprovado_auto': aprovado})
+
+
+@app.route('/admin/avaliacoes')
+@requer_admin
+def admin_avaliacoes():
+    rows = db_execute("""SELECT a.*, c.nome AS cliente_nome
+        FROM avaliacoes a LEFT JOIN clientes_site c ON c.id=a.cliente_id
+        ORDER BY a.aprovado, a.criado_em DESC LIMIT 200""", fetch='all') or []
+    return render_template('admin_avaliacoes.html', avaliacoes=rows)
+
+
+@app.route('/admin/avaliacoes/<int:aid>/aprovar', methods=['POST'])
+@requer_admin
+def admin_avaliacao_aprovar(aid):
+    db_execute("UPDATE avaliacoes SET aprovado=true WHERE id=%s", [aid])
+    return redirect(url_for('admin_avaliacoes'))
+
+
+@app.route('/admin/avaliacoes/<int:aid>/excluir', methods=['POST'])
+@requer_admin
+def admin_avaliacao_excluir(aid):
+    db_execute("DELETE FROM avaliacoes WHERE id=%s", [aid])
+    return redirect(url_for('admin_avaliacoes'))
+
+
+@app.route('/cron/email-pos-compra')
+def cron_email_pos_compra():
+    """Roda diário: pedidos pagos há ~7 dias e ainda sem email de avaliação."""
+    if request.args.get('token') != os.environ.get('CRON_TOKEN', 'troque'):
+        return 'unauthorized', 401
+    candidatos = db_execute("""
+        SELECT * FROM pedidos
+         WHERE status IN ('pago','enviado','entregue')
+           AND pago_em IS NOT NULL
+           AND pago_em < NOW() - INTERVAL '7 days'
+           AND pago_em > NOW() - INTERVAL '14 days'
+           AND COALESCE(observacao,'') NOT LIKE '%[avaliacao-enviada]%'
+        LIMIT 50""", fetch='all') or []
+    enviados = 0
+    for p in candidatos:
+        try:
+            enviar_email(p['email'],
+                f'Como foi seu pedido #{p["id"]}? 💛',
+                f"""<p>Oi {p['nome'].split()[0]}! Tudo bem?</p>
+<p>Faz uma semana que seu pedido <b>#{p['id']}</b> foi confirmado.
+Esperamos que tudo tenha chegado certinho! 🧸</p>
+<p>Que tal contar pra gente o que você achou? Sua avaliação ajuda outras famílias
+a escolherem com confiança!</p>
+<p><a href="https://www.luquibrinquedos.com.br/pedido/{p['id']}/tracking"
+     style="background:#FFC700;color:#1652C7;padding:12px 24px;border-radius:8px;
+            font-weight:900;text-decoration:none;display:inline-block">
+  ⭐ Avaliar produtos
+</a></p>
+<p>Abraço,<br>Luqui Brinquedos 💛</p>""")
+            db_execute("""UPDATE pedidos SET observacao=COALESCE(observacao,'')
+                       || ' [avaliacao-enviada]' WHERE id=%s""", [p['id']])
+            enviados += 1
+        except Exception as e:
+            log.error("pos-compra %s: %s", p['id'], e)
+    return jsonify({'ok': True, 'enviados': enviados})
+
+
+@app.route('/api/newsletter', methods=['POST'])
+def newsletter_signup():
+    email = ((request.get_json() or {}).get('email') or '').strip().lower()
+    nome = ((request.get_json() or {}).get('nome') or '').strip()
+    if '@' not in email or '.' not in email:
+        return jsonify({'erro': 'E-mail inválido'}), 400
+    db_execute("""INSERT INTO newsletter (email, nome) VALUES (%s, %s)
+                  ON CONFLICT (email) DO UPDATE SET ativo=true,
+                  nome=COALESCE(EXCLUDED.nome, newsletter.nome)""",
+               [email, nome or None])
+    return jsonify({'ok': True})
+
+
 @app.route('/trocas-devolucoes')
 def pag_trocas():
     return _render_pagina_legal('trocas-devolucoes')
@@ -693,6 +823,49 @@ def pag_privacidade():
 @app.route('/termos')
 def pag_termos():
     return _render_pagina_legal('termos')
+
+
+@app.route('/robots.txt')
+def robots_txt():
+    txt = """User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api/
+Disallow: /pedido/
+
+Sitemap: https://www.luquibrinquedos.com.br/sitemap.xml
+"""
+    from flask import Response
+    return Response(txt, mimetype='text/plain')
+
+
+@app.route('/sitemap.xml')
+def sitemap_xml():
+    """Sitemap dinâmico: estáticas + categorias visíveis + produtos da vitrine."""
+    from flask import Response
+    base = 'https://www.luquibrinquedos.com.br'
+    urls = [
+        (base + '/', '1.0', 'daily'),
+        (base + '/clube', '0.9', 'weekly'),
+        (base + '/sobre', '0.7', 'monthly'),
+        (base + '/trocas-devolucoes', '0.5', 'yearly'),
+        (base + '/entregas', '0.5', 'yearly'),
+        (base + '/formas-pagamento', '0.5', 'yearly'),
+        (base + '/privacidade', '0.4', 'yearly'),
+        (base + '/termos', '0.4', 'yearly'),
+    ]
+    for c in (listar_categorias() or []):
+        urls.append((f"{base}/categoria/{c['slug']}", '0.8', 'weekly'))
+    # Produtos da vitrine (até 1000 pra não estourar)
+    rs = pdv_get('/api/integracao/produtos', {'limite': 100, 'offset': 0})
+    if rs and rs.get('produtos'):
+        for p in rs['produtos']:
+            urls.append((f"{base}/produto/{p['id']}", '0.6', 'weekly'))
+    xml = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    for u, prio, freq in urls:
+        xml += f'  <url><loc>{u}</loc><priority>{prio}</priority><changefreq>{freq}</changefreq></url>\n'
+    xml += '</urlset>'
+    return Response(xml, mimetype='application/xml')
 
 
 @app.route('/healthz')
@@ -754,8 +927,15 @@ def produto(pid):
     p = buscar_produto(pid)
     if not p:
         abort(404)
+    avals = db_execute("""SELECT a.*, c.nome AS cliente_nome
+        FROM avaliacoes a LEFT JOIN clientes_site c ON c.id=a.cliente_id
+        WHERE a.produto_pdv_id=%s AND a.aprovado=true
+        ORDER BY a.criado_em DESC""", [pid], fetch='all') or []
+    media = None
+    if avals:
+        media = round(sum(a['estrelas'] for a in avals) / len(avals), 1)
     return render_template('produto.html',
-                           p=p,
+                           p=p, avaliacoes=avals, media_estrelas=media,
                            categorias=listar_categorias(),
                            cliente=cliente_logado(),
                            carrinho=carrinho_ler())
@@ -994,6 +1174,85 @@ def clube_assinar_post():
                     'pagamento_url': '/minha-conta'})
 
 
+@app.route('/api/clube/pausar', methods=['POST'])
+def clube_pausar():
+    """Marca a assinatura como 'pausada' até a próxima data informada (default +30d).
+    Asaas continua a cobrança porque o controle é nosso — quando reativar, o
+    próximo envio é recalculado."""
+    c = cliente_logado()
+    if not c:
+        return jsonify({'erro': 'Faça login'}), 401
+    ass = db_execute("""SELECT * FROM clube_assinaturas
+                        WHERE cliente_id=%s AND status='ativa'
+                        ORDER BY id DESC LIMIT 1""",
+                     [c['id']], fetch='one')
+    if not ass:
+        return jsonify({'erro': 'Sem assinatura ativa'}), 404
+    db_execute("""UPDATE clube_assinaturas
+                  SET status='pausada',
+                      proximo_envio=CURRENT_DATE + INTERVAL '30 days'
+                  WHERE id=%s""", [ass['id']])
+    return jsonify({'ok': True})
+
+
+@app.route('/api/clube/reativar', methods=['POST'])
+def clube_reativar():
+    c = cliente_logado()
+    if not c:
+        return jsonify({'erro': 'Faça login'}), 401
+    db_execute("""UPDATE clube_assinaturas SET status='ativa',
+                  proximo_envio=CURRENT_DATE + INTERVAL '7 days'
+                  WHERE cliente_id=%s AND status='pausada'""", [c['id']])
+    return jsonify({'ok': True})
+
+
+@app.route('/api/clube/trocar-plano', methods=['POST'])
+def clube_trocar_plano():
+    """Troca o plano da assinatura ativa: cancela no Asaas, cria nova
+    subscription com o plano novo. Não duplica cobrança porque o cancel é
+    pre-pago (Asaas cobra prorata)."""
+    c = cliente_logado()
+    if not c:
+        return jsonify({'erro': 'Faça login'}), 401
+    novo_slug = (request.get_json() or {}).get('plano_slug')
+    plano = db_execute("SELECT * FROM clube_planos WHERE slug=%s AND ativo",
+                       [novo_slug], fetch='one')
+    if not plano:
+        return jsonify({'erro': 'Plano inválido'}), 404
+    atual = db_execute("""SELECT * FROM clube_assinaturas
+                          WHERE cliente_id=%s AND status IN ('ativa','pausada')
+                          ORDER BY id DESC LIMIT 1""",
+                       [c['id']], fetch='one')
+    if not atual:
+        return jsonify({'erro': 'Sem assinatura ativa pra trocar'}), 404
+    if atual['plano_id'] == plano['id']:
+        return jsonify({'erro': 'Você já está nesse plano'}), 400
+    # Cancela a antiga
+    if atual.get('asaas_assinatura_id'):
+        asaas_cancelar_assinatura(atual['asaas_assinatura_id'])
+    db_execute("""UPDATE clube_assinaturas SET status='cancelada',
+                  cancelada_em=NOW() WHERE id=%s""", [atual['id']])
+    # Cria a nova
+    customer_id = asaas_criar_customer(c['nome'], c['email'],
+                                       c['cpf'], c.get('telefone'))
+    if not customer_id:
+        return jsonify({'erro': 'Falha no gateway'}), 502
+    sub = asaas_criar_assinatura(
+        customer_id, float(plano['preco_mensal']),
+        descricao=f'Clube Luqui — {plano["nome"]}',
+        billing_type='PIX',
+        externa_ref=f'clube-pending',
+    )
+    if not sub:
+        return jsonify({'erro': 'Falha ao criar assinatura'}), 502
+    nv = db_execute("""INSERT INTO clube_assinaturas
+        (cliente_id, plano_id, status, proximo_envio, asaas_assinatura_id)
+        VALUES (%s,%s,'aguardando_pagto', CURRENT_DATE + INTERVAL '7 days', %s)
+        RETURNING id""", [c['id'], plano['id'], sub.get('id')], fetch='one')
+    # Atualiza ref do Asaas pro id correto
+    return jsonify({'ok': True, 'assinatura_id': nv['id']})
+
+
 @app.route('/api/clube/cancelar', methods=['POST'])
 def clube_cancelar():
     c = cliente_logado()
@@ -1059,6 +1318,50 @@ def cadastrar():
                            carrinho=carrinho_ler())
 
 
+import secrets
+
+
+@app.route('/esqueci-senha', methods=['GET', 'POST'])
+def esqueci_senha():
+    msg = None
+    if request.method == 'POST':
+        email = (request.form.get('email') or '').strip().lower()
+        c = db_execute("SELECT id, nome FROM clientes_site WHERE LOWER(email)=%s",
+                       [email], fetch='one')
+        if c:
+            nova = secrets.token_urlsafe(8)[:10]
+            db_execute("UPDATE clientes_site SET senha_hash=%s WHERE id=%s",
+                       [generate_password_hash(nova), c['id']])
+            enviar_email(email, 'Sua nova senha — Luqui Brinquedos',
+                f"""<p>Oi {c['nome'].split()[0]}! 💛</p>
+<p>Recebemos um pedido pra resetar sua senha.</p>
+<p>Sua <b>nova senha temporária</b> é: <code style='background:#FEF3C7;padding:4px 10px;border-radius:4px;font-size:18px'>{nova}</code></p>
+<p>Entre em <a href='https://www.luquibrinquedos.com.br/login'>luquibrinquedos.com.br/login</a> e troque pela senha que preferir em "Minha conta".</p>
+<p>Não foi você? Avisa a gente no WhatsApp (45) 99111-9800.</p>""")
+        msg = ('Se esse e-mail tem cadastro, enviamos uma senha temporária. '
+               'Veja seu e-mail (inclusive a caixa de spam).')
+    return render_template('esqueci_senha.html', msg=msg,
+                           categorias=listar_categorias(),
+                           carrinho=carrinho_ler())
+
+
+@app.route('/api/minha-conta/trocar-senha', methods=['POST'])
+def trocar_senha():
+    c = cliente_logado()
+    if not c:
+        return jsonify({'erro': 'Faça login'}), 401
+    d = request.get_json() or {}
+    atual = d.get('senha_atual') or ''
+    nova = d.get('senha_nova') or ''
+    if not check_password_hash(c['senha_hash'], atual):
+        return jsonify({'erro': 'Senha atual incorreta'}), 400
+    if len(nova) < 6:
+        return jsonify({'erro': 'Senha nova precisa de pelo menos 6 caracteres'}), 400
+    db_execute("UPDATE clientes_site SET senha_hash=%s WHERE id=%s",
+               [generate_password_hash(nova), c['id']])
+    return jsonify({'ok': True})
+
+
 @app.route('/sair')
 def sair():
     session.pop('cliente_id', None)
@@ -1074,13 +1377,23 @@ def minha_conta():
         "SELECT * FROM pedidos WHERE cliente_id=%s ORDER BY criado_em DESC",
         [c['id']], fetch='all') or []
     assinatura = db_execute(
-        """SELECT a.*, p.nome AS plano_nome, p.preco_mensal
+        """SELECT a.*, p.nome AS plano_nome, p.slug AS plano_slug, p.preco_mensal
            FROM clube_assinaturas a JOIN clube_planos p ON p.id=a.plano_id
-           WHERE a.cliente_id=%s AND a.status IN ('ativa','aguardando_pagto')
+           WHERE a.cliente_id=%s AND a.status IN ('ativa','aguardando_pagto','pausada')
            ORDER BY a.id DESC LIMIT 1""",
         [c['id']], fetch='one')
+    envios = []
+    if assinatura:
+        envios = db_execute(
+            """SELECT * FROM clube_envios
+               WHERE assinatura_id=%s ORDER BY enviado_em DESC LIMIT 12""",
+            [assinatura['id']], fetch='all') or []
+    planos = db_execute(
+        "SELECT * FROM clube_planos WHERE ativo ORDER BY ordem",
+        fetch='all') or []
     return render_template('minha_conta.html',
                            cliente=c, pedidos=pedidos, assinatura=assinatura,
+                           envios=envios, planos=planos,
                            categorias=listar_categorias(),
                            carrinho=carrinho_ler())
 
@@ -1143,6 +1456,70 @@ def admin_pedidos():
     return render_template('admin_pedidos.html', pedidos=pedidos)
 
 
+STATUS_TIMELINE = ['aguardando_pagto', 'pago', 'preparando', 'enviado', 'entregue']
+STATUS_LABELS = {
+    'aguardando_pagto': 'Aguardando pagamento',
+    'pago':             'Pagamento confirmado',
+    'preparando':       'Preparando seu pedido',
+    'enviado':          'Saiu pra entrega',
+    'entregue':         'Entregue ✓',
+    'cancelado':        'Cancelado',
+    'atrasado':         'Pagamento atrasado',
+}
+
+
+@app.route('/pedido/<int:pid>/tracking')
+def pedido_tracking(pid):
+    p = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one')
+    if not p:
+        abort(404)
+    itens = db_execute(
+        "SELECT * FROM pedido_itens WHERE pedido_id=%s ORDER BY id",
+        [pid], fetch='all') or []
+    return render_template('pedido_tracking.html',
+                           p=p, itens=itens,
+                           status_timeline=STATUS_TIMELINE,
+                           status_labels=STATUS_LABELS,
+                           categorias=listar_categorias(),
+                           cliente=cliente_logado(),
+                           carrinho=carrinho_ler())
+
+
+@app.route('/api/admin/pedido/<int:pid>/status', methods=['POST'])
+@requer_admin
+def admin_pedido_status(pid):
+    d = request.get_json() or {}
+    novo = (d.get('status') or '').strip()
+    rastreio = (d.get('rastreio') or '').strip() or None
+    if novo not in STATUS_TIMELINE + ['cancelado']:
+        return jsonify({'erro': 'Status inválido'}), 400
+    p = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one')
+    if not p:
+        return jsonify({'erro': 'Pedido não encontrado'}), 404
+    db_execute("""UPDATE pedidos SET status=%s,
+                  melhorenvio_rastreio=COALESCE(%s, melhorenvio_rastreio),
+                  atualizado_em=NOW() WHERE id=%s""",
+               [novo, rastreio, pid])
+    # Notifica cliente
+    try:
+        msgs = {
+            'preparando': (f"📦 Oi {p['nome'].split()[0]}! Seu *Pedido #{pid}* está sendo "
+                           f"preparado com muito carinho 💛"),
+            'enviado': (f"🚚 Oi {p['nome'].split()[0]}! Seu *Pedido #{pid}* "
+                        f"acabou de sair pra entrega!"
+                        + (f"\n\n*Rastreio:* {rastreio}" if rastreio else "")
+                        + f"\n\nAcompanhe: https://www.luquibrinquedos.com.br/pedido/{pid}/tracking"),
+            'entregue': (f"💛 *Pedido #{pid} entregue!* Esperamos que ame!\n\n"
+                         f"Que tal nos avaliar? "
+                         f"https://www.luquibrinquedos.com.br/pedido/{pid}/tracking"),
+        }
+        if novo in msgs:
+            enviar_whatsapp(p['telefone'], msgs[novo])
+    except Exception as e:
+        log.error("WA status: %s", e)
+    return jsonify({'ok': True, 'status': novo})
+
+
 @app.route('/admin/assinantes')
 @requer_admin
 def admin_assinantes():
@@ -1154,6 +1531,83 @@ def admin_assinantes():
            JOIN clientes_site c ON c.id=a.cliente_id
            ORDER BY a.iniciada_em DESC""", fetch='all') or []
     return render_template('admin_assinantes.html', assinaturas=rows)
+
+
+@app.route('/admin/banners', methods=['GET', 'POST'])
+@requer_admin
+def admin_banners():
+    if request.method == 'POST':
+        bid = request.form.get('id')
+        d = {k: (request.form.get(k) or '').strip() for k in
+             ('titulo', 'subtitulo', 'imagem_url', 'link', 'cta_texto', 'cor_fundo')}
+        ordem = int(request.form.get('ordem') or 0)
+        ativo = request.form.get('ativo') == 'on'
+        if bid:
+            db_execute("""UPDATE banners SET titulo=%s, subtitulo=%s,
+                          imagem_url=%s, link=%s, cta_texto=%s, cor_fundo=%s,
+                          ordem=%s, ativo=%s WHERE id=%s""",
+                       [d['titulo'], d['subtitulo'], d['imagem_url'] or None,
+                        d['link'] or None, d['cta_texto'] or 'Ver',
+                        d['cor_fundo'] or '#4FB8FF', ordem, ativo, int(bid)])
+        else:
+            db_execute("""INSERT INTO banners
+                (titulo, subtitulo, imagem_url, link, cta_texto, cor_fundo, ordem, ativo)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
+                [d['titulo'], d['subtitulo'], d['imagem_url'] or None,
+                 d['link'] or None, d['cta_texto'] or 'Ver',
+                 d['cor_fundo'] or '#4FB8FF', ordem, ativo])
+        return redirect(url_for('admin_banners'))
+    banners = db_execute("SELECT * FROM banners ORDER BY ordem, id",
+                         fetch='all') or []
+    return render_template('admin_banners.html', banners=banners)
+
+
+@app.route('/admin/banners/<int:bid>/excluir', methods=['POST'])
+@requer_admin
+def admin_banner_excluir(bid):
+    db_execute("DELETE FROM banners WHERE id=%s", [bid])
+    return redirect(url_for('admin_banners'))
+
+
+@app.route('/admin/cupons', methods=['GET', 'POST'])
+@requer_admin
+def admin_cupons():
+    if request.method == 'POST':
+        cid = request.form.get('id')
+        codigo = (request.form.get('codigo') or '').strip().upper()[:40]
+        tipo = (request.form.get('tipo') or 'pct').strip()
+        valor = float((request.form.get('valor') or '0').replace(',', '.'))
+        valor_min = float((request.form.get('valor_min') or '0').replace(',', '.'))
+        usos_max = request.form.get('usos_max')
+        usos_max = int(usos_max) if usos_max and usos_max.isdigit() else None
+        valido_ate = request.form.get('valido_ate') or None
+        ativo = request.form.get('ativo') == 'on'
+        if not codigo or valor <= 0 or tipo not in ('pct', 'rs'):
+            return redirect(url_for('admin_cupons') + '?erro=dados')
+        if cid:
+            db_execute("""UPDATE cupons SET codigo=%s, tipo=%s, valor=%s,
+                          valor_min=%s, usos_max=%s, valido_ate=%s, ativo=%s
+                          WHERE id=%s""",
+                       [codigo, tipo, valor, valor_min, usos_max,
+                        valido_ate, ativo, int(cid)])
+        else:
+            db_execute("""INSERT INTO cupons
+                (codigo, tipo, valor, valor_min, usos_max, valido_ate, ativo)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (codigo) DO NOTHING""",
+                [codigo, tipo, valor, valor_min, usos_max, valido_ate, ativo])
+        return redirect(url_for('admin_cupons'))
+    cupons = db_execute(
+        "SELECT * FROM cupons ORDER BY ativo DESC, id DESC",
+        fetch='all') or []
+    return render_template('admin_cupons.html', cupons=cupons)
+
+
+@app.route('/admin/cupons/<int:cid>/excluir', methods=['POST'])
+@requer_admin
+def admin_cupom_excluir(cid):
+    db_execute("DELETE FROM cupons WHERE id=%s", [cid])
+    return redirect(url_for('admin_cupons'))
 
 
 @app.route('/admin/planos')

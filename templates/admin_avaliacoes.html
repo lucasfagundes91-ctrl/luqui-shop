@@ -1,0 +1,37 @@
+{% extends "admin_base.html" %}
+{% set pagina = 'avaliacoes' %}
+{% block titulo %}Avaliações — LuquiShop{% endblock %}
+{% block conteudo %}
+<h2>⭐ Avaliações</h2>
+<div class="card">
+  {% if avaliacoes %}
+  <table>
+    <thead><tr><th>Produto</th><th>Cliente</th><th>Nota</th><th>Comentário</th><th>Data</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for a in avaliacoes %}
+      <tr>
+        <td><a href="/produto/{{ a.produto_pdv_id }}" target="_blank" style="color:#1652C7;font-weight:700">#{{ a.produto_pdv_id }}</a></td>
+        <td>{{ a.cliente_nome or '—' }}</td>
+        <td style="color:#F59E0B;font-size:16px">{{ '★' * a.estrelas }}<span style="opacity:.3">{{ '★' * (5 - a.estrelas) }}</span></td>
+        <td style="max-width:300px">{% if a.titulo %}<b>{{ a.titulo }}</b><br>{% endif %}<small>{{ a.comentario[:200] }}{% if a.comentario|length > 200 %}...{% endif %}</small></td>
+        <td><small>{{ a.criado_em.strftime('%d/%m %H:%M') if a.criado_em else '—' }}</small></td>
+        <td><span class="pill {{ 'verde' if a.aprovado else 'amarelo' }}">{{ 'aprovada' if a.aprovado else 'aguardando' }}</span></td>
+        <td>
+          {% if not a.aprovado %}
+          <form method="post" action="/admin/avaliacoes/{{ a.id }}/aprovar" style="display:inline">
+            <button class="pill verde" style="border:0;cursor:pointer">✓ Aprovar</button>
+          </form>
+          {% endif %}
+          <form method="post" action="/admin/avaliacoes/{{ a.id }}/excluir" style="display:inline" onsubmit="return confirm('Excluir essa avaliação?')">
+            <button class="pill" style="background:#FEE2E2;color:#991B1B;border:0;cursor:pointer">×</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:#64748B">Sem avaliações ainda.</p>
+  {% endif %}
+</div>
+{% endblock %}

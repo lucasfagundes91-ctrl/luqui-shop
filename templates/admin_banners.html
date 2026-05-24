@@ -1,0 +1,94 @@
+{% extends "admin_base.html" %}
+{% set pagina = 'banners' %}
+{% block titulo %}Banners — LuquiShop{% endblock %}
+{% block conteudo %}
+<h2>🎨 Banners do hero (página inicial)</h2>
+
+<div class="card">
+  <h3 style="margin-bottom:14px">{{ '✏️ Editar banner' if request.args.get('edit') else '➕ Novo banner' }}</h3>
+  {% set ed = (banners|selectattr('id','equalto',request.args.get('edit',0)|int)|list|first) if request.args.get('edit') else None %}
+  <form method="post" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    {% if ed %}<input type="hidden" name="id" value="{{ ed.id }}">{% endif %}
+    <div style="grid-column:1/-1">
+      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Título *</label>
+      <input name="titulo" required value="{{ ed.titulo if ed else '' }}" placeholder="Ex: BICICLETAS"
+             style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
+    </div>
+    <div style="grid-column:1/-1">
+      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Subtítulo (aceita HTML)</label>
+      <input name="subtitulo" value="{{ ed.subtitulo if ed else '' }}"
+             placeholder="em até <b>12x sem juros</b><br>com 5% retirando na loja"
+             style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
+    </div>
+    <div>
+      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">URL da imagem (opcional)</label>
+      <input name="imagem_url" value="{{ ed.imagem_url if ed else '' }}" placeholder="https://..."
+             style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
+    </div>
+    <div>
+      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Link de destino</label>
+      <input name="link" value="{{ ed.link if ed else '' }}" placeholder="/buscar?q=bicicleta"
+             style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
+    </div>
+    <div>
+      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Texto do botão</label>
+      <input name="cta_texto" value="{{ ed.cta_texto if ed else 'Ver agora' }}"
+             style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
+    </div>
+    <div>
+      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Cor de fundo</label>
+      <input name="cor_fundo" type="color" value="{{ ed.cor_fundo if ed else '#4FB8FF' }}"
+             style="width:100%;padding:6px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px;height:44px">
+    </div>
+    <div>
+      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Ordem</label>
+      <input name="ordem" type="number" value="{{ ed.ordem if ed else 0 }}"
+             style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <label><input type="checkbox" name="ativo" {% if (ed and ed.ativo) or not ed %}checked{% endif %}> Ativo (aparece no site)</label>
+    </div>
+    <div style="grid-column:1/-1;display:flex;gap:10px;justify-content:flex-end">
+      {% if ed %}<a href="/admin/banners" class="pill cinza" style="padding:10px 18px;text-decoration:none">Cancelar</a>{% endif %}
+      <button type="submit" style="background:#16A34A;color:#fff;border:0;padding:12px 24px;border-radius:8px;font-weight:700;cursor:pointer">
+        {{ 'Salvar alterações' if ed else '➕ Adicionar banner' }}
+      </button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h3 style="margin-bottom:14px">Banners cadastrados</h3>
+  {% if banners %}
+  <table>
+    <thead><tr><th>Ordem</th><th>Banner</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for b in banners %}
+      <tr>
+        <td><b>{{ b.ordem }}</b></td>
+        <td>
+          <div style="display:flex;gap:12px;align-items:center">
+            <div style="width:120px;height:60px;background:{{ b.cor_fundo or '#4FB8FF' }};border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:11px;text-align:center;padding:6px">{{ b.titulo[:20] }}</div>
+            <div>
+              <b>{{ b.titulo }}</b>
+              <div style="font-size:11px;color:#64748B">{{ b.subtitulo|safe if b.subtitulo else '—' }}</div>
+              {% if b.link %}<div style="font-size:11px;color:#1652C7">→ {{ b.link }}</div>{% endif %}
+            </div>
+          </div>
+        </td>
+        <td><span class="pill {{ 'verde' if b.ativo else 'cinza' }}">{{ 'ativo' if b.ativo else 'inativo' }}</span></td>
+        <td>
+          <a href="/admin/banners?edit={{ b.id }}" class="pill azul" style="text-decoration:none">Editar</a>
+          <form method="post" action="/admin/banners/{{ b.id }}/excluir" style="display:inline" onsubmit="return confirm('Excluir esse banner?')">
+            <button class="pill" style="background:#FEE2E2;color:#991B1B;border:0;cursor:pointer">Excluir</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:#64748B">Nenhum banner cadastrado. O site usa o banner padrão "BICICLETAS" enquanto não tem nada aqui.</p>
+  {% endif %}
+</div>
+{% endblock %}

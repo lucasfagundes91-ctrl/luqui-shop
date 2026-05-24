@@ -187,6 +187,34 @@
     .banner-clube h3{ font-size:36px; }
   }
 </style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "ToyStore",
+  "name": "Luqui Brinquedos",
+  "image": "https://www.luquibrinquedos.com.br/static/logo.png",
+  "url": "https://www.luquibrinquedos.com.br",
+  "telephone": "+5545991119800",
+  "email": "contato@luquibrinquedos.com.br",
+  "priceRange": "$$",
+  "address": {
+    "@type": "PostalAddress",
+    "streetAddress": "R. Engenheiro Rebouças, 2053",
+    "addressLocality": "Cascavel",
+    "addressRegion": "PR",
+    "postalCode": "85812-130",
+    "addressCountry": "BR"
+  },
+  "openingHoursSpecification": [
+    {"@type":"OpeningHoursSpecification","dayOfWeek":["Monday","Tuesday","Wednesday","Thursday","Friday"],"opens":"09:00","closes":"18:00"},
+    {"@type":"OpeningHoursSpecification","dayOfWeek":"Saturday","opens":"09:00","closes":"13:00"}
+  ],
+  "sameAs": [
+    "https://instagram.com/luquibrinquedos",
+    "https://facebook.com/luquibrinquedos"
+  ]
+}
+</script>
 {% block extra_head %}{% endblock %}
 
 {% if META_PIXEL_ID %}
@@ -304,6 +332,7 @@ gtag('config', '{{ GOOGLE_TAG_ID }}');
       <a href="/buscar?q=novidade">Novidades</a>
       <a href="/buscar?q=promo">Promoções</a>
       <a href="/clube">Clube Luqui</a>
+      <a href="/sobre">Sobre a Luqui</a>
       <a href="/minha-conta">Minha conta</a>
     </div>
     <div>
@@ -323,15 +352,67 @@ gtag('config', '{{ GOOGLE_TAG_ID }}');
     </div>
   </div>
   <div class="copy">
+    <!-- Newsletter -->
+    <div style="max-width:600px;margin:0 auto 20px">
+      <p style="color:#fff;font-weight:700;margin-bottom:10px">📧 Receba promoções e novidades no seu e-mail</p>
+      <form onsubmit="event.preventDefault();assinarNewsletter(this)" style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <input name="email" type="email" required placeholder="seu@email.com"
+               style="flex:1;min-width:220px;padding:12px;border:0;border-radius:8px;font-size:14px">
+        <button type="submit"
+                style="background:var(--amarelo);color:var(--azul);font-weight:900;border:0;padding:12px 24px;border-radius:8px;cursor:pointer;font-size:14px">
+          Receber novidades
+        </button>
+      </form>
+      <p id="news-msg" style="color:#FFC700;margin-top:8px;font-size:12px"></p>
+    </div>
     © {{ ano }} Luqui Brinquedos LTDA · CNPJ 32.650.888/0001-02 ·
     Site desenvolvido com 💛 pela <a href="https://luqsys.com.br" target="_blank" style="color:#FFC700">Luqsys</a>
   </div>
 </footer>
+<script>
+async function assinarNewsletter(form){
+  const email = form.email.value.trim();
+  const r = await fetch('/api/newsletter', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({email})
+  });
+  const d = await r.json();
+  const msg = document.getElementById('news-msg');
+  if(d.erro){ msg.textContent = '❌ '+d.erro; msg.style.color='#FCA5A5'; return; }
+  msg.textContent = '✓ Pronto! Você vai receber as melhores promoções 💛';
+  form.reset();
+}
+</script>
 
 <a href="https://wa.me/{{ whatsapp_loja() }}?text=Olá!%20Tudo%20bem?"
    target="_blank" class="wa-float">
   💚 Compre pelo WhatsApp
 </a>
+
+<!-- Cookie banner LGPD -->
+<div id="cookie-banner" style="position:fixed;bottom:0;left:0;right:0;background:#0F172A;color:#fff;padding:18px 24px;display:none;z-index:60;box-shadow:0 -8px 24px rgba(0,0,0,.3)">
+  <div style="max-width:1100px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px">
+    <div style="flex:1;min-width:280px;font-size:13px;line-height:1.5">
+      🍪 <b>Cookies & Privacidade.</b> Usamos cookies pra manter seu carrinho funcionando e entender quais produtos vocês mais curtem.
+      Ao continuar navegando, você concorda. Detalhes em
+      <a href="/privacidade" style="color:#FFC700;text-decoration:underline">nossa política</a>.
+    </div>
+    <button onclick="aceitarCookies()" style="background:#FFC700;color:#1652C7;border:0;padding:10px 22px;border-radius:8px;font-weight:900;cursor:pointer;font-size:13px">
+      Aceitar e fechar
+    </button>
+  </div>
+</div>
+<script>
+(function(){
+  if(!localStorage.getItem('luqui_cookies_ok')){
+    document.getElementById('cookie-banner').style.display='block';
+  }
+})();
+function aceitarCookies(){
+  localStorage.setItem('luqui_cookies_ok','1');
+  document.getElementById('cookie-banner').style.display='none';
+}
+</script>
 
 <script>
 function toast(msg, tipo='ok'){
