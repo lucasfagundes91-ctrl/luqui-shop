@@ -186,7 +186,29 @@ function recalcular(){
 
 document.getElementById('form-checkout').addEventListener('submit', async (e)=>{
   e.preventDefault();
-  toast('🚧 Checkout via Asaas em finalização — disponível em algumas horas');
+  const btn = e.target.querySelector('button[type=submit]');
+  btn.disabled = true; btn.textContent = 'Processando...';
+  const f = new FormData(e.target);
+  const dados = Object.fromEntries(f.entries());
+  dados.frete_valor = frete;
+  dados.frete_servico = document.querySelector('input[name="frete_servico"]:checked')?.value || '';
+  try {
+    const r = await fetch('/api/checkout/finalizar', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(dados),
+    });
+    const resp = await r.json();
+    if(resp.erro){
+      toast(resp.erro, 'err');
+      btn.disabled = false; btn.textContent = 'Pagar e finalizar →';
+      return;
+    }
+    location.href = resp.pagamento_url;
+  } catch(err) {
+    toast('Erro: ' + err.message, 'err');
+    btn.disabled = false; btn.textContent = 'Pagar e finalizar →';
+  }
 });
 </script>
 

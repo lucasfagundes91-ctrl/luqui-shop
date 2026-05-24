@@ -15,18 +15,76 @@
       {% endfor %}
     </ul>
 
-    <div style="background:#FEF3C7;color:#92400E;padding:14px;border-radius:10px;font-size:13px;margin:20px 0">
-      🚧 <b>Checkout da assinatura em finalização.</b><br>
-      Em algumas horas o pagamento recorrente via Asaas estará integrado. Por enquanto,
-      <a href="https://wa.me/{{ whatsapp_loja() }}?text=Olá!%20Quero%20assinar%20o%20{{ plano.nome|urlencode }}" target="_blank" style="color:var(--azul);font-weight:700;text-decoration:underline">
-        chama no WhatsApp pra ativar manualmente
-      </a>.
-    </div>
+    {% if ja_assinou and ja_assinou.status == 'ativa' %}
+      <div style="background:#FEF3C7;color:#92400E;padding:14px;border-radius:10px;margin:20px 0">
+        ⚠️ Você já tem uma assinatura ativa. Cancele a atual em
+        <a href="/minha-conta" style="color:var(--azul);font-weight:700">minha conta</a>
+        antes de trocar de plano.
+      </div>
+    {% elif not cliente.cpf %}
+      <div style="background:#FEF3C7;color:#92400E;padding:14px;border-radius:10px;margin:20px 0">
+        ⚠️ Pra assinar o clube, precisamos do seu CPF (cobrança Asaas).
+        <a href="/minha-conta" style="color:var(--azul);font-weight:700">Completar cadastro →</a>
+      </div>
+    {% else %}
+      <h3 style="margin:24px 0 14px">Forma de pagamento</h3>
+      <div id="formas" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">
+        <label class="forma" data-v="pix" style="border:2px solid var(--azul);padding:14px;border-radius:10px;cursor:pointer;text-align:center">
+          <input type="radio" name="forma_pagto" value="pix" checked style="display:none">
+          <div style="font-size:24px">📱</div><b>PIX</b>
+          <div style="font-size:11px;color:var(--mut)">cobrança mensal</div>
+        </label>
+        <label class="forma" data-v="boleto" style="border:2px solid var(--linha);padding:14px;border-radius:10px;cursor:pointer;text-align:center">
+          <input type="radio" name="forma_pagto" value="boleto" style="display:none">
+          <div style="font-size:24px">📄</div><b>Boleto</b>
+          <div style="font-size:11px;color:var(--mut)">cobrança mensal</div>
+        </label>
+        <label class="forma" data-v="cartao" style="border:2px solid var(--linha);padding:14px;border-radius:10px;cursor:pointer;text-align:center">
+          <input type="radio" name="forma_pagto" value="cartao" style="display:none">
+          <div style="font-size:24px">💳</div><b>Cartão</b>
+          <div style="font-size:11px;color:var(--mut)">cobrança mensal</div>
+        </label>
+      </div>
 
-    <a href="https://wa.me/{{ whatsapp_loja() }}?text=Olá!%20Quero%20assinar%20o%20{{ plano.nome|urlencode }}%20({{ rs(plano.preco_mensal) }}/mês)"
-       target="_blank" class="btn btn-amarelo btn-block" style="padding:16px;font-size:15px">
-      💚 Falar com a Luqui no WhatsApp
-    </a>
+      <p style="font-size:12px;color:var(--mut);margin-bottom:14px">
+        🔒 Cobrança automática mensal via Asaas. Cancele quando quiser pela página
+        Minha Conta. A primeira Caixa Misteriosa é despachada em até 7 dias após
+        confirmação do pagamento.
+      </p>
+
+      <button id="btn-assinar" class="btn btn-amarelo btn-block" style="padding:16px;font-size:15px">
+        💛 Assinar agora · {{ rs(plano.preco_mensal) }}/mês
+      </button>
+    {% endif %}
   </div>
 </div>
+
+<script>
+document.querySelectorAll('.forma').forEach(l=>{
+  l.addEventListener('click',()=>{
+    document.querySelectorAll('.forma').forEach(x=>x.style.borderColor='var(--linha)');
+    l.style.borderColor='var(--azul)';
+    l.querySelector('input').checked = true;
+  });
+});
+
+document.getElementById('btn-assinar')?.addEventListener('click', async ()=>{
+  const btn = document.getElementById('btn-assinar');
+  btn.disabled = true; btn.textContent = 'Processando...';
+  const forma = document.querySelector('input[name="forma_pagto"]:checked').value;
+  try {
+    const r = await fetch('/api/clube/assinar', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({plano_slug:'{{ plano.slug }}', forma_pagto:forma}),
+    });
+    const d = await r.json();
+    if(d.erro){ toast(d.erro,'err'); btn.disabled=false; btn.textContent='💛 Assinar agora'; return; }
+    toast('Assinatura criada! Redirecionando pro pagamento...');
+    setTimeout(()=>{ location.href = d.pagamento_url; }, 800);
+  } catch(e){
+    toast('Erro: '+e.message,'err');
+    btn.disabled=false; btn.textContent='💛 Assinar agora';
+  }
+});
+</script>
 {% endblock %}

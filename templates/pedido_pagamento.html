@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block titulo %}Pedido #{{ p.id }} — Pagamento{% endblock %}
+{% block conteudo %}
+<div style="max-width:780px;margin:30px auto;padding:0 16px">
+  <div style="background:#fff;padding:30px;border-radius:18px">
+    {% if p.status == 'pago' %}
+      <div style="text-align:center">
+        <div style="font-size:60px">✅</div>
+        <h1 style="color:var(--verde);margin:14px 0">Pagamento confirmado!</h1>
+        <p style="color:var(--mut);margin-bottom:20px">Estamos preparando seu pedido com muito carinho 💛</p>
+        <a href="/minha-conta" class="btn btn-amarelo">Acompanhar pedido</a>
+      </div>
+    {% elif p.status == 'cancelado' %}
+      <div style="text-align:center">
+        <div style="font-size:60px">❌</div>
+        <h1 style="color:var(--vermelho);margin:14px 0">Pedido cancelado</h1>
+        <a href="/" class="btn btn-primario">Voltar pra loja</a>
+      </div>
+    {% else %}
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;margin-bottom:24px">
+        <div>
+          <h1 style="font-size:24px">Pedido #{{ p.id }}</h1>
+          <div style="color:var(--mut);font-size:13px">{{ p.criado_em.strftime('%d/%m/%Y %H:%M') if p.criado_em else '' }}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:12px;color:var(--mut)">TOTAL A PAGAR</div>
+          <div style="color:var(--verde);font-weight:900;font-size:30px;line-height:1">{{ rs(p.total) }}</div>
+        </div>
+      </div>
+
+      <div style="background:#FEF3C7;color:#92400E;padding:14px;border-radius:10px;margin-bottom:20px;font-size:13px;display:flex;align-items:center;gap:10px">
+        <span style="font-size:24px">⏳</span>
+        <span><b>Aguardando pagamento.</b> Esta página atualiza automaticamente quando confirmarmos.</span>
+      </div>
+
+      {% if p.forma_pagto == 'pix' %}
+        <h3 style="margin-bottom:14px">📱 Pague com PIX</h3>
+        <p style="font-size:13px;color:var(--mut);margin-bottom:14px">
+          1. Abra o app do seu banco · 2. Escolha PIX · 3. Escaneie o QR ou copie o código abaixo
+        </p>
+        <div style="text-align:center;background:#F8FAFC;padding:24px;border-radius:14px;margin-bottom:14px">
+          {% if p.asaas_link %}
+            <p><a href="{{ p.asaas_link }}" target="_blank" class="btn btn-amarelo">
+              Abrir página de pagamento do Asaas →
+            </a></p>
+            <p style="margin-top:14px;font-size:12px;color:var(--mut)">Ou copie o código PIX:</p>
+          {% endif %}
+          {% if p.asaas_pix_qrcode %}
+            <textarea readonly onclick="this.select();document.execCommand('copy');toast('Código PIX copiado!')"
+              style="width:100%;max-width:500px;padding:12px;border:1px solid var(--linha);border-radius:8px;font-family:monospace;font-size:11px;height:80px;text-align:center;cursor:pointer">{{ p.asaas_pix_qrcode }}</textarea>
+            <p style="font-size:11px;color:var(--mut);margin-top:6px">(clique pra copiar)</p>
+          {% endif %}
+        </div>
+      {% elif p.forma_pagto == 'boleto' %}
+        <h3 style="margin-bottom:14px">📄 Pague com Boleto</h3>
+        <p style="font-size:13px;color:var(--mut);margin-bottom:14px">
+          O boleto vence em 3 dias úteis. Pode pagar em qualquer banco, lotérica ou pelo app.
+        </p>
+        {% if p.asaas_boleto_url %}
+          <a href="{{ p.asaas_boleto_url }}" target="_blank" class="btn btn-amarelo btn-block" style="padding:16px;font-size:15px">
+            📄 Abrir/Imprimir boleto
+          </a>
+        {% elif p.asaas_link %}
+          <a href="{{ p.asaas_link }}" target="_blank" class="btn btn-amarelo btn-block" style="padding:16px;font-size:15px">
+            Abrir página de pagamento →
+          </a>
+        {% endif %}
+      {% elif p.forma_pagto == 'cartao' %}
+        <h3 style="margin-bottom:14px">💳 Pague com Cartão</h3>
+        <p style="font-size:13px;color:var(--mut);margin-bottom:14px">
+          {% if p.parcelas > 1 %}Parcelado em <b>{{ p.parcelas }}x sem juros</b>.{% endif %}
+          Você vai informar os dados do cartão na página segura do Asaas.
+        </p>
+        {% if p.asaas_link %}
+          <a href="{{ p.asaas_link }}" target="_blank" class="btn btn-amarelo btn-block" style="padding:16px;font-size:15px">
+            💳 Pagar com cartão →
+          </a>
+        {% endif %}
+      {% endif %}
+
+      <div style="background:#F8FAFC;padding:18px;border-radius:10px;margin-top:20px">
+        <h4 style="font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Itens do pedido</h4>
+        {% for i in itens %}
+          <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0">
+            <span>{{ i.quantidade|int }}× {{ i.descricao }}</span>
+            <span><b>{{ rs(i.subtotal) }}</b></span>
+          </div>
+        {% endfor %}
+        <hr style="margin:10px 0;border:0;border-top:1px solid var(--linha)">
+        <div style="display:flex;justify-content:space-between;font-size:13px">
+          <span>Subtotal</span><span>{{ rs(p.subtotal) }}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px">
+          <span>Frete</span><span>{{ rs(p.frete) if p.frete else 'GRÁTIS' }}</span>
+        </div>
+        {% if p.desconto and p.desconto|float > 0 %}
+        <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--verde)">
+          <span>Desconto</span><span>-{{ rs(p.desconto) }}</span>
+        </div>
+        {% endif %}
+        <div style="display:flex;justify-content:space-between;font-weight:700;margin-top:6px">
+          <span>Total</span><span style="color:var(--verde)">{{ rs(p.total) }}</span>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+<script>
+{% if p.status not in ('pago', 'cancelado') %}
+// Polling pra detectar pagamento
+setInterval(async ()=>{
+  try {
+    const r = await fetch('/api/pedido/{{ p.id }}/status');
+    const d = await r.json();
+    if(d.status === 'pago'){ location.reload(); }
+  } catch(e){}
+}, 6000);
+{% endif %}
+</script>
+{% endblock %}
