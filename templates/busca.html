@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block titulo %}Busca: {{ termo }} — Luqui Brinquedos{% endblock %}
+{% block conteudo %}
+<div style="max-width:1200px;margin:20px auto;padding:0 16px">
+  <a href="/" style="color:var(--mut);font-size:13px">← Voltar pra loja</a>
+  <h2 style="margin-top:8px">Busca por "<span style="color:var(--azul)">{{ termo }}</span>"</h2>
+  <p style="color:var(--mut);font-size:13px;margin-top:4px">{{ total }} {{ 'produto encontrado' if total == 1 else 'produtos encontrados' }}</p>
+</div>
+<section class="produtos">
+  {% for p in produtos %}
+    <div class="prod-card">
+      {% if p.preco_promo %}<span class="selo promo">PROMO</span>{% endif %}
+      <a href="/produto/{{ p.id }}">
+        <div class="foto">
+          {% if p.foto_url %}<img src="{{ p.foto_url }}" alt="">
+          {% else %}<span class="ph">📦</span>{% endif %}
+        </div>
+        <div class="desc">{{ p.descricao }}</div>
+      </a>
+      {% if p.preco_promo %}
+        <div class="preco-velho">{{ rs(p.preco_venda) }}</div>
+        <div class="preco">{{ rs(p.preco_promo) }}</div>
+      {% else %}
+        <div class="preco">{{ rs(p.preco_venda) }}</div>
+      {% endif %}
+      <button class="btn" onclick="carrinhoAdd({{ p.id }})">+ Adicionar</button>
+    </div>
+  {% else %}
+    <div style="grid-column:1/-1;padding:60px;text-align:center;color:var(--mut)">
+      Nenhum produto encontrado pra "{{ termo }}". Tenta com outras palavras!
+    </div>
+  {% endfor %}
+</section>
+{% endblock %}

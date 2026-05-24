@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block titulo %}Luqui Brinquedos — Aqui você compra brincando{% endblock %}</title>
+<meta name="description" content="{% block descricao %}A loja de brinquedos da família — pelúcias, jogos, bonecas, hot wheels, lego e muito mais. Loja física em Cascavel/PR.{% endblock %}">
+<link rel="icon" href="/static/favicon.ico">
+<style>
+  :root{
+    --azul:#1652C7; --azul-d:#0E3D9E; --azul-c:#3B82F6;
+    --amarelo:#FFC700; --amarelo-d:#E0A800;
+    --branco:#FFFFFF; --bg:#F8FAFC; --linha:#E2E8F0;
+    --txt:#0F172A; --mut:#64748B; --verde:#16A34A;
+    --vermelho:#DC2626;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  body{ font-family:-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;
+        background:var(--bg); color:var(--txt); -webkit-font-smoothing:antialiased; }
+  a{ color:inherit; text-decoration:none; }
+  img{ max-width:100%; display:block; }
+  button{ font-family:inherit; cursor:pointer; border:0; }
+
+  /* ─── Topo ─── */
+  .topo{ background:#fff; border-bottom:1px solid var(--linha); }
+  .topo .container{ max-width:1200px; margin:0 auto; padding:14px 16px;
+    display:flex; align-items:center; gap:18px; }
+  .logo{ display:flex; align-items:center; gap:6px; flex:none; }
+  .logo-img{
+    background:#FFC700; padding:8px 16px; border-radius:14px;
+    color:#1652C7; font-weight:900; font-size:30px; letter-spacing:-1px;
+    font-family:'Comic Sans MS','Marker Felt',sans-serif;
+    box-shadow:0 4px 0 #E0A800; line-height:.9;
+  }
+  .logo-img small{ display:block; font-size:11px; font-weight:700; letter-spacing:2px;
+    color:#1652C7; opacity:.85; margin-top:2px;}
+  .busca{ flex:1; position:relative; }
+  .busca input{ width:100%; padding:14px 50px 14px 20px; border-radius:30px;
+    border:2px solid var(--linha); font-size:14px; outline:none;
+    transition:border-color .15s; }
+  .busca input:focus{ border-color:var(--amarelo); }
+  .busca button{ position:absolute; right:6px; top:6px; bottom:6px;
+    background:var(--amarelo); padding:0 20px; border-radius:30px;
+    color:var(--azul); font-weight:800; font-size:14px; }
+  .topo-ico{ display:flex; gap:18px; align-items:center; flex:none; }
+  .topo-ico a{ display:flex; align-items:center; gap:8px; color:var(--azul);
+    font-weight:700; font-size:13px; padding:8px 10px; border-radius:8px; }
+  .topo-ico a:hover{ background:#F1F5F9; }
+  .ico-circ{ width:36px; height:36px; background:var(--amarelo); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:18px; }
+  .cart-badge{ background:var(--vermelho); color:#fff; font-size:11px;
+    padding:1px 6px; border-radius:10px; font-weight:700; }
+
+  /* ─── Mega-menu ─── */
+  .menu{ background:var(--azul); }
+  .menu .container{ max-width:1200px; margin:0 auto; padding:0 16px;
+    display:flex; flex-wrap:wrap; justify-content:center; gap:0; }
+  .menu a{ color:#fff; font-weight:700; font-size:13px; padding:14px 14px;
+    letter-spacing:.3px; text-transform:uppercase; transition:background .12s; }
+  .menu a:hover, .menu a.atual{ background:var(--azul-d); }
+
+  /* ─── Hero / Banners ─── */
+  .hero{ max-width:1200px; margin:18px auto; padding:0 16px; }
+  .hero .slide{ background:linear-gradient(135deg, #87CEFA, #4FB8FF);
+    border-radius:18px; overflow:hidden; min-height:300px; position:relative;
+    display:flex; align-items:center; padding:32px 48px; }
+  .hero .slide h2{ color:#FFC700; font-size:54px; font-weight:900;
+    letter-spacing:-1px; text-shadow:2px 2px 0 #1652C7; line-height:1;
+    font-family:'Comic Sans MS','Marker Felt',sans-serif; }
+  .hero .slide .sub{ color:#fff; font-size:22px; font-weight:800; margin-top:10px;
+    text-shadow:1px 1px 0 #1652C7; }
+  .hero .slide .cta{ display:inline-block; margin-top:18px; background:var(--amarelo);
+    color:var(--azul); font-weight:900; padding:14px 28px; border-radius:30px;
+    box-shadow:0 4px 0 #E0A800; font-size:15px; }
+
+  /* ─── Badges (parcelamento etc) ─── */
+  .badges{ max-width:1200px; margin:14px auto; padding:0 16px;
+    display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+  .badge-card{ background:#fff; border:1px dashed var(--linha); border-radius:14px;
+    padding:14px 16px; display:flex; align-items:center; gap:12px; }
+  .badge-card .ico{ font-size:30px; color:var(--azul); }
+  .badge-card b{ display:block; color:var(--azul); font-size:13px; font-weight:800; }
+  .badge-card span{ font-size:11px; color:var(--mut); }
+
+  /* ─── Seção título ─── */
+  .secao{ max-width:1200px; margin:30px auto 14px; padding:0 16px;
+    text-align:center; }
+  .secao h2{ color:var(--amarelo-d); font-size:18px; font-weight:900;
+    text-transform:uppercase; letter-spacing:1.5px; position:relative; display:inline-block; }
+  .secao h2:after{ content:''; display:block; width:60px; height:3px;
+    background:var(--amarelo); margin:8px auto 0; border-radius:2px; }
+
+  /* ─── Grid de produtos ─── */
+  .produtos{ max-width:1200px; margin:0 auto 30px; padding:0 16px;
+    display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+  .prod-card{ background:#fff; border:1px solid var(--linha); border-radius:14px;
+    padding:14px; transition:transform .15s, box-shadow .15s; position:relative;
+    display:flex; flex-direction:column; }
+  .prod-card:hover{ transform:translateY(-3px); box-shadow:0 12px 30px rgba(0,0,0,.08); }
+  .prod-card .selo{ position:absolute; top:10px; left:10px;
+    background:var(--vermelho); color:#fff; font-size:10px; font-weight:800;
+    padding:3px 8px; border-radius:6px; letter-spacing:.5px; }
+  .prod-card .selo.promo{ background:var(--amarelo); color:var(--azul); }
+  .prod-card .foto{ width:100%; aspect-ratio:1; background:#F1F5F9;
+    border-radius:10px; overflow:hidden; display:flex;
+    align-items:center; justify-content:center; margin-bottom:10px; }
+  .prod-card .foto img{ max-height:100%; max-width:100%; }
+  .prod-card .foto .ph{ font-size:60px; }
+  .prod-card .desc{ font-size:13px; color:var(--txt); font-weight:600;
+    line-height:1.3; margin-bottom:8px; min-height:38px;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+    overflow:hidden; }
+  .prod-card .preco-velho{ font-size:11px; color:var(--mut);
+    text-decoration:line-through; }
+  .prod-card .preco{ color:var(--verde); font-weight:900; font-size:20px; }
+  .prod-card .parc{ font-size:11px; color:var(--mut); margin-top:2px; }
+  .prod-card .btn{ margin-top:auto; background:var(--azul); color:#fff;
+    padding:10px; border-radius:8px; font-weight:700; text-align:center;
+    font-size:13px; transition:background .12s; }
+  .prod-card .btn:hover{ background:var(--azul-d); }
+
+  /* ─── Banner clube ─── */
+  .banner-clube{ max-width:1200px; margin:30px auto; padding:0 16px; }
+  .banner-clube .box{ background:#3FA89C; border-radius:18px; padding:38px;
+    color:#fff; display:flex; gap:30px; align-items:center; }
+  .banner-clube .box img{ max-width:220px; }
+  .banner-clube h3{ font-family:'Comic Sans MS','Marker Felt',sans-serif;
+    font-size:48px; color:var(--amarelo); text-shadow:2px 2px 0 #1652C7;
+    line-height:1; }
+  .banner-clube p{ font-size:16px; margin:14px 0; line-height:1.5; }
+  .banner-clube .cta{ background:var(--amarelo); color:var(--azul);
+    padding:14px 28px; border-radius:30px; font-weight:900;
+    display:inline-block; box-shadow:0 4px 0 #E0A800; }
+
+  /* ─── Footer ─── */
+  .footer{ background:var(--azul); color:#fff; padding:40px 16px 20px;
+    margin-top:50px; }
+  .footer .container{ max-width:1200px; margin:0 auto;
+    display:grid; grid-template-columns:1.5fr 1fr 1fr 1fr; gap:30px; }
+  .footer h4{ font-size:14px; margin-bottom:14px; text-transform:uppercase;
+    letter-spacing:1px; color:var(--amarelo); }
+  .footer a{ display:block; padding:5px 0; color:#cbd5e1; font-size:13px; }
+  .footer a:hover{ color:#fff; }
+  .footer .copy{ max-width:1200px; margin:30px auto 0; padding-top:20px;
+    border-top:1px solid rgba(255,255,255,.15); text-align:center;
+    color:#cbd5e1; font-size:12px; }
+
+  /* ─── WhatsApp flutuante ─── */
+  .wa-float{ position:fixed; bottom:24px; right:24px; background:#25D366;
+    color:#fff; padding:14px 22px; border-radius:50px; font-weight:700;
+    display:flex; align-items:center; gap:10px; box-shadow:0 10px 30px rgba(37,211,102,.5);
+    z-index:50; font-size:14px; }
+  .wa-float:hover{ background:#1DAA50; }
+
+  /* ─── Mensagens ─── */
+  .toast{ position:fixed; top:80px; right:20px; background:var(--azul);
+    color:#fff; padding:14px 22px; border-radius:10px; font-weight:600;
+    box-shadow:0 10px 30px rgba(0,0,0,.15); z-index:100;
+    animation:slideIn .25s; }
+  @keyframes slideIn{ from{ transform:translateX(120%); } to{ transform:translateX(0); } }
+
+  /* ─── Botões genéricos ─── */
+  .btn{ display:inline-block; padding:12px 24px; border-radius:10px;
+    font-weight:700; cursor:pointer; transition:opacity .15s; text-align:center;
+    font-size:14px; }
+  .btn:hover{ opacity:.92; }
+  .btn-primario{ background:var(--azul); color:#fff; }
+  .btn-amarelo{ background:var(--amarelo); color:var(--azul);
+    box-shadow:0 4px 0 var(--amarelo-d); }
+  .btn-verde{ background:var(--verde); color:#fff; }
+  .btn-ghost{ background:transparent; color:var(--azul);
+    border:1.5px solid var(--azul); }
+  .btn-block{ display:block; width:100%; }
+
+  /* ─── Mobile ─── */
+  @media (max-width: 900px){
+    .topo .container{ flex-wrap:wrap; }
+    .busca{ order:3; flex-basis:100%; }
+    .menu .container{ overflow-x:auto; flex-wrap:nowrap; justify-content:flex-start; }
+    .menu a{ white-space:nowrap; }
+    .hero .slide h2{ font-size:36px; }
+    .badges{ grid-template-columns:repeat(2,1fr); }
+    .produtos{ grid-template-columns:repeat(2,1fr); }
+    .footer .container{ grid-template-columns:1fr 1fr; }
+    .banner-clube .box{ flex-direction:column; text-align:center; padding:24px; }
+    .banner-clube h3{ font-size:36px; }
+  }
+</style>
+{% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<!-- TOPO -->
+<header class="topo">
+  <div class="container">
+    <a href="/" class="logo">
+      <div class="logo-img">
+        Luqui
+        <small>BRINQUEDOS</small>
+      </div>
+    </a>
+    <form class="busca" action="/buscar" method="get">
+      <input name="q" placeholder="o que você procura?" autocomplete="off"
+             value="{{ request.args.get('q','') }}">
+      <button type="submit">🔍</button>
+    </form>
+    <div class="topo-ico">
+      {% if cliente %}
+        <a href="/minha-conta">
+          <div class="ico-circ">👤</div>
+          <div>Olá, {{ cliente.nome.split()[0] }}<br><small>Minha conta</small></div>
+        </a>
+      {% else %}
+        <a href="/login">
+          <div class="ico-circ">👤</div>
+          <div>Entrar<br><small>ou cadastrar</small></div>
+        </a>
+      {% endif %}
+      <a href="/carrinho" style="position:relative">
+        <div class="ico-circ">🛒</div>
+        <div>{{ carrinho|length }}<br><small>R$ {{ '%.2f'|format(carrinho|sum(attribute='preco')*1) if carrinho else '0,00' }}</small></div>
+      </a>
+    </div>
+  </div>
+</header>
+
+<!-- MEGA-MENU -->
+<nav class="menu">
+  <div class="container">
+    {% set cats = categorias or [] %}
+    {% if cats %}
+      {% for c in cats[:22] %}
+        <a href="/categoria/{{ c.slug }}">{{ c.nome }}</a>
+      {% endfor %}
+    {% else %}
+      <a href="/buscar?q=bebes">Bebês</a>
+      <a href="/buscar?q=pelucia">Pelúcias</a>
+      <a href="/buscar?q=boneca">Bonecas</a>
+      <a href="/buscar?q=boneco">Bonecos</a>
+      <a href="/buscar?q=praia">Praia e Piscina</a>
+      <a href="/buscar?q=esporte">Esporte e Lazer</a>
+      <a href="/buscar?q=rodados">Rodados</a>
+      <a href="/buscar?q=quebra-cabeca">Quebra-cabeça</a>
+      <a href="/buscar?q=artes">Artes</a>
+      <a href="/buscar?q=playground">Playground</a>
+      <a href="/buscar?q=pokemon">Pokémon</a>
+      <a href="/buscar?q=fantasia">Fantasia</a>
+      <a href="/buscar?q=nerf">Nerf</a>
+      <a href="/buscar?q=dinossauros">Dinossauros</a>
+      <a href="/buscar?q=lego">Lego</a>
+      <a href="/buscar?q=ferramentas">Ferramentas</a>
+      <a href="/buscar?q=carrinho">Carrinhos</a>
+      <a href="/buscar?q=hot wheels">Hot Wheels</a>
+      <a href="/clube" style="background:var(--amarelo); color:var(--azul);">🎁 Clube Luqui</a>
+    {% endif %}
+  </div>
+</nav>
+
+{% block conteudo %}{% endblock %}
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="container">
+    <div>
+      <div class="logo-img" style="display:inline-block;margin-bottom:14px">
+        Luqui<small>BRINQUEDOS</small>
+      </div>
+      <p style="font-size:13px;color:#cbd5e1;line-height:1.6">
+        A loja de brinquedos da família.<br>
+        Aqui você compra brincando! 🎈
+      </p>
+      <p style="font-size:12px;color:#cbd5e1;margin-top:14px">
+        📍 R. Engenheiro Rebouças, 2053 — Centro — Cascavel/PR<br>
+        📞 (45) 99107-7788<br>
+        ✉️ contato@luquibrinquedos.com.br
+      </p>
+    </div>
+    <div>
+      <h4>Loja</h4>
+      <a href="/">Início</a>
+      <a href="/buscar?q=novidade">Novidades</a>
+      <a href="/buscar?q=promo">Promoções</a>
+      <a href="/clube">Clube Luqui</a>
+      <a href="/minha-conta">Minha conta</a>
+    </div>
+    <div>
+      <h4>Ajuda</h4>
+      <a href="https://wa.me/{{ whatsapp_loja() }}">Atendimento WhatsApp</a>
+      <a href="/trocas-devolucoes">Trocas e devoluções</a>
+      <a href="/entregas">Prazo de entrega</a>
+      <a href="/formas-pagamento">Formas de pagamento</a>
+    </div>
+    <div>
+      <h4>Siga a Luqui</h4>
+      <a href="https://instagram.com/luquibrinquedos" target="_blank">📷 Instagram</a>
+      <a href="https://facebook.com/luquibrinquedos" target="_blank">📘 Facebook</a>
+      <a href="https://wa.me/{{ whatsapp_loja() }}" target="_blank">💚 WhatsApp</a>
+    </div>
+  </div>
+  <div class="copy">
+    © {{ ano }} Luqui Brinquedos LTDA · CNPJ 32.650.888/0001-02 ·
+    Site desenvolvido com 💛 pela <a href="https://luqsys.com.br" target="_blank" style="color:#FFC700">Luqsys</a>
+  </div>
+</footer>
+
+<a href="https://wa.me/{{ whatsapp_loja() }}?text=Olá!%20Tudo%20bem?"
+   target="_blank" class="wa-float">
+  💚 Compre pelo WhatsApp
+</a>
+
+<script>
+function toast(msg, tipo='ok'){
+  const d=document.createElement('div');
+  d.className='toast';
+  if(tipo==='err') d.style.background='var(--vermelho)';
+  d.textContent=msg;
+  document.body.appendChild(d);
+  setTimeout(()=>d.remove(), 3000);
+}
+async function carrinhoAdd(produto_id, qtd=1){
+  try{
+    const r=await fetch('/api/carrinho/add',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({produto_id, quantidade: qtd})
+    });
+    const d=await r.json();
+    if(d.erro){ toast(d.erro,'err'); return; }
+    toast('Adicionado ao carrinho 🛒');
+    setTimeout(()=>location.reload(), 700);
+  }catch(e){ toast('Erro: '+e.message,'err'); }
+}
+</script>
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

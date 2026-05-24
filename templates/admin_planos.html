@@ -1,0 +1,25 @@
+{% extends "admin_base.html" %}
+{% set pagina = 'planos' %}
+{% block conteudo %}
+<h2>📋 Planos do Clube</h2>
+<div class="card">
+  <table>
+    <thead><tr><th>Slug</th><th>Nome</th><th>Modalidade</th><th>Preço mensal</th><th>Benefícios</th><th>Ativo</th></tr></thead>
+    <tbody>
+      {% for p in planos %}
+        <tr>
+          <td><code style="font-size:11px">{{ p.slug }}</code></td>
+          <td><b>{{ p.nome }}</b></td>
+          <td><span class="pill {{ 'azul' if p.modalidade == 'mensal' else 'verde' }}">{{ p.modalidade }}</span></td>
+          <td><b>{{ rs(p.preco_mensal) }}</b></td>
+          <td><small>{{ p.beneficios_json|length }} item(ns)</small></td>
+          <td><span class="pill {{ 'verde' if p.ativo else 'cinza' }}">{{ 'Sim' if p.ativo else 'Não' }}</span></td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p style="color:#64748B;margin-top:14px;font-size:12px">
+    Edição de planos via banco — em breve interface aqui no admin.
+  </p>
+</div>
+{% endblock %}

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block titulo %}Cadastrar — Luqui Brinquedos{% endblock %}
+{% block conteudo %}
+<div style="max-width:480px;margin:50px auto;padding:0 16px">
+  <div style="background:#fff;padding:32px;border-radius:18px">
+    <h2 style="color:var(--azul);margin-bottom:8px">Criar conta</h2>
+    <p style="color:var(--mut);font-size:13px;margin-bottom:20px">É rapidinho! Só precisamos do básico.</p>
+    {% if erro %}<div style="background:#FEE2E2;color:#991B1B;padding:10px;border-radius:8px;margin-bottom:14px;font-size:13px">{{ erro }}</div>{% endif %}
+    <form method="post">
+      <input name="nome" placeholder="Nome completo *" required
+             style="width:100%;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-bottom:10px">
+      <input name="email" type="email" placeholder="E-mail *" required
+             style="width:100%;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-bottom:10px">
+      <input name="senha" type="password" placeholder="Senha (mín 6 caracteres) *" required minlength="6"
+             style="width:100%;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-bottom:10px">
+      <input name="telefone" placeholder="WhatsApp"
+             style="width:100%;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-bottom:10px">
+      <input name="cpf" placeholder="CPF (opcional)"
+             style="width:100%;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-bottom:16px">
+      <button type="submit" class="btn btn-amarelo btn-block" style="padding:14px">Criar conta</button>
+    </form>
+    <p style="text-align:center;color:var(--mut);font-size:13px;margin-top:18px">
+      Já tem conta? <a href="/login" style="color:var(--azul);font-weight:700">Entrar</a>
+    </p>
+  </div>
+</div>
+{% endblock %}

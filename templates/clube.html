@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block titulo %}Clube Caixa Misteriosa — Luqui Brinquedos{% endblock %}
+{% block conteudo %}
+
+<!-- HERO CLUBE -->
+<section style="background:linear-gradient(135deg,#1652C7,#3B82F6);color:#fff;padding:60px 16px;text-align:center;position:relative;overflow:hidden">
+  <div style="max-width:900px;margin:0 auto;position:relative;z-index:1">
+    <h1 style="font-family:'Comic Sans MS','Marker Felt',sans-serif;font-size:60px;color:var(--amarelo);text-shadow:3px 3px 0 #0E3D9E;line-height:1">
+      Caixa Misteriosa
+    </h1>
+    <p style="font-size:22px;font-weight:700;margin-top:16px">
+      Todo mês uma surpresa nova chega na sua casa! 🎁
+    </p>
+    <p style="font-size:14px;margin-top:14px;opacity:.9">
+      Brinquedos selecionados a dedo pela equipe Luqui · Livros lúdicos ·
+      Frete grátis Cascavel e Toledo · Cancele quando quiser
+    </p>
+  </div>
+</section>
+
+<!-- VANTAGENS -->
+<section style="max-width:1100px;margin:50px auto;padding:0 16px">
+  <h2 style="text-align:center;color:var(--azul);font-size:24px;margin-bottom:30px">Por que assinar?</h2>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px">
+    <div style="background:#fff;padding:24px;border-radius:14px;border:2px solid var(--linha);text-align:center">
+      <div style="font-size:48px;margin-bottom:10px">🎁</div>
+      <h3 style="color:var(--azul);margin-bottom:8px">Variedade e novidade</h3>
+      <p style="font-size:13px;color:var(--mut);line-height:1.5">As crianças ficam sempre com uma novidade em casa, todo mês.</p>
+    </div>
+    <div style="background:#fff;padding:24px;border-radius:14px;border:2px solid var(--linha);text-align:center">
+      <div style="font-size:48px;margin-bottom:10px">💰</div>
+      <h3 style="color:var(--azul);margin-bottom:8px">Economia e conveniência</h3>
+      <p style="font-size:13px;color:var(--mut);line-height:1.5">Ótima relação custo-benefício. Recebe direto em casa, sem ter que sair.</p>
+    </div>
+    <div style="background:#fff;padding:24px;border-radius:14px;border:2px solid var(--linha);text-align:center">
+      <div style="font-size:48px;margin-bottom:10px">🧠</div>
+      <h3 style="color:var(--azul);margin-bottom:8px">Desenvolvimento infantil</h3>
+      <p style="font-size:13px;color:var(--mut);line-height:1.5">Produtos pensados pra estimular cognição, emoção e socialização.</p>
+    </div>
+  </div>
+</section>
+
+<!-- PLANOS -->
+{% for modalidade, titulo in [('mensal','Planos Mensais'),('anual','Planos Anuais (12 meses)')] %}
+<section style="max-width:1200px;margin:50px auto;padding:0 16px">
+  <h2 style="text-align:center;color:var(--azul);font-size:26px;margin-bottom:8px">{{ titulo }}</h2>
+  {% if modalidade == 'anual' %}
+    <p style="text-align:center;color:var(--verde);font-weight:700;margin-bottom:30px">
+      ⭐ Economize até R$ 240/ano pagando como anual
+    </p>
+  {% else %}
+    <p style="text-align:center;color:var(--mut);margin-bottom:30px">Sem fidelidade · Cancele quando quiser</p>
+  {% endif %}
+
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px">
+    {% for p in planos %}
+      {% if p.modalidade == modalidade %}
+        {% set destaque = 'essencial' in p.slug %}
+        <div style="background:#fff;border:{{ '3px solid var(--amarelo)' if destaque else '2px solid var(--linha)' }};border-radius:18px;padding:30px;position:relative;{{ 'transform:scale(1.03)' if destaque else '' }}">
+          {% if destaque %}
+            <div style="position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--amarelo);color:var(--azul);padding:4px 18px;border-radius:20px;font-size:11px;font-weight:900;letter-spacing:1px">
+              ⭐ MAIS POPULAR
+            </div>
+          {% endif %}
+          <div style="text-align:center;margin-bottom:20px">
+            <div style="font-size:50px;margin-bottom:8px">
+              {% if 'smart' in p.slug %}🚂
+              {% elif 'essencial' in p.slug %}🌟
+              {% else %}🚀{% endif %}
+            </div>
+            <h3 style="color:var(--azul);font-size:20px">{{ p.nome.replace('Plano ','').replace(' Anual','') }}</h3>
+            <div style="margin-top:14px">
+              <span style="color:var(--verde);font-size:42px;font-weight:900">{{ rs(p.preco_mensal) }}</span>
+              <span style="color:var(--mut);font-size:13px">/mês</span>
+            </div>
+            {% if modalidade == 'anual' %}
+              <div style="font-size:12px;color:var(--mut);margin-top:4px">cobrado mensalmente · plano de 12 meses</div>
+            {% endif %}
+          </div>
+
+          <ul style="list-style:none;padding:0;margin:0 0 24px">
+            {% for b in p.beneficios_json %}
+              <li style="padding:8px 0;border-bottom:1px solid var(--linha);font-size:13px;display:flex;gap:8px">
+                <span style="color:var(--verde);font-weight:900">✓</span>
+                <span>{{ b }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+
+          <a href="/clube/assinar/{{ p.slug }}" class="btn btn-block {{ 'btn-amarelo' if destaque else 'btn-primario' }}"
+             style="padding:14px;font-size:14px">
+            Assinar agora →
+          </a>
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+</section>
+{% endfor %}
+
+<!-- FRETE GRÁTIS -->
+<section style="background:var(--amarelo);padding:30px 16px;margin:30px 0;text-align:center">
+  <div style="max-width:800px;margin:0 auto">
+    <h2 style="color:var(--azul);font-size:32px;font-family:'Comic Sans MS',sans-serif">
+      🚚 FRETE GRÁTIS
+    </h2>
+    <p style="color:var(--azul);font-weight:700;font-size:18px;margin-top:6px">Cascavel e Toledo / PR</p>
+    <p style="color:var(--azul);font-size:13px;margin-top:8px;opacity:.85">
+      **Para outras regiões, frete a calcular no checkout.
+    </p>
+  </div>
+</section>
+
+<!-- CTA FINAL -->
+<section style="max-width:800px;margin:40px auto;padding:30px 16px;text-align:center">
+  <h2 style="color:var(--azul);margin-bottom:14px">Ainda com dúvidas?</h2>
+  <p style="color:var(--mut);margin-bottom:20px">Chama no WhatsApp que tiramos toda dúvida 💛</p>
+  <a href="https://wa.me/{{ whatsapp_loja() }}?text=Olá!%20Quero%20saber%20mais%20sobre%20o%20Clube%20Luqui"
+     target="_blank" class="btn btn-amarelo" style="padding:16px 32px;font-size:15px">
+    💚 Falar com a Luqui no WhatsApp
+  </a>
+</section>
+
+{% endblock %}

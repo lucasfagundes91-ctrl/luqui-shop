@@ -1,0 +1,26 @@
+{% extends "admin_base.html" %}
+{% set pagina = 'assinantes' %}
+{% block conteudo %}
+<h2>🎁 Assinantes do Clube</h2>
+<div class="card">
+  {% if assinaturas %}
+    <table>
+      <thead><tr><th>Cliente</th><th>E-mail</th><th>Plano</th><th>Mensal</th><th>Próximo envio</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for a in assinaturas %}
+          <tr>
+            <td><b>{{ a.cliente_nome }}</b></td>
+            <td><small>{{ a.cliente_email }}</small></td>
+            <td>{{ a.plano_nome }}</td>
+            <td><b>{{ rs(a.preco_mensal) }}</b></td>
+            <td>{{ a.proximo_envio.strftime('%d/%m/%Y') if a.proximo_envio else '—' }}</td>
+            <td><span class="pill {{ 'verde' if a.status == 'ativa' else 'amarelo' if a.status == 'aguardando_pagto' else 'cinza' }}">{{ a.status }}</span></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p style="color:#64748B">Nenhum assinante ainda. Quando alguém assinar pelo site, aparece aqui.</p>
+  {% endif %}
+</div>
+{% endblock %}

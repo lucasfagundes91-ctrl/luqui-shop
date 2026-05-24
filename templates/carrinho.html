@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block titulo %}Meu carrinho — Luqui Brinquedos{% endblock %}
+{% block conteudo %}
+
+<div style="max-width:1000px;margin:30px auto;padding:0 16px">
+  <h1 style="margin-bottom:20px">🛒 Meu carrinho</h1>
+
+  {% if not itens %}
+    <div style="background:#fff;padding:60px;border-radius:18px;text-align:center">
+      <div style="font-size:60px;margin-bottom:14px">🛒</div>
+      <p style="color:var(--mut);margin-bottom:20px">Seu carrinho está vazio.</p>
+      <a href="/" class="btn btn-amarelo">Continuar comprando</a>
+    </div>
+  {% else %}
+    <div style="background:#fff;border-radius:18px;overflow:hidden">
+      {% for it in itens %}
+      <div style="display:grid;grid-template-columns:80px 1fr auto auto;gap:16px;padding:16px;border-bottom:1px solid var(--linha);align-items:center">
+        <div style="width:80px;height:80px;background:#F1F5F9;border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden">
+          {% if it.foto_url %}<img src="{{ it.foto_url }}" style="max-height:100%">
+          {% else %}<span style="font-size:36px">📦</span>{% endif %}
+        </div>
+        <div>
+          <div style="font-weight:600">{{ it.descricao }}</div>
+          <div style="font-size:12px;color:var(--mut);margin-top:4px">Cód.: {{ it.codigo_barras or '—' }}</div>
+          <div style="color:var(--verde);font-weight:700;margin-top:6px">{{ rs(it.preco) }}</div>
+        </div>
+        <div>
+          <input type="number" value="{{ it.qtd }}" min="1" max="20"
+                 onchange="atualizarQtd({{ it.produto_id }}, this.value)"
+                 style="width:60px;padding:6px;border:1px solid var(--linha);border-radius:6px;text-align:center">
+        </div>
+        <div style="text-align:right;min-width:100px">
+          <div style="font-weight:700">{{ rs(it.preco * it.qtd) }}</div>
+          <button onclick="removerItem({{ it.produto_id }})"
+                  style="background:none;color:var(--vermelho);font-size:12px;margin-top:6px">remover</button>
+        </div>
+      </div>
+      {% endfor %}
+
+      <div style="padding:24px;background:#F8FAFC;display:flex;justify-content:space-between;align-items:center">
+        <a href="/" style="color:var(--azul);font-weight:600">← Continuar comprando</a>
+        <div style="text-align:right">
+          <div style="font-size:13px;color:var(--mut)">Subtotal ({{ qtd_total|int }} {{ 'item' if qtd_total|int == 1 else 'itens' }})</div>
+          <div style="font-size:32px;font-weight:900;color:var(--verde);line-height:1">{{ rs(subtotal) }}</div>
+          <div style="font-size:12px;color:var(--mut);margin-bottom:14px">+ frete a calcular no checkout</div>
+          <a href="/checkout" class="btn btn-amarelo" style="padding:14px 32px;font-size:15px">
+            Finalizar compra →
+          </a>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+async function atualizarQtd(pid, q){
+  const r=await fetch('/api/carrinho/qtd',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({produto_id:pid, quantidade:parseInt(q)||1})});
+  if((await r.json()).ok) location.reload();
+}
+async function removerItem(pid){
+  if(!confirm('Remover este item?')) return;
+  const r=await fetch('/api/carrinho/remove',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({produto_id:pid})});
+  if((await r.json()).ok) location.reload();
+}
+</script>
+
+{% endblock %}

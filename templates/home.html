@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block conteudo %}
+
+<!-- HERO -->
+<section class="hero">
+  <div class="slide">
+    <div>
+      <h2>BICICLETAS</h2>
+      <div class="sub">em até <b style="color:#FFC700">12x sem juros</b><br>
+        com <b style="color:#FFC700">5%</b> retirando na loja</div>
+      <a href="/buscar?q=bicicleta" class="cta">Ver bicicletas →</a>
+    </div>
+  </div>
+</section>
+
+<!-- BADGES -->
+<section class="badges">
+  <div class="badge-card">
+    <div class="ico">💳</div>
+    <div><b>Parcelamento</b><span>em até 12x sem juros</span></div>
+  </div>
+  <div class="badge-card">
+    <div class="ico">📱</div>
+    <div><b>Pague no Pix/Boleto</b><span>com 5% de desconto</span></div>
+  </div>
+  <div class="badge-card">
+    <div class="ico">🚚</div>
+    <div><b>Enviamos</b><span>para todo o Brasil</span></div>
+  </div>
+  <div class="badge-card">
+    <div class="ico">🔒</div>
+    <div><b>Segurança</b><span>garantida em sua compra</span></div>
+  </div>
+</section>
+
+<!-- BANNER CLUBE -->
+<section class="banner-clube">
+  <div class="box">
+    <div style="flex:1">
+      <h3>Clube Luqui</h3>
+      <p>
+        🎁 Descontos exclusivos · 5% de desconto acumulativo<br>
+        💰 Cada R$ 1 em compras = 1 ponto<br>
+        📦 Caixa Misteriosa todo mês com brinquedos + livros<br>
+        ⭐ ...e muito mais!
+      </p>
+      <a href="/clube" class="cta">Conhecer planos →</a>
+    </div>
+    <div style="font-size:160px;line-height:1">🎁</div>
+  </div>
+</section>
+
+<!-- PRODUTOS EM DESTAQUE -->
+<div class="secao"><h2>Produtos em destaque</h2></div>
+<section class="produtos">
+  {% for p in produtos %}
+    <div class="prod-card">
+      {% if p.preco_promo %}<span class="selo promo">PROMO</span>
+      {% elif p.novidade %}<span class="selo">NOVIDADE!</span>{% endif %}
+      <a href="/produto/{{ p.id }}">
+        <div class="foto">
+          {% if p.foto_url %}<img src="{{ p.foto_url }}" alt="{{ p.descricao }}">
+          {% else %}<span class="ph">📦</span>{% endif %}
+        </div>
+        <div class="desc">{{ p.descricao }}</div>
+      </a>
+      {% if p.preco_promo %}
+        <div class="preco-velho">{{ rs(p.preco_venda) }}</div>
+        <div class="preco">{{ rs(p.preco_promo) }}</div>
+      {% else %}
+        <div class="preco">{{ rs(p.preco_venda) }}</div>
+      {% endif %}
+      <div class="parc">ou 12x de R$ {{ '%.2f'|format((p.preco_promo or p.preco_venda|float)/12) }}</div>
+      <button class="btn" onclick="carrinhoAdd({{ p.id }})">+ Adicionar</button>
+    </div>
+  {% else %}
+    <div style="grid-column:1/-1;padding:60px;text-align:center;color:var(--mut)">
+      Conectando ao catálogo do PDV Pro... configure <code>PDVPRO_API_KEY</code>.
+    </div>
+  {% endfor %}
+</section>
+
+{% endblock %}

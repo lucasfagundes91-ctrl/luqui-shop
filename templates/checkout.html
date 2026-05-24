@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block titulo %}Finalizar compra — Luqui Brinquedos{% endblock %}
+{% block conteudo %}
+
+<div style="max-width:1100px;margin:30px auto;padding:0 16px">
+  <h1 style="margin-bottom:20px">Finalizar compra</h1>
+
+  <form id="form-checkout" style="display:grid;grid-template-columns:1.4fr 1fr;gap:24px">
+    <div>
+      <!-- ENDEREÇO -->
+      <div style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px">
+        <h3 style="margin-bottom:16px">📍 Endereço de entrega</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <input name="nome" placeholder="Nome completo *" required
+                 value="{{ cliente.nome if cliente else '' }}"
+                 style="padding:12px;border:1px solid var(--linha);border-radius:8px">
+          <input name="email" type="email" placeholder="E-mail *" required
+                 value="{{ cliente.email if cliente else '' }}"
+                 style="padding:12px;border:1px solid var(--linha);border-radius:8px">
+          <input name="telefone" placeholder="WhatsApp *" required
+                 value="{{ cliente.telefone if cliente else '' }}"
+                 style="padding:12px;border:1px solid var(--linha);border-radius:8px">
+          <input name="cpf" placeholder="CPF *" required
+                 value="{{ cliente.cpf if cliente else '' }}"
+                 style="padding:12px;border:1px solid var(--linha);border-radius:8px">
+          <input name="cep" id="cep" placeholder="CEP *" required
+                 onblur="buscarCep(this.value)"
+                 style="padding:12px;border:1px solid var(--linha);border-radius:8px">
+          <input name="cidade" id="cidade" placeholder="Cidade *" required readonly
+                 style="padding:12px;border:1px solid var(--linha);border-radius:8px;background:#F8FAFC">
+          <input name="endereco" id="endereco" placeholder="Endereço *" required
+                 style="grid-column:1/-1;padding:12px;border:1px solid var(--linha);border-radius:8px">
+          <input name="numero" placeholder="Nº *" required
+                 style="padding:12px;border:1px solid var(--linha);border-radius:8px">
+          <input name="bairro" id="bairro" placeholder="Bairro *" required
+                 style="padding:12px;border:1px solid var(--linha);border-radius:8px">
+          <input name="complemento" placeholder="Complemento"
+                 style="grid-column:1/-1;padding:12px;border:1px solid var(--linha);border-radius:8px">
+          <input name="uf" id="uf" placeholder="UF" required readonly maxlength="2"
+                 style="padding:12px;border:1px solid var(--linha);border-radius:8px;background:#F8FAFC">
+        </div>
+      </div>
+
+      <!-- FRETE -->
+      <div id="bloco-frete" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px;display:none">
+        <h3 style="margin-bottom:16px">🚚 Frete</h3>
+        <div id="opcoes-frete"></div>
+      </div>
+
+      <!-- PAGAMENTO -->
+      <div style="background:#fff;padding:24px;border-radius:14px">
+        <h3 style="margin-bottom:16px">💳 Forma de pagamento</h3>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+          <label class="forma" style="border:2px solid var(--linha);padding:14px;border-radius:10px;cursor:pointer;text-align:center">
+            <input type="radio" name="forma_pagto" value="pix" checked onchange="aoTrocarForma()" style="display:none">
+            <div style="font-size:24px">📱</div><b>PIX</b>
+            <div style="font-size:11px;color:var(--verde);font-weight:700">-{{ desconto_pix_pct }}% off</div>
+          </label>
+          <label class="forma" style="border:2px solid var(--linha);padding:14px;border-radius:10px;cursor:pointer;text-align:center">
+            <input type="radio" name="forma_pagto" value="cartao" onchange="aoTrocarForma()" style="display:none">
+            <div style="font-size:24px">💳</div><b>Cartão</b>
+            <div style="font-size:11px;color:var(--mut)">até {{ parcelamento_max }}x</div>
+          </label>
+          <label class="forma" style="border:2px solid var(--linha);padding:14px;border-radius:10px;cursor:pointer;text-align:center">
+            <input type="radio" name="forma_pagto" value="boleto" onchange="aoTrocarForma()" style="display:none">
+            <div style="font-size:24px">📄</div><b>Boleto</b>
+            <div style="font-size:11px;color:var(--verde);font-weight:700">-{{ desconto_pix_pct }}% off</div>
+          </label>
+        </div>
+        <div id="parcelas-bloco" style="margin-top:14px;display:none">
+          <label style="font-size:13px;color:var(--mut);font-weight:600">Parcelas</label>
+          <select name="parcelas" id="parcelas" style="width:100%;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-top:6px"></select>
+        </div>
+      </div>
+    </div>
+
+    <!-- RESUMO -->
+    <div>
+      <div style="background:#fff;padding:24px;border-radius:14px;position:sticky;top:20px">
+        <h3 style="margin-bottom:14px">Resumo</h3>
+        {% for it in itens %}
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px">
+          <span>{{ it.qtd }}× {{ it.descricao[:30] }}{% if it.descricao|length > 30 %}...{% endif %}</span>
+          <span>{{ rs(it.preco * it.qtd) }}</span>
+        </div>
+        {% endfor %}
+        <hr style="margin:14px 0;border:0;border-top:1px solid var(--linha)">
+        <div style="display:flex;justify-content:space-between;font-size:14px">
+          <span>Subtotal</span><span>{{ rs(subtotal) }}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:14px;margin-top:6px">
+          <span>Frete</span><span id="resumo-frete">A calcular</span>
+        </div>
+        <div id="bloco-desconto" style="display:none;justify-content:space-between;font-size:14px;margin-top:6px;color:var(--verde)">
+          <span>Desconto PIX/Boleto</span><span id="resumo-desconto">-</span>
+        </div>
+        <hr style="margin:14px 0;border:0;border-top:1px solid var(--linha)">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <span style="font-weight:700">Total</span>
+          <span id="resumo-total" style="color:var(--verde);font-weight:900;font-size:28px">{{ rs(subtotal) }}</span>
+        </div>
+        <button type="submit" class="btn btn-amarelo btn-block" style="margin-top:20px;padding:16px;font-size:15px">
+          Pagar e finalizar →
+        </button>
+        <p style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">
+          🔒 Pagamento processado com segurança via Asaas
+        </p>
+      </div>
+    </div>
+  </form>
+</div>
+
+<script>
+const SUBTOTAL = {{ subtotal }};
+const DESC_PCT = {{ desconto_pix_pct }};
+const PARC_MAX = {{ parcelamento_max }};
+let frete = 0;
+
+document.querySelectorAll('.forma').forEach(l=>{
+  l.addEventListener('click',()=>{
+    document.querySelectorAll('.forma').forEach(x=>x.style.borderColor='var(--linha)');
+    l.style.borderColor='var(--azul)';
+  });
+});
+document.querySelector('.forma').style.borderColor='var(--azul)';
+
+async function buscarCep(cep){
+  cep = cep.replace(/\D/g,'');
+  if(cep.length !== 8) return;
+  const r=await fetch('/api/checkout/cep?cep='+cep);
+  const d=await r.json();
+  if(d.erro){ toast(d.erro,'err'); return; }
+  document.getElementById('endereco').value = d.endereco;
+  document.getElementById('bairro').value = d.bairro;
+  document.getElementById('cidade').value = d.cidade;
+  document.getElementById('uf').value = d.uf;
+  buscarFrete();
+}
+async function buscarFrete(){
+  const cidade = document.getElementById('cidade').value;
+  const uf = document.getElementById('uf').value;
+  if(!cidade || !uf) return;
+  const r = await fetch(`/api/checkout/frete?cidade=${encodeURIComponent(cidade)}&uf=${uf}`);
+  const d = await r.json();
+  const box = document.getElementById('opcoes-frete');
+  box.innerHTML = d.opcoes.map((o,i)=>`
+    <label style="display:flex;justify-content:space-between;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-bottom:8px;cursor:pointer">
+      <span>
+        <input type="radio" name="frete_servico" value="${o.servico}" data-valor="${o.valor}" ${i===0?'checked':''} onchange="aoTrocarFrete()" style="margin-right:8px">
+        <b>${o.servico}</b><br><span style="font-size:12px;color:var(--mut);margin-left:24px">${o.prazo}</span>
+      </span>
+      <b style="color:${o.valor===0?'var(--verde)':'var(--txt)'}">${o.valor===0?'GRÁTIS':'R$ '+o.valor.toFixed(2).replace('.',',')}</b>
+    </label>
+  `).join('');
+  document.getElementById('bloco-frete').style.display='block';
+  frete = d.opcoes[0].valor;
+  recalcular();
+}
+function aoTrocarFrete(){
+  const r = document.querySelector('input[name="frete_servico"]:checked');
+  if(r){ frete = parseFloat(r.dataset.valor); recalcular(); }
+}
+function aoTrocarForma(){
+  const f = document.querySelector('input[name="forma_pagto"]:checked').value;
+  document.getElementById('parcelas-bloco').style.display = (f==='cartao'?'block':'none');
+  if(f==='cartao'){
+    const sel = document.getElementById('parcelas');
+    const total = SUBTOTAL + frete;
+    sel.innerHTML='';
+    for(let i=1;i<=PARC_MAX;i++){
+      sel.innerHTML += `<option value="${i}">${i}x de R$ ${(total/i).toFixed(2).replace('.',',')} sem juros</option>`;
+    }
+  }
+  recalcular();
+}
+function recalcular(){
+  const f = document.querySelector('input[name="forma_pagto"]:checked').value;
+  let desconto = 0;
+  if(f==='pix' || f==='boleto') desconto = SUBTOTAL * (DESC_PCT/100);
+  const total = SUBTOTAL + frete - desconto;
+  document.getElementById('resumo-frete').textContent = frete===0?'GRÁTIS':'R$ '+frete.toFixed(2).replace('.',',');
+  document.getElementById('bloco-desconto').style.display = desconto>0?'flex':'none';
+  document.getElementById('resumo-desconto').textContent = '-R$ '+desconto.toFixed(2).replace('.',',');
+  document.getElementById('resumo-total').textContent = 'R$ '+total.toFixed(2).replace('.',',');
+}
+
+document.getElementById('form-checkout').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  toast('🚧 Checkout via Asaas em finalização — disponível em algumas horas');
+});
+</script>
+
+{% endblock %}

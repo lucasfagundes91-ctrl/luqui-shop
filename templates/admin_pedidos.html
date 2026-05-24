@@ -1,0 +1,28 @@
+{% extends "admin_base.html" %}
+{% set pagina = 'pedidos' %}
+{% block conteudo %}
+<h2>🛒 Pedidos</h2>
+<div class="card">
+  {% if pedidos %}
+    <table>
+      <thead><tr><th>#</th><th>Cliente</th><th>WhatsApp</th><th>Cidade/UF</th><th>Data</th><th>Forma</th><th>Total</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for p in pedidos %}
+          <tr>
+            <td><b>#{{ p.id }}</b></td>
+            <td>{{ p.nome or '—' }}<br><small style="color:#64748B">{{ p.email }}</small></td>
+            <td>{{ p.telefone or '—' }}</td>
+            <td>{{ p.cidade or '—' }}{% if p.uf %}/{{ p.uf }}{% endif %}</td>
+            <td>{{ p.criado_em.strftime('%d/%m %H:%M') if p.criado_em else '—' }}</td>
+            <td><span class="pill azul">{{ p.forma_pagto or '—' }}</span></td>
+            <td><b>{{ rs(p.total) }}</b></td>
+            <td><span class="pill {{ 'verde' if p.status == 'pago' else 'amarelo' }}">{{ p.status }}</span></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p style="color:#64748B">Nenhum pedido cadastrado ainda. Os pedidos aparecem aqui depois que o checkout for finalizado pelo cliente.</p>
+  {% endif %}
+</div>
+{% endblock %}

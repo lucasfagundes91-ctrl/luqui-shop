@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><title>Admin · LuquiShop</title>
+<style>
+  body{font-family:-apple-system,sans-serif;background:#0F172A;min-height:100vh;display:flex;align-items:center;justify-content:center;margin:0}
+  .box{background:#fff;padding:32px;border-radius:18px;width:400px;max-width:90%}
+  h2{color:#1652C7;margin-bottom:8px}
+  .sub{color:#64748B;font-size:13px;margin-bottom:18px}
+  input{width:100%;padding:12px;border:1px solid #E2E8F0;border-radius:8px;margin-bottom:10px;font-size:14px;box-sizing:border-box}
+  button{width:100%;background:#FFC700;color:#1652C7;padding:14px;border:0;border-radius:8px;font-weight:900;cursor:pointer;font-size:14px}
+  .erro{background:#FEE2E2;color:#991B1B;padding:10px;border-radius:8px;margin-bottom:14px;font-size:13px}
+</style></head><body>
+<div class="box">
+  <h2>🎁 LuquiShop Admin</h2>
+  <p class="sub">Acesso restrito.</p>
+  {% if erro %}<div class="erro">{{ erro }}</div>{% endif %}
+  <form method="post">
+    <input name="email" type="email" placeholder="E-mail" required autofocus>
+    <input name="senha" type="password" placeholder="Senha" required>
+    <button type="submit">Entrar</button>
+  </form>
+</div>
+</body></html>

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block titulo %}Entrar — Luqui Brinquedos{% endblock %}
+{% block conteudo %}
+<div style="max-width:420px;margin:50px auto;padding:0 16px">
+  <div style="background:#fff;padding:32px;border-radius:18px">
+    <h2 style="color:var(--azul);margin-bottom:8px">Entrar</h2>
+    <p style="color:var(--mut);font-size:13px;margin-bottom:20px">Já tem conta? Faça login.</p>
+    {% if erro %}<div style="background:#FEE2E2;color:#991B1B;padding:10px;border-radius:8px;margin-bottom:14px;font-size:13px">{{ erro }}</div>{% endif %}
+    <form method="post">
+      <input name="email" type="email" placeholder="E-mail" required
+             style="width:100%;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-bottom:10px">
+      <input name="senha" type="password" placeholder="Senha" required
+             style="width:100%;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-bottom:16px">
+      <button type="submit" class="btn btn-amarelo btn-block" style="padding:14px">Entrar</button>
+    </form>
+    <p style="text-align:center;color:var(--mut);font-size:13px;margin-top:18px">
+      Ainda não tem conta? <a href="/cadastrar" style="color:var(--azul);font-weight:700">Cadastrar grátis</a>
+    </p>
+  </div>
+</div>
+{% endblock %}

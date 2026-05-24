@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>{% block titulo %}LuquiShop Admin{% endblock %}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,sans-serif;background:#F8FAFC;color:#0F172A}
+  .layout{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
+  .sb{background:#0F172A;color:#fff;padding:20px}
+  .sb h1{font-size:18px;color:#FFC700;margin-bottom:24px}
+  .sb a{display:block;color:#cbd5e1;padding:10px 14px;border-radius:8px;text-decoration:none;font-size:14px;margin-bottom:4px}
+  .sb a:hover, .sb a.on{background:#1E293B;color:#FFC700}
+  .sb .sair{position:absolute;bottom:20px;font-size:12px;color:#94A3B8}
+  main{padding:30px}
+  h2{font-size:22px;margin-bottom:20px}
+  .card{background:#fff;border-radius:14px;padding:20px;margin-bottom:18px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:12px;text-align:left;border-bottom:1px solid #E2E8F0}
+  th{background:#F8FAFC;text-transform:uppercase;font-size:11px;color:#64748B;letter-spacing:.5px}
+  .stat{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
+  .stat .c{background:#fff;padding:18px;border-radius:14px}
+  .stat .c .lbl{font-size:11px;text-transform:uppercase;color:#64748B;letter-spacing:1px}
+  .stat .c .val{font-size:28px;font-weight:900;margin-top:4px}
+  .stat .c.azul .val{color:#1652C7}
+  .stat .c.verde .val{color:#16A34A}
+  .stat .c.amarelo .val{color:#E0A800}
+  .pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+  .pill.amarelo{background:#FEF3C7;color:#92400E}
+  .pill.verde{background:#D1FAE5;color:#065F46}
+  .pill.azul{background:#DBEAFE;color:#1E40AF}
+  .pill.cinza{background:#E2E8F0;color:#475569}
+</style></head><body>
+<div class="layout">
+  <aside class="sb">
+    <h1>🎁 LuquiShop</h1>
+    <a href="/admin" {% if pagina == 'home' %}class="on"{% endif %}>📊 Dashboard</a>
+    <a href="/admin/pedidos" {% if pagina == 'pedidos' %}class="on"{% endif %}>🛒 Pedidos</a>
+    <a href="/admin/assinantes" {% if pagina == 'assinantes' %}class="on"{% endif %}>🎁 Assinantes</a>
+    <a href="/admin/planos" {% if pagina == 'planos' %}class="on"{% endif %}>📋 Planos do clube</a>
+    <a href="/" target="_blank">🔗 Ver site público</a>
+    <span class="sair"><a href="/admin/sair">Sair</a></span>
+  </aside>
+  <main>{% block conteudo %}{% endblock %}</main>
+</div>
+</body></html>

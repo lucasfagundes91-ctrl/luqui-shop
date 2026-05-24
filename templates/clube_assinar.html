@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block titulo %}Assinar {{ plano.nome }} — Clube Luqui{% endblock %}
+{% block conteudo %}
+<div style="max-width:780px;margin:30px auto;padding:0 16px">
+  <a href="/clube" style="color:var(--mut);font-size:13px">← Voltar pros planos</a>
+  <div style="background:#fff;padding:30px;border-radius:18px;margin-top:14px">
+    <h1 style="color:var(--azul);font-size:26px">Assinar {{ plano.nome }}</h1>
+    <div style="color:var(--verde);font-weight:900;font-size:36px;margin:10px 0">
+      {{ rs(plano.preco_mensal) }}<span style="color:var(--mut);font-size:14px;font-weight:600">/mês</span>
+    </div>
+
+    <ul style="list-style:none;padding:0;margin:20px 0;background:#F8FAFC;border-radius:10px;padding:16px">
+      {% for b in plano.beneficios_json %}
+        <li style="padding:6px 0;font-size:14px"><span style="color:var(--verde);font-weight:900">✓</span> {{ b }}</li>
+      {% endfor %}
+    </ul>
+
+    <div style="background:#FEF3C7;color:#92400E;padding:14px;border-radius:10px;font-size:13px;margin:20px 0">
+      🚧 <b>Checkout da assinatura em finalização.</b><br>
+      Em algumas horas o pagamento recorrente via Asaas estará integrado. Por enquanto,
+      <a href="https://wa.me/{{ whatsapp_loja() }}?text=Olá!%20Quero%20assinar%20o%20{{ plano.nome|urlencode }}" target="_blank" style="color:var(--azul);font-weight:700;text-decoration:underline">
+        chama no WhatsApp pra ativar manualmente
+      </a>.
+    </div>
+
+    <a href="https://wa.me/{{ whatsapp_loja() }}?text=Olá!%20Quero%20assinar%20o%20{{ plano.nome|urlencode }}%20({{ rs(plano.preco_mensal) }}/mês)"
+       target="_blank" class="btn btn-amarelo btn-block" style="padding:16px;font-size:15px">
+      💚 Falar com a Luqui no WhatsApp
+    </a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "admin_base.html" %}
+{% set pagina = 'home' %}
+{% block conteudo %}
+<h2>📊 Dashboard</h2>
+<div class="stat">
+  <div class="c azul"><div class="lbl">Pedidos total</div><div class="val">{{ stats.pedidos_total or 0 }}</div></div>
+  <div class="c verde"><div class="lbl">Pedidos pagos</div><div class="val">{{ stats.pedidos_pagos or 0 }}</div></div>
+  <div class="c amarelo"><div class="lbl">Clientes</div><div class="val">{{ stats.clientes or 0 }}</div></div>
+  <div class="c"><div class="lbl">Assinantes ativos</div><div class="val" style="color:#3FA89C">{{ stats.assinantes or 0 }}</div></div>
+</div>
+
+<div class="card">
+  <h3 style="margin-bottom:14px">🛒 Últimos pedidos</h3>
+  {% if pedidos %}
+    <table>
+      <thead><tr><th>#</th><th>Cliente</th><th>Data</th><th>Total</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for p in pedidos %}
+          <tr>
+            <td><b>#{{ p.id }}</b></td>
+            <td>{{ p.nome or '—' }}</td>
+            <td>{{ p.criado_em.strftime('%d/%m %H:%M') if p.criado_em else '—' }}</td>
+            <td><b>{{ rs(p.total) }}</b></td>
+            <td><span class="pill {{ 'verde' if p.status == 'pago' else 'amarelo' }}">{{ p.status }}</span></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p style="color:#64748B">Nenhum pedido ainda.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h3 style="margin-bottom:14px">🎁 Assinaturas ativas</h3>
+  {% if assinaturas %}
+    <table>
+      <thead><tr><th>Cliente</th><th>Plano</th><th>Próximo envio</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for a in assinaturas %}
+          <tr>
+            <td>{{ a.cliente_nome }}</td>
+            <td>{{ a.plano_nome }}</td>
+            <td>{{ a.proximo_envio.strftime('%d/%m/%Y') if a.proximo_envio else '—' }}</td>
+            <td><span class="pill verde">{{ a.status }}</span></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p style="color:#64748B">Nenhuma assinatura ativa ainda.</p>
+  {% endif %}
+</div>
+{% endblock %}
