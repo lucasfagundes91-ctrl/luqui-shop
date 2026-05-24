@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block titulo %}Página não encontrada — Luqui Brinquedos{% endblock %}
+{% block conteudo %}
+<div style="max-width:600px;margin:40px auto;padding:60px 24px;text-align:center">
+  <div style="font-size:80px">🧸</div>
+  <h1 style="color:var(--azul);margin:14px 0;font-size:32px">Eita, esse brinquedo a gente não tem aqui!</h1>
+  <p style="color:var(--mut);margin-bottom:30px">A página que você procurou não existe ou foi movida. Mas tem muita coisa legal te esperando 💛</p>
+  <a href="/" class="btn btn-amarelo" style="padding:14px 32px">Voltar pra loja</a>
+</div>
+
+{% if sugestoes %}
+<div class="secao"><h2>Que tal esses?</h2></div>
+<section class="produtos">
+  {% for p in sugestoes %}
+    <div class="prod-card">
+      <a href="/produto/{{ p.id }}">
+        <div class="foto">
+          {% if p.foto_url %}<img src="{{ p.foto_url }}">{% else %}<span class="ph">📦</span>{% endif %}
+        </div>
+        <div class="desc">{{ p.descricao }}</div>
+      </a>
+      <div class="preco">{{ rs(p.preco_promo or p.preco_venda) }}</div>
+      <button class="btn" onclick="carrinhoAdd({{ p.id }})">+ Adicionar</button>
+    </div>
+  {% endfor %}
+</section>
+{% endif %}
+{% endblock %}

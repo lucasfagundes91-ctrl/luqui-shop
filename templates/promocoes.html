@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block titulo %}🔥 Promoções — Luqui Brinquedos{% endblock %}
+{% block conteudo %}
+<section style="background:linear-gradient(135deg,#F59E0B,#FCD34D);color:#fff;padding:50px 16px;text-align:center">
+  <div style="max-width:800px;margin:0 auto">
+    <h1 style="font-family:'Comic Sans MS',sans-serif;font-size:48px;color:#fff;text-shadow:2px 2px 0 #B45309">🔥 Promoções da semana!</h1>
+    <p style="font-size:18px;margin-top:10px">Aproveita antes que acabe</p>
+  </div>
+</section>
+
+{% if promocoes %}
+<section class="produtos" style="margin-top:30px">
+  {% for p in promocoes %}
+  <div class="prod-card">
+    <span class="selo promo">PROMO</span>
+    <a href="/produto/{{ p.produto_id }}">
+      <div class="foto"><span class="ph">📦</span></div>
+      <div class="desc">{{ p.descricao }}</div>
+    </a>
+    <div class="preco-velho">{{ rs(p.preco_venda) }}</div>
+    <div class="preco">{{ rs(p.preco_promo) }}</div>
+    {% set economia = (p.preco_venda - p.preco_promo) %}
+    <div style="font-size:11px;color:var(--verde);font-weight:700">Você economiza {{ rs(economia) }}</div>
+    <button class="btn" onclick="carrinhoAdd({{ p.produto_id }})">+ Adicionar</button>
+  </div>
+  {% endfor %}
+</section>
+{% else %}
+<div style="text-align:center;padding:60px;color:var(--mut)">Nenhuma promoção ativa agora — volta logo!</div>
+{% endif %}
+{% endblock %}

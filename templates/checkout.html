@@ -4,6 +4,10 @@
 
 <div style="max-width:1100px;margin:30px auto;padding:0 16px">
   <h1 style="margin-bottom:20px">Finalizar compra</h1>
+  <div id="banner-primeira" style="display:none;background:linear-gradient(90deg,#FFC700,#FFA800);color:#1652C7;padding:14px 20px;border-radius:14px;margin-bottom:20px;font-weight:700;text-align:center">
+    🎉 É sua primeira compra! Use o cupom <code style="background:#fff;padding:3px 10px;border-radius:4px;letter-spacing:1px">PRIMEIRO10</code>
+    pra ganhar <b>10% OFF</b> em compras a partir de R$ 50.
+  </div>
 
   <form id="form-checkout" style="display:grid;grid-template-columns:1.4fr 1fr;gap:24px">
     <div>
@@ -143,6 +147,11 @@ async function aplicarCupom(){
 }
 
 if(typeof fbq !== 'undefined'){ fbq('track','InitiateCheckout',{value:SUBTOTAL,currency:'BRL'}); }
+
+// Banner primeira compra
+fetch('/api/checkout/cupom-primeira', {method:'POST'}).then(r=>r.json()).then(d=>{
+  if(d.pode){ document.getElementById('banner-primeira').style.display='block'; }
+});
 
 document.querySelectorAll('.forma').forEach(l=>{
   l.addEventListener('click',()=>{

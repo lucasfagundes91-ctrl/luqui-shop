@@ -57,7 +57,19 @@
       {% if p.estoque_atual and p.estoque_atual|float > 0 %}
         <div style="color:var(--verde);font-weight:700;margin-bottom:14px">✓ Em estoque</div>
       {% else %}
-        <div style="color:var(--vermelho);font-weight:700;margin-bottom:14px">Indisponível no momento</div>
+        <div style="color:var(--vermelho);font-weight:700;margin-bottom:8px">Indisponível no momento</div>
+        <details style="margin-bottom:14px;padding:12px;background:#FEF3C7;border-radius:8px">
+          <summary style="cursor:pointer;font-weight:700;color:#92400E">🔔 Me avise quando voltar</summary>
+          <div style="margin-top:10px">
+            <input id="avisa-email" type="email" placeholder="seu@email.com"
+                   style="width:100%;padding:8px;border:1px solid var(--linha);border-radius:6px;margin-bottom:6px">
+            <input id="avisa-tel" type="tel" placeholder="WhatsApp (opcional)"
+                   style="width:100%;padding:8px;border:1px solid var(--linha);border-radius:6px;margin-bottom:6px">
+            <button onclick="avisarEstoque({{ p.id }})" class="btn btn-amarelo" style="padding:8px 16px;font-size:13px">
+              Quero ser avisado
+            </button>
+          </div>
+        </details>
       {% endif %}
 
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
@@ -79,6 +91,37 @@
       </div>
 
       <script>
+      async function calcFrete(){
+        const cep = document.getElementById('cep-frete').value.replace(/\D/g,'');
+        if(cep.length !== 8){ document.getElementById('frete-result').innerHTML = '<span style="color:var(--vermelho)">CEP inválido</span>'; return; }
+        document.getElementById('frete-result').innerHTML = '<span style="color:var(--mut)">Buscando...</span>';
+        try {
+          const r1 = await fetch('/api/checkout/cep?cep='+cep);
+          const d1 = await r1.json();
+          if(d1.erro){ document.getElementById('frete-result').innerHTML = '<span style="color:var(--vermelho)">'+d1.erro+'</span>'; return; }
+          const r2 = await fetch('/api/checkout/frete?cidade='+encodeURIComponent(d1.cidade)+'&uf='+d1.uf);
+          const d2 = await r2.json();
+          document.getElementById('frete-result').innerHTML = '<b>'+d1.cidade+'/'+d1.uf+'</b><br>' + d2.opcoes.map(o=>
+            `<div style="display:flex;justify-content:space-between;padding:4px 0">
+               <span>${o.servico} <small style="color:var(--mut)">· ${o.prazo}</small></span>
+               <b style="color:${o.valor===0?'var(--verde)':'var(--txt)'}">${o.valor===0?'GRÁTIS':'R$ '+o.valor.toFixed(2).replace('.',',')}</b>
+             </div>`).join('');
+        } catch(e){ document.getElementById('frete-result').innerHTML = '<span style="color:var(--vermelho)">Erro: '+e.message+'</span>'; }
+      }
+      async function avisarEstoque(pid){
+        const email = document.getElementById('avisa-email').value.trim();
+        const tel = document.getElementById('avisa-tel').value.trim();
+        if(!email.includes('@')){ toast('E-mail inválido','err'); return; }
+        try {
+          const r = await fetch('/api/avise-me', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({produto_id: pid, email, telefone: tel})
+          });
+          const d = await r.json();
+          if(d.erro){ toast(d.erro,'err'); return; }
+          toast('🔔 Vamos te avisar quando voltar!');
+        } catch(e){ toast('Erro: '+e.message,'err'); }
+      }
       async function toggleFavorito(pid){
         try {
           const r = await fetch('/api/wishlist/toggle', {
@@ -93,10 +136,33 @@
       }
       </script>
 
+      <!-- Calculadora de frete -->
+      <div style="margin-top:14px;padding:14px;background:#F8FAFC;border-radius:10px">
+        <label style="font-size:12px;color:var(--mut);font-weight:700">📦 CALCULAR FRETE</label>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <input id="cep-frete" placeholder="00000-000" maxlength="9"
+                 style="flex:1;padding:10px;border:1px solid var(--linha);border-radius:8px;font-size:14px">
+          <button onclick="calcFrete()" type="button"
+                  style="background:var(--azul);color:#fff;border:0;padding:0 16px;border-radius:8px;cursor:pointer;font-weight:700">Calcular</button>
+        </div>
+        <div id="frete-result" style="margin-top:8px;font-size:13px"></div>
+      </div>
+
       <a href="https://wa.me/{{ whatsapp_loja() }}?text=Olá!%20Tenho%20interesse%20no%20{{ p.descricao|urlencode }}"
          target="_blank" class="btn" style="background:#25D366;color:#fff;margin-top:10px;display:block">
         💚 Tirar dúvida pelo WhatsApp
       </a>
+
+      <div style="display:flex;gap:6px;margin-top:10px;font-size:12px">
+        <a href="https://wa.me/?text={{ ('Olha esse brinquedo: ' + p.descricao + ' — ' + ('https://www.luquibrinquedos.com.br/produto/' + p.id|string))|urlencode }}"
+           target="_blank" style="flex:1;padding:8px;background:#F1F5F9;color:var(--azul);text-align:center;border-radius:6px;text-decoration:none;font-weight:600">
+          📲 Indicar pra um amigo
+        </a>
+        <button onclick="navigator.clipboard.writeText(location.href);toast('Link copiado!')"
+                style="flex:1;padding:8px;background:#F1F5F9;color:var(--azul);border:0;border-radius:6px;font-weight:600;cursor:pointer">
+          🔗 Copiar link
+        </button>
+      </div>
     </div>
   </div>
 
@@ -125,6 +191,7 @@
         </div>
         {% if a.titulo %}<div style="font-weight:700;margin:6px 0">{{ a.titulo }}</div>{% endif %}
         <div style="color:var(--txt);line-height:1.5">{{ a.comentario }}</div>
+        {% if a.foto_url %}<img src="{{ a.foto_url }}" alt="" style="max-width:200px;border-radius:8px;margin-top:8px">{% endif %}
         <div style="font-size:11px;color:var(--mut);margin-top:6px">{{ a.criado_em.strftime('%d/%m/%Y') if a.criado_em else '' }}</div>
       </div>
       {% endfor %}
@@ -164,6 +231,8 @@
                style="width:100%;padding:10px;border:1px solid var(--linha);border-radius:8px;margin-bottom:8px">
         <textarea id="aval-comentario" placeholder="Conta como foi sua experiência..." rows="4" required
                   style="width:100%;padding:10px;border:1px solid var(--linha);border-radius:8px;resize:vertical"></textarea>
+        <input id="aval-foto" placeholder="📷 URL de uma foto do produto (opcional)"
+               style="width:100%;padding:10px;border:1px solid var(--linha);border-radius:8px;margin-top:8px">
         <button onclick="enviarAvaliacao()" class="btn btn-amarelo" style="padding:12px 24px;margin-top:10px">
           Enviar avaliação
         </button>
@@ -192,7 +261,8 @@ async function enviarAvaliacao(){
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         estrelas, comentario: com,
-        titulo: document.getElementById('aval-titulo').value.trim()
+        titulo: document.getElementById('aval-titulo').value.trim(),
+        foto_url: document.getElementById('aval-foto').value.trim()
       })
     });
     const d = await r.json();

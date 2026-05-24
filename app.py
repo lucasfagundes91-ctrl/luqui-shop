@@ -229,6 +229,9 @@ def init_db():
         "ALTER TABLE banners ADD COLUMN IF NOT EXISTS cor_fundo VARCHAR(20) DEFAULT '#4FB8FF'",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_codigo VARCHAR(40)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_desconto NUMERIC(10,2) DEFAULT 0",
+        "ALTER TABLE clientes_site ADD COLUMN IF NOT EXISTS data_nascimento DATE",
+        "ALTER TABLE clientes_site ADD COLUMN IF NOT EXISTS ganhou_primeira BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS foto_url TEXT",
         # Newsletter (opt-in pra promoções)
         """CREATE TABLE IF NOT EXISTS newsletter (
             id SERIAL PRIMARY KEY,
@@ -250,6 +253,19 @@ def init_db():
             criado_em TIMESTAMPTZ DEFAULT NOW()
         )""",
         "CREATE INDEX IF NOT EXISTS idx_avaliacoes_produto ON avaliacoes(produto_pdv_id, aprovado)",
+        # Carrinho abandonado: pedidos sem pagamento criados pelo checkout
+        # já gravam linha em pedidos com status=aguardando_pagto. O cron pega
+        # esses + 24h sem mexer.
+        # Avise-me quando voltar ao estoque
+        """CREATE TABLE IF NOT EXISTS avise_me (
+            id SERIAL PRIMARY KEY,
+            produto_pdv_id INT NOT NULL,
+            email VARCHAR(160) NOT NULL,
+            telefone VARCHAR(20),
+            criado_em TIMESTAMPTZ DEFAULT NOW(),
+            notificado_em TIMESTAMPTZ,
+            UNIQUE(produto_pdv_id, email)
+        )""",
         # Wishlist / favoritos
         """CREATE TABLE IF NOT EXISTS wishlist (
             id SERIAL PRIMARY KEY,
@@ -325,6 +341,14 @@ def init_db():
             log.info("Seed: 6 planos do clube criados")
     except Exception as e:
         log.error("seed planos: %s", e)
+
+    # Cupom de primeira compra
+    try:
+        db_execute("""INSERT INTO cupons (codigo, tipo, valor, valor_min, ativo)
+                      VALUES ('PRIMEIRO10','pct',10,50,true)
+                      ON CONFLICT (codigo) DO NOTHING""")
+    except Exception as e:
+        log.error("seed PRIMEIRO10: %s", e)
 
     # Configs default
     try:
@@ -715,9 +739,9 @@ def avaliacao_criar(pid):
     estrelas = max(1, min(5, int(d.get('estrelas') or 0)))
     titulo = (d.get('titulo') or '')[:120]
     comentario = (d.get('comentario') or '')[:2000]
+    foto_url = (d.get('foto_url') or '').strip()[:500] or None
     if not comentario.strip():
         return jsonify({'erro': 'Escreve algo no comentário'}), 400
-    # Auto-aprova se o cliente já comprou esse produto
     aprovado = False
     pedido_id = None
     if c:
@@ -729,10 +753,11 @@ def avaliacao_criar(pid):
             aprovado = True
             pedido_id = ja['pedido_id']
     db_execute("""INSERT INTO avaliacoes
-        (produto_pdv_id, cliente_id, pedido_id, estrelas, titulo, comentario, aprovado)
-        VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+        (produto_pdv_id, cliente_id, pedido_id, estrelas, titulo, comentario,
+         aprovado, foto_url)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
         [pid, c['id'] if c else None, pedido_id, estrelas,
-         titulo or None, comentario, aprovado])
+         titulo or None, comentario, aprovado, foto_url])
     return jsonify({'ok': True, 'aprovado_auto': aprovado})
 
 
@@ -757,6 +782,119 @@ def admin_avaliacao_aprovar(aid):
 def admin_avaliacao_excluir(aid):
     db_execute("DELETE FROM avaliacoes WHERE id=%s", [aid])
     return redirect(url_for('admin_avaliacoes'))
+
+
+@app.route('/cron/aniversariantes')
+def cron_aniversariantes():
+    """Gera cupom personalizado pros aniversariantes do dia + WA + email."""
+    if request.args.get('token') != os.environ.get('CRON_TOKEN', 'troque'):
+        return 'unauthorized', 401
+    rows = db_execute("""
+        SELECT * FROM clientes_site
+         WHERE data_nascimento IS NOT NULL
+           AND EXTRACT(MONTH FROM data_nascimento) = EXTRACT(MONTH FROM CURRENT_DATE)
+           AND EXTRACT(DAY FROM data_nascimento) = EXTRACT(DAY FROM CURRENT_DATE)
+    """, fetch='all') or []
+    gerados = 0
+    for c in rows:
+        codigo = f'ANIVER{c["id"]}-{secrets.token_hex(3).upper()}'[:40]
+        try:
+            db_execute("""INSERT INTO cupons (codigo, tipo, valor, valor_min,
+                          usos_max, valido_ate, ativo)
+                          VALUES (%s,'pct',15,0,1,
+                                  CURRENT_DATE + INTERVAL '14 days', true)""",
+                       [codigo])
+            enviar_whatsapp(c['telefone'],
+                f"🎂 Feliz Aniversário, {c['nome'].split()[0]}! 💛\n\n"
+                f"Pra comemorar, te demos um cupom de *15% OFF* válido por 14 dias:\n"
+                f"`{codigo}`\n\n"
+                f"Aproveita: https://www.luquibrinquedos.com.br")
+            enviar_email(c['email'],
+                f'🎂 Feliz aniversário, {c["nome"].split()[0]}!',
+                f"""<p>🎉 Parabéns!</p>
+<p>Hoje é seu dia especial e a Luqui preparou um <b>cupom de 15% OFF</b> pra você:</p>
+<p style="background:#FEF3C7;padding:14px 24px;border-radius:8px;font-size:22px;
+          font-weight:900;color:#1652C7;text-align:center;letter-spacing:2px">{codigo}</p>
+<p>Válido por <b>14 dias</b>. Use no checkout.</p>
+<p><a href="https://www.luquibrinquedos.com.br" style="background:#FFC700;color:#1652C7;padding:12px 28px;border-radius:8px;font-weight:900;text-decoration:none">🎁 Aproveitar</a></p>""")
+            gerados += 1
+        except Exception as e:
+            log.error("aniver %s: %s", c['id'], e)
+    return jsonify({'ok': True, 'gerados': gerados})
+
+
+@app.route('/api/checkout/cupom-primeira', methods=['POST'])
+def cupom_primeira_compra():
+    """Pra cliente novo logado que nunca usou cupom de primeira compra."""
+    c = cliente_logado()
+    if not c or c.get('ganhou_primeira'):
+        return jsonify({'pode': False})
+    return jsonify({'pode': True, 'codigo': 'PRIMEIRO10', 'desconto_pct': 10})
+
+
+@app.route('/cron/carrinho-abandonado')
+def cron_carrinho_abandonado():
+    """Pedidos aguardando_pagto há 24-48h: dispara WhatsApp/email lembrando."""
+    if request.args.get('token') != os.environ.get('CRON_TOKEN', 'troque'):
+        return 'unauthorized', 401
+    rows = db_execute("""
+        SELECT * FROM pedidos
+         WHERE status='aguardando_pagto'
+           AND criado_em < NOW() - INTERVAL '24 hours'
+           AND criado_em > NOW() - INTERVAL '48 hours'
+           AND COALESCE(observacao,'') NOT LIKE '%[lembrete-enviado]%'
+        LIMIT 50""", fetch='all') or []
+    enviados = 0
+    for p in rows:
+        try:
+            enviar_whatsapp(p['telefone'],
+                f"💛 Oi {p['nome'].split()[0]}! "
+                f"Vi que você começou um pedido aqui na Luqui mas ainda não finalizou.\n\n"
+                f"Total: *{rs(p['total'])}*\n\n"
+                f"Tá tudo certinho? Quer finalizar?\n"
+                f"👉 https://www.luquibrinquedos.com.br/pedido/{p['id']}/pagamento")
+            enviar_email(p['email'],
+                f'Esqueceu de finalizar seu pedido #{p["id"]}?',
+                f"""<p>Oi {p['nome'].split()[0]}! 💛</p>
+<p>Notamos que você começou um pedido aqui na Luqui mas ainda não finalizou o pagamento.</p>
+<p><b>Total:</b> {rs(p['total'])}</p>
+<p><a href="https://www.luquibrinquedos.com.br/pedido/{p['id']}/pagamento"
+   style="background:#FFC700;color:#1652C7;padding:12px 24px;border-radius:8px;
+          font-weight:900;text-decoration:none;display:inline-block">
+  💛 Finalizar pedido
+</a></p>
+<p>Se mudou de ideia, sem problema. Mas se foi distração, é só clicar e a gente despacha tudinho! 🧸</p>""")
+            db_execute("""UPDATE pedidos SET observacao=COALESCE(observacao,'')
+                          || ' [lembrete-enviado]' WHERE id=%s""", [p['id']])
+            enviados += 1
+        except Exception as e:
+            log.error("carrinho abandonado %s: %s", p['id'], e)
+    return jsonify({'ok': True, 'enviados': enviados})
+
+
+@app.route('/promocoes')
+def pag_promocoes():
+    """Página com produtos em promoção (puxa do PDV Pro)."""
+    rs_promos = pdv_get('/api/integracao/promocoes') or {}
+    return render_template('promocoes.html',
+                           promocoes=rs_promos.get('promocoes', []),
+                           categorias=listar_categorias(),
+                           cliente=cliente_logado(),
+                           carrinho=carrinho_ler())
+
+
+@app.route('/api/avise-me', methods=['POST'])
+def avise_me():
+    d = request.get_json() or {}
+    pid = int(d.get('produto_id') or 0)
+    email = (d.get('email') or '').strip().lower()
+    tel = (d.get('telefone') or '').strip()
+    if not pid or '@' not in email:
+        return jsonify({'erro': 'Dados inválidos'}), 400
+    db_execute("""INSERT INTO avise_me (produto_pdv_id, email, telefone)
+                  VALUES (%s,%s,%s) ON CONFLICT DO NOTHING""",
+               [pid, email, tel or None])
+    return jsonify({'ok': True})
 
 
 @app.route('/cron/email-pos-compra')
@@ -867,10 +1005,21 @@ def newsletter_signup():
     nome = ((request.get_json() or {}).get('nome') or '').strip()
     if '@' not in email or '.' not in email:
         return jsonify({'erro': 'E-mail inválido'}), 400
-    db_execute("""INSERT INTO newsletter (email, nome) VALUES (%s, %s)
+    novo = db_execute("""INSERT INTO newsletter (email, nome) VALUES (%s, %s)
                   ON CONFLICT (email) DO UPDATE SET ativo=true,
-                  nome=COALESCE(EXCLUDED.nome, newsletter.nome)""",
-               [email, nome or None])
+                  nome=COALESCE(EXCLUDED.nome, newsletter.nome)
+                  RETURNING (xmax = 0) AS inserido""",
+               [email, nome or None], fetch='one')
+    if novo and novo.get('inserido'):
+        total = db_execute("SELECT COUNT(*) AS n FROM newsletter WHERE ativo",
+                           fetch='one')['n']
+        try:
+            enviar_whatsapp(ADMIN_WHATSAPP,
+                f"📧 *Nova inscrição na newsletter*\n\n"
+                f"E-mail: {email}\n"
+                f"Total de inscritos: {total}")
+        except Exception as e:
+            log.error("WA newsletter: %s", e)
     return jsonify({'ok': True})
 
 
@@ -942,6 +1091,16 @@ def sitemap_xml():
     return Response(xml, mimetype='application/xml')
 
 
+@app.errorhandler(404)
+def pag_404(e):
+    sugestoes, _ = listar_produtos(limite=8)
+    return render_template('404.html',
+                           sugestoes=sugestoes or [],
+                           categorias=listar_categorias(),
+                           cliente=cliente_logado(),
+                           carrinho=carrinho_ler()), 404
+
+
 @app.route('/healthz')
 def healthz():
     try:
@@ -969,8 +1128,22 @@ def home():
 def categoria(slug):
     pagina = max(1, int(request.args.get('p', 1)))
     por_pagina = 24
+    ordem = request.args.get('ordem', 'destaque')  # destaque, barato, caro, novidade, promo
+    so_promo = request.args.get('promo') == '1'
     produtos, total = listar_produtos(
         categoria=slug, limite=por_pagina, offset=(pagina - 1) * por_pagina)
+    # Filtro de promo + ordenação no LADO PYTHON (PDV Pro não tem esses params)
+    if so_promo:
+        produtos = [p for p in produtos if p.get('preco_promo')]
+    if ordem == 'barato':
+        produtos.sort(key=lambda p: float(p.get('preco_promo') or p.get('preco_venda') or 0))
+    elif ordem == 'caro':
+        produtos.sort(key=lambda p: float(p.get('preco_promo') or p.get('preco_venda') or 0),
+                      reverse=True)
+    elif ordem == 'novidade':
+        produtos.sort(key=lambda p: p.get('id', 0), reverse=True)
+    elif ordem == 'promo':
+        produtos.sort(key=lambda p: 0 if p.get('preco_promo') else 1)
     categorias = listar_categorias()
     cat_nome = next((c['nome'] for c in categorias if c['slug'] == slug), slug)
     return render_template('categoria.html',
@@ -981,6 +1154,7 @@ def categoria(slug):
                            categorias=categorias,
                            categoria_nome=cat_nome,
                            categoria_slug=slug,
+                           ordem=ordem, so_promo=so_promo,
                            cliente=cliente_logado(),
                            carrinho=carrinho_ler())
 
@@ -1399,7 +1573,7 @@ def cadastrar():
     erro = None
     if request.method == 'POST':
         d = {k: (request.form.get(k) or '').strip() for k in
-             ('nome', 'email', 'senha', 'telefone', 'cpf')}
+             ('nome', 'email', 'senha', 'telefone', 'cpf', 'data_nascimento')}
         if not d['nome'] or not d['email'] or len(d['senha']) < 6:
             erro = 'Preencha nome, e-mail e senha (mín 6 caracteres).'
         elif db_execute("SELECT 1 FROM clientes_site WHERE LOWER(email)=%s",
@@ -1408,11 +1582,12 @@ def cadastrar():
         else:
             nv = db_execute(
                 """INSERT INTO clientes_site
-                   (nome, email, senha_hash, telefone, cpf)
-                   VALUES (%s,%s,%s,%s,%s) RETURNING id""",
+                   (nome, email, senha_hash, telefone, cpf, data_nascimento)
+                   VALUES (%s,%s,%s,%s,%s,%s) RETURNING id""",
                 [d['nome'], d['email'].lower(),
                  generate_password_hash(d['senha']),
-                 d['telefone'] or None, d['cpf'] or None],
+                 d['telefone'] or None, d['cpf'] or None,
+                 d['data_nascimento'] or None],
                 fetch='one')
             session.permanent = True
             session['cliente_id'] = nv['id']
@@ -1654,6 +1829,16 @@ def admin_pedido_status(pid):
                   melhorenvio_rastreio=COALESCE(%s, melhorenvio_rastreio),
                   atualizado_em=NOW() WHERE id=%s""",
                [novo, rastreio, pid])
+    # Se cancelou e tem venda no PDV Pro, cancela NF e volta estoque
+    if novo == 'cancelado' and p.get('pdv_venda_id') and PDVPRO_API_KEY:
+        try:
+            requests.post(
+                PDVPRO_URL + '/api/integracao/cancelar-venda',
+                json={'venda_id': p['pdv_venda_id'],
+                      'justificativa': 'Pedido site cancelado'},
+                headers={'X-API-Key': PDVPRO_API_KEY}, timeout=30)
+        except Exception as e:
+            log.error("cancelar NF: %s", e)
     # Notifica cliente
     try:
         msgs = {
@@ -1687,7 +1872,23 @@ def admin_assinantes():
     return render_template('admin_assinantes.html', assinaturas=rows)
 
 
-@app.route('/admin/banners', methods=['GET', 'POST'])
+@app.route('/admin/clientes')
+@requer_admin
+def admin_clientes():
+    rows = db_execute("""
+      SELECT c.id, c.nome, c.email, c.telefone, c.cpf, c.cidade, c.uf, c.criado_em,
+             COUNT(DISTINCT p.id) FILTER (WHERE p.status IN ('pago','enviado','entregue')) AS qtd_pedidos,
+             COALESCE(SUM(p.total) FILTER (WHERE p.status IN ('pago','enviado','entregue')),0) AS total_gasto,
+             MAX(p.criado_em) AS ultimo_pedido,
+             (SELECT a.id FROM clube_assinaturas a
+              WHERE a.cliente_id=c.id AND a.status='ativa' LIMIT 1) AS assinatura_ativa
+        FROM clientes_site c
+        LEFT JOIN pedidos p ON p.cliente_id=c.id
+        GROUP BY c.id
+        ORDER BY total_gasto DESC, qtd_pedidos DESC
+        LIMIT 300
+    """, fetch='all') or []
+    return render_template('admin_clientes.html', clientes=rows)
 @requer_admin
 def admin_banners():
     if request.method == 'POST':

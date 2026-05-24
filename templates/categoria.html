@@ -7,6 +7,25 @@
 </div>
 <div class="secao"><h2>{{ categoria_nome }}</h2></div>
 
+<!-- Filtros e ordenação -->
+<div style="max-width:1200px;margin:0 auto 20px;padding:0 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="?{% if so_promo %}{% else %}promo=1{% endif %}&ordem={{ ordem }}"
+       class="pill {{ 'amarelo' if so_promo else 'cinza' }}"
+       style="text-decoration:none;padding:6px 14px;font-size:13px">
+      {% if so_promo %}✓ {% endif %}🔥 Só promoções
+    </a>
+  </div>
+  <select onchange="location.href='?ordem='+this.value+'{% if so_promo %}&promo=1{% endif %}'"
+          style="padding:8px 12px;border:1px solid var(--linha);border-radius:8px;font-size:13px">
+    <option value="destaque" {% if ordem=='destaque' %}selected{% endif %}>Em destaque</option>
+    <option value="novidade" {% if ordem=='novidade' %}selected{% endif %}>Mais novos</option>
+    <option value="barato" {% if ordem=='barato' %}selected{% endif %}>Menor preço</option>
+    <option value="caro" {% if ordem=='caro' %}selected{% endif %}>Maior preço</option>
+    <option value="promo" {% if ordem=='promo' %}selected{% endif %}>Promoções primeiro</option>
+  </select>
+</div>
+
 <section class="produtos">
   {% for p in produtos %}
     <div class="prod-card">

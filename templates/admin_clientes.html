@@ -1,0 +1,51 @@
+{% extends "admin_base.html" %}
+{% set pagina = 'clientes' %}
+{% block titulo %}Clientes — LuquiShop{% endblock %}
+{% block conteudo %}
+<h2>👥 Clientes ({{ clientes|length }})</h2>
+
+<div class="card">
+  {% if clientes %}
+  <input id="busca-cliente" type="search" placeholder="Buscar por nome/email/cidade..."
+         oninput="filtrar(this.value)"
+         style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-bottom:14px">
+  <table id="tabela-clientes">
+    <thead><tr>
+      <th>Cliente</th><th>Localização</th><th>Pedidos</th><th>Total gasto</th>
+      <th>Último pedido</th><th>Clube</th><th>Cadastro</th><th></th>
+    </tr></thead>
+    <tbody>
+      {% for c in clientes %}
+      <tr>
+        <td>
+          <b>{{ c.nome }}</b>
+          <div style="font-size:11px;color:#64748B">{{ c.email }}<br>{{ c.telefone or '—' }}</div>
+        </td>
+        <td>{{ c.cidade or '—' }}{% if c.uf %}/{{ c.uf }}{% endif %}</td>
+        <td><b>{{ c.qtd_pedidos }}</b></td>
+        <td><b style="color:#16A34A">{{ rs(c.total_gasto) }}</b></td>
+        <td>{{ c.ultimo_pedido.strftime('%d/%m/%Y') if c.ultimo_pedido else '—' }}</td>
+        <td>{% if c.assinatura_ativa %}<span class="pill amarelo">🎁 ativo</span>{% else %}—{% endif %}</td>
+        <td><small>{{ c.criado_em.strftime('%d/%m/%Y') if c.criado_em else '—' }}</small></td>
+        <td>
+          <a href="https://wa.me/55{{ c.telefone|replace(' ','')|replace('(','')|replace(')','')|replace('-','') if c.telefone else '' }}"
+             target="_blank" class="pill verde" style="text-decoration:none">💬 WA</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:#64748B">Nenhum cliente cadastrado ainda.</p>
+  {% endif %}
+</div>
+
+<script>
+function filtrar(q){
+  q = q.toLowerCase();
+  document.querySelectorAll('#tabela-clientes tbody tr').forEach(tr=>{
+    tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}
