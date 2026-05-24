@@ -66,10 +66,32 @@
                style="width:70px;padding:8px;border:1px solid var(--linha);border-radius:8px;text-align:center">
       </div>
 
-      <button class="btn btn-amarelo btn-block" style="padding:18px;font-size:16px"
-              onclick="carrinhoAdd({{ p.id }}, parseInt(document.getElementById('qtd').value)||1)">
-        🛒 Adicionar ao carrinho
-      </button>
+      <div style="display:flex;gap:10px;align-items:stretch">
+        <button class="btn btn-amarelo" style="flex:1;padding:18px;font-size:16px"
+                onclick="carrinhoAdd({{ p.id }}, parseInt(document.getElementById('qtd').value)||1)">
+          🛒 Adicionar ao carrinho
+        </button>
+        <button id="btn-fav" onclick="toggleFavorito({{ p.id }})" title="Favoritar"
+                style="background:#fff;border:2px solid var(--linha);padding:0 18px;border-radius:10px;font-size:28px;cursor:pointer">
+          {% set favs = wishlist_ids() %}
+          <span id="fav-icon">{{ '❤️' if p.id in favs else '🤍' }}</span>
+        </button>
+      </div>
+
+      <script>
+      async function toggleFavorito(pid){
+        try {
+          const r = await fetch('/api/wishlist/toggle', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({produto_id: pid})
+          });
+          const d = await r.json();
+          if(d.precisa_login){ location.href = '/login?next=/produto/'+pid; return; }
+          document.getElementById('fav-icon').textContent = d.favorito ? '❤️' : '🤍';
+          toast(d.favorito ? '❤️ Adicionado aos favoritos' : 'Removido dos favoritos');
+        } catch(e){ toast('Erro: '+e.message,'err'); }
+      }
+      </script>
 
       <a href="https://wa.me/{{ whatsapp_loja() }}?text=Olá!%20Tenho%20interesse%20no%20{{ p.descricao|urlencode }}"
          target="_blank" class="btn" style="background:#25D366;color:#fff;margin-top:10px;display:block">
@@ -108,6 +130,25 @@
       {% endfor %}
     {% else %}
       <p style="color:var(--mut);text-align:center;padding:20px">Ainda sem avaliações. Seja o primeiro a avaliar!</p>
+    {% endif %}
+
+    {% if relacionados %}
+    <div style="margin-top:30px">
+      <h3 style="margin-bottom:14px">🎯 Quem comprou esse, levou também</h3>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
+        {% for r in relacionados %}
+        <a href="/produto/{{ r.id }}" style="background:#F8FAFC;border-radius:10px;padding:12px;text-decoration:none;transition:transform .15s">
+          <div style="aspect-ratio:1;background:#fff;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:8px">
+            {% if r.foto_url %}<img src="{{ r.foto_url }}" style="max-height:100%">
+            {% else %}<span style="font-size:40px">📦</span>{% endif %}
+          </div>
+          <div style="font-size:12px;line-height:1.3;height:32px;overflow:hidden;color:var(--txt)">{{ r.descricao[:60] }}</div>
+          <div style="color:var(--verde);font-weight:900;margin-top:4px">{{ rs(r.preco_promo or r.preco_venda) }}</div>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    <style>@media(max-width:700px){.relacionados-grid{grid-template-columns:repeat(2,1fr) !important}}</style>
     {% endif %}
 
     <details style="margin-top:20px;padding:14px;background:#F8FAFC;border-radius:10px">

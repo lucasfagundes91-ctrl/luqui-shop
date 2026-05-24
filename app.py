@@ -48,6 +48,7 @@ ZAPI_CLIENT_TOKEN = os.environ.get('ZAPI_CLIENT_TOKEN', '')
 ADMIN_WHATSAPP = os.environ.get('ADMIN_WHATSAPP', '5545991119800')
 META_PIXEL_ID = os.environ.get('META_PIXEL_ID', '')
 GOOGLE_TAG_ID = os.environ.get('GOOGLE_TAG_ID', '')
+ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 
 
 def get_conn():
@@ -249,6 +250,14 @@ def init_db():
             criado_em TIMESTAMPTZ DEFAULT NOW()
         )""",
         "CREATE INDEX IF NOT EXISTS idx_avaliacoes_produto ON avaliacoes(produto_pdv_id, aprovado)",
+        # Wishlist / favoritos
+        """CREATE TABLE IF NOT EXISTS wishlist (
+            id SERIAL PRIMARY KEY,
+            cliente_id INT REFERENCES clientes_site(id) ON DELETE CASCADE,
+            produto_pdv_id INT NOT NULL,
+            criado_em TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(cliente_id, produto_pdv_id)
+        )""",
     ]
     for ddl in ddls:
         try:
@@ -787,6 +796,71 @@ a escolherem com confiança!</p>
     return jsonify({'ok': True, 'enviados': enviados})
 
 
+LUQUIZINHA_SYSTEM = """Voce eh a Luquizinha, atendente virtual da Luqui Brinquedos
+(loja em Cascavel/PR). Atende no site/WhatsApp com tom carinhoso e direto.
+
+CONHECIMENTO DA LOJA:
+- Endereco: R. Engenheiro Reboucas, 2053 - Centro - Cascavel/PR
+- Horario: Seg-Sex 9h-18h, Sab 9h-13h, Dom fechado
+- WhatsApp humano: (45) 99111-9800
+- Frete GRATIS em Cascavel e Toledo/PR
+- Resto do Brasil: PAC R$ 39,90 (5-9 dias) ou SEDEX R$ 62,90 (2-4 dias)
+- Resto do PR: PAC R$ 24,90 ou SEDEX R$ 38,90
+- Pagamento: cartao ate 12x sem juros; PIX e boleto com 5% desconto
+- Trocas: 7 dias direito de arrependimento (CDC) + 30 dias defeito
+- Clube Caixa Misteriosa: Smart R$ 79,99/mes, Essencial R$ 129,99, Premium R$ 199,99
+  Cobranca mensal automatica, sem fidelidade.
+
+TOM:
+- Curto (1-3 linhas), 1-2 emojis por mensagem (💛 🧸 🎁), sem markdown pesado
+- "vc", "ta", "ne" se cliente puxar
+- Acolhedor: "ahh que fofo!", "amei!", "vai amar de mais!"
+- NAO inventa preco de produto especifico nem promete prazo certo -
+  manda pro WhatsApp humano: "Pra confirmar isso da uma chamada
+  no WhatsApp (45) 99111-9800 que a gente te ajuda direitinho 💛"
+- Se cliente quer comprar especifico: indica a busca do site ou WhatsApp
+- Se cliente pergunta produto que voce nao sabe: nao inventa, manda pro humano
+
+NUNCA fale sobre Anthropic/Claude/IA. Voce eh a Luquizinha."""
+
+
+@app.route('/api/luquizinha', methods=['POST'])
+def luquizinha_chat():
+    if not ANTHROPIC_API_KEY:
+        return jsonify({'erro': 'Chat indisponível. Chame no WhatsApp (45) 99111-9800 💛'}), 503
+    d = request.get_json() or {}
+    historico = d.get('historico') or []  # [{role, content}]
+    nova = (d.get('mensagem') or '').strip()
+    if not nova:
+        return jsonify({'erro': 'Mensagem vazia'}), 400
+    # Adiciona a mensagem nova no histórico que vamos mandar
+    msgs = historico[-10:]  # últimas 10 trocas
+    msgs.append({'role': 'user', 'content': nova[:2000]})
+    try:
+        r = requests.post('https://api.anthropic.com/v1/messages',
+            headers={
+                'x-api-key': ANTHROPIC_API_KEY,
+                'anthropic-version': '2023-06-01',
+                'content-type': 'application/json',
+            },
+            json={
+                'model': 'claude-haiku-4-5-20251001',
+                'max_tokens': 400,
+                'system': LUQUIZINHA_SYSTEM,
+                'messages': msgs,
+            }, timeout=20)
+        if r.status_code != 200:
+            log.error("Claude API %s: %s", r.status_code, r.text[:300])
+            return jsonify({'erro': 'Tô meio sobrecarregada agora 😅 '
+                                    'Chama no WhatsApp (45) 99111-9800!'}), 502
+        data = r.json()
+        resposta = ''.join(b.get('text', '') for b in data.get('content', []))
+        return jsonify({'resposta': resposta or 'Desculpa, não entendi! Pode repetir? 💛'})
+    except Exception as e:
+        log.error("luquizinha exc: %s", e)
+        return jsonify({'erro': 'Tive um probleminha técnico. WhatsApp: (45) 99111-9800'}), 500
+
+
 @app.route('/api/newsletter', methods=['POST'])
 def newsletter_signup():
     email = ((request.get_json() or {}).get('email') or '').strip().lower()
@@ -934,8 +1008,38 @@ def produto(pid):
     media = None
     if avals:
         media = round(sum(a['estrelas'] for a in avals) / len(avals), 1)
+    # Upsell: produtos que mais aparecem em pedidos junto com esse
+    rel_ids = []
+    rows = db_execute("""
+        SELECT pi2.produto_pdv_id, COUNT(*) AS qtd
+          FROM pedido_itens pi
+          JOIN pedido_itens pi2 ON pi2.pedido_id = pi.pedido_id
+                                AND pi2.produto_pdv_id != pi.produto_pdv_id
+         WHERE pi.produto_pdv_id = %s
+         GROUP BY pi2.produto_pdv_id
+         ORDER BY qtd DESC, RANDOM()
+         LIMIT 8""", [pid], fetch='all') or []
+    for r in rows:
+        rel_ids.append(r['produto_pdv_id'])
+    # Fallback: produtos da mesma categoria (departamento)
+    relacionados = []
+    for rid in rel_ids:
+        rp = buscar_produto(rid)
+        if rp:
+            relacionados.append(rp)
+        if len(relacionados) >= 4:
+            break
+    if len(relacionados) < 4 and p.get('departamento'):
+        slug = p['departamento'].lower().replace(' ', '-').replace('/', '-')
+        mais, _ = listar_produtos(categoria=slug, limite=8)
+        for rp in mais or []:
+            if rp['id'] != pid and rp['id'] not in [r['id'] for r in relacionados]:
+                relacionados.append(rp)
+            if len(relacionados) >= 4:
+                break
     return render_template('produto.html',
                            p=p, avaliacoes=avals, media_estrelas=media,
+                           relacionados=relacionados[:4],
                            categorias=listar_categorias(),
                            cliente=cliente_logado(),
                            carrinho=carrinho_ler())
@@ -1366,6 +1470,56 @@ def trocar_senha():
 def sair():
     session.pop('cliente_id', None)
     return redirect(url_for('home'))
+
+
+@app.route('/api/wishlist/toggle', methods=['POST'])
+def wishlist_toggle():
+    c = cliente_logado()
+    if not c:
+        return jsonify({'erro': 'login', 'precisa_login': True}), 401
+    pid = int((request.get_json() or {}).get('produto_id') or 0)
+    if not pid:
+        return jsonify({'erro': 'Sem produto'}), 400
+    ja = db_execute("""SELECT id FROM wishlist
+                       WHERE cliente_id=%s AND produto_pdv_id=%s""",
+                    [c['id'], pid], fetch='one')
+    if ja:
+        db_execute("DELETE FROM wishlist WHERE id=%s", [ja['id']])
+        return jsonify({'ok': True, 'favorito': False})
+    db_execute("""INSERT INTO wishlist (cliente_id, produto_pdv_id)
+                  VALUES (%s,%s) ON CONFLICT DO NOTHING""", [c['id'], pid])
+    return jsonify({'ok': True, 'favorito': True})
+
+
+@app.route('/favoritos')
+def favoritos():
+    c = cliente_logado()
+    if not c:
+        return redirect(url_for('login', next=request.path))
+    rows = db_execute("""SELECT produto_pdv_id FROM wishlist
+                         WHERE cliente_id=%s ORDER BY criado_em DESC""",
+                      [c['id']], fetch='all') or []
+    produtos = []
+    for r in rows:
+        p = buscar_produto(r['produto_pdv_id'])
+        if p:
+            produtos.append(p)
+    return render_template('favoritos.html', produtos=produtos,
+                           categorias=listar_categorias(),
+                           cliente=c, carrinho=carrinho_ler())
+
+
+def wishlist_ids():
+    """IDs dos produtos favoritos do cliente logado (ou set vazio)."""
+    c = cliente_logado()
+    if not c:
+        return set()
+    rows = db_execute("""SELECT produto_pdv_id FROM wishlist
+                         WHERE cliente_id=%s""", [c['id']], fetch='all') or []
+    return {r['produto_pdv_id'] for r in rows}
+
+
+app.jinja_env.globals['wishlist_ids'] = wishlist_ids
 
 
 @app.route('/minha-conta')
