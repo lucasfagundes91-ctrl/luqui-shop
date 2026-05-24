@@ -2123,6 +2123,12 @@ Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp
                 'pedido_id': pid,
                 'cliente': {'nome': p['nome'], 'email': p['email'],
                             'cpf': p['cpf'], 'telefone': p['telefone']},
+                'endereco': {
+                    'cep': p['cep'], 'endereco': p['endereco'],
+                    'numero': p['numero'], 'complemento': p.get('complemento'),
+                    'bairro': p['bairro'], 'cidade': p['cidade'],
+                    'uf': p['uf']
+                },
                 'itens': [{'produto_id': i['produto_pdv_id'],
                            'descricao': i['descricao'],
                            'preco_unitario': float(i['preco_unitario']),
@@ -2139,12 +2145,23 @@ Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp
                 headers={'X-API-Key': PDVPRO_API_KEY},
                 timeout=20)
             if r.status_code == 200:
-                pdv_vid = (r.json() or {}).get('venda_id')
+                resp_pdv = r.json() or {}
+                pdv_vid = resp_pdv.get('venda_id')
+                nfe_ref = resp_pdv.get('nfe_ref')
                 if pdv_vid:
                     db_execute(
                         "UPDATE pedidos SET pdv_venda_id=%s WHERE id=%s",
                         [pdv_vid, pid])
-                    log.info("pedido %s → PDV venda %s", pid, pdv_vid)
+                    log.info("pedido %s → PDV venda %s (NF ref=%s)",
+                             pid, pdv_vid, nfe_ref or 'n/a')
+                if nfe_ref:
+                    db_execute(
+                        "UPDATE pedidos SET observacao = COALESCE(observacao,'') "
+                        "|| %s WHERE id=%s",
+                        [f' [NF {resp_pdv.get("nfe_modelo")}/{resp_pdv.get("nfe_numero")}]',
+                         pid])
+                if resp_pdv.get('nfe_erro'):
+                    log.error("NF auto: %s", resp_pdv['nfe_erro'])
             else:
                 log.error("PDV /pedido %s: %s", r.status_code, r.text[:300])
         except Exception as e:
