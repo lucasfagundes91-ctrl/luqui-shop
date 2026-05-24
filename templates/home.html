@@ -1,17 +1,57 @@
 {% extends "base.html" %}
 {% block conteudo %}
 
-<!-- HERO -->
+<!-- HERO ROTATIVO -->
 <section class="hero">
-  <div class="slide">
-    <div>
-      <h2>BICICLETAS</h2>
-      <div class="sub">em até <b style="color:#FFC700">12x sem juros</b><br>
-        com <b style="color:#FFC700">5%</b> retirando na loja</div>
-      <a href="/buscar?q=bicicleta" class="cta">Ver bicicletas →</a>
+  {% if banners %}
+    <div id="hero-slides" style="position:relative">
+      {% for b in banners %}
+      <div class="slide" style="background:{{ b.cor_fundo or 'linear-gradient(135deg,#87CEFA,#4FB8FF)' }};{% if not loop.first %}display:none;{% endif %}"
+           data-idx="{{ loop.index0 }}">
+        {% if b.imagem_url %}<img src="{{ b.imagem_url }}" alt="{{ b.titulo }}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.6">{% endif %}
+        <div style="position:relative;z-index:1">
+          <h2>{{ b.titulo }}</h2>
+          {% if b.subtitulo %}<div class="sub">{{ b.subtitulo|safe }}</div>{% endif %}
+          {% if b.link %}<a href="{{ b.link }}" class="cta">{{ b.cta_texto or 'Ver' }} →</a>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+      {% if banners|length > 1 %}
+      <div style="position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:2">
+        {% for b in banners %}
+        <span class="slide-dot {% if loop.first %}on{% endif %}" data-idx="{{ loop.index0 }}"
+              style="width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,.5);cursor:pointer"></span>
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
-  </div>
+  {% else %}
+    <div class="slide">
+      <div>
+        <h2>BICICLETAS</h2>
+        <div class="sub">em até <b style="color:#FFC700">12x sem juros</b><br>
+          com <b style="color:#FFC700">5%</b> retirando na loja</div>
+        <a href="/buscar?q=bicicleta" class="cta">Ver bicicletas →</a>
+      </div>
+    </div>
+  {% endif %}
 </section>
+<style>.slide-dot.on{background:#fff !important}</style>
+<script>
+(function(){
+  const slides = document.querySelectorAll('#hero-slides .slide');
+  const dots = document.querySelectorAll('.slide-dot');
+  if(slides.length < 2) return;
+  let i = 0;
+  function go(n){
+    slides.forEach((s,k)=>s.style.display=k===n?'flex':'none');
+    dots.forEach((d,k)=>d.classList.toggle('on',k===n));
+    i = n;
+  }
+  dots.forEach(d=>d.addEventListener('click',()=>go(parseInt(d.dataset.idx))));
+  setInterval(()=>go((i+1)%slides.length), 6000);
+})();
+</script>
 
 <!-- BADGES -->
 <section class="badges">

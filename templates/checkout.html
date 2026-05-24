@@ -85,6 +85,14 @@
         </div>
         {% endfor %}
         <hr style="margin:14px 0;border:0;border-top:1px solid var(--linha)">
+        <div style="margin-bottom:10px">
+          <label style="font-size:11px;color:var(--mut);font-weight:700;letter-spacing:.5px">CUPOM DE DESCONTO</label>
+          <div style="display:flex;gap:6px;margin-top:4px">
+            <input id="cupom-codigo" placeholder="Tem um código?" style="flex:1;padding:8px;border:1px solid var(--linha);border-radius:6px;font-size:13px;text-transform:uppercase">
+            <button type="button" onclick="aplicarCupom()" style="background:var(--azul);color:#fff;border:0;padding:0 14px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">Aplicar</button>
+          </div>
+          <div id="cupom-info" style="font-size:11px;margin-top:4px"></div>
+        </div>
         <div style="display:flex;justify-content:space-between;font-size:14px">
           <span>Subtotal</span><span>{{ rs(subtotal) }}</span>
         </div>
@@ -93,6 +101,9 @@
         </div>
         <div id="bloco-desconto" style="display:none;justify-content:space-between;font-size:14px;margin-top:6px;color:var(--verde)">
           <span>Desconto PIX/Boleto</span><span id="resumo-desconto">-</span>
+        </div>
+        <div id="bloco-cupom" style="display:none;justify-content:space-between;font-size:14px;margin-top:6px;color:var(--verde)">
+          <span>Cupom (<span id="cupom-cod-show"></span>)</span><span id="resumo-cupom">-</span>
         </div>
         <hr style="margin:14px 0;border:0;border-top:1px solid var(--linha)">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
@@ -115,6 +126,23 @@ const SUBTOTAL = {{ subtotal }};
 const DESC_PCT = {{ desconto_pix_pct }};
 const PARC_MAX = {{ parcelamento_max }};
 let frete = 0;
+let cupom = null; // {codigo, desconto}
+
+async function aplicarCupom(){
+  const cod = document.getElementById('cupom-codigo').value.trim().toUpperCase();
+  if(!cod) return;
+  try {
+    const r = await fetch('/api/checkout/cupom?codigo='+encodeURIComponent(cod)+'&subtotal='+SUBTOTAL);
+    const d = await r.json();
+    const info = document.getElementById('cupom-info');
+    if(d.erro){ cupom=null; info.innerHTML='<span style="color:var(--vermelho)">'+d.erro+'</span>'; recalcular(); return; }
+    cupom = d;
+    info.innerHTML = '<span style="color:var(--verde)">✓ Cupom aplicado — '+(d.tipo==='pct'?d.valor+'% off':'R$ '+d.valor+' off')+'</span>';
+    recalcular();
+  } catch(e){ console.error(e); }
+}
+
+if(typeof fbq !== 'undefined'){ fbq('track','InitiateCheckout',{value:SUBTOTAL,currency:'BRL'}); }
 
 document.querySelectorAll('.forma').forEach(l=>{
   l.addEventListener('click',()=>{
@@ -177,10 +205,14 @@ function recalcular(){
   const f = document.querySelector('input[name="forma_pagto"]:checked').value;
   let desconto = 0;
   if(f==='pix' || f==='boleto') desconto = SUBTOTAL * (DESC_PCT/100);
-  const total = SUBTOTAL + frete - desconto;
+  const dcupom = cupom ? cupom.desconto : 0;
+  const total = Math.max(0, SUBTOTAL + frete - desconto - dcupom);
   document.getElementById('resumo-frete').textContent = frete===0?'GRÁTIS':'R$ '+frete.toFixed(2).replace('.',',');
   document.getElementById('bloco-desconto').style.display = desconto>0?'flex':'none';
   document.getElementById('resumo-desconto').textContent = '-R$ '+desconto.toFixed(2).replace('.',',');
+  document.getElementById('bloco-cupom').style.display = dcupom>0?'flex':'none';
+  document.getElementById('cupom-cod-show').textContent = cupom?cupom.codigo:'';
+  document.getElementById('resumo-cupom').textContent = '-R$ '+dcupom.toFixed(2).replace('.',',');
   document.getElementById('resumo-total').textContent = 'R$ '+total.toFixed(2).replace('.',',');
 }
 
@@ -192,6 +224,7 @@ document.getElementById('form-checkout').addEventListener('submit', async (e)=>{
   const dados = Object.fromEntries(f.entries());
   dados.frete_valor = frete;
   dados.frete_servico = document.querySelector('input[name="frete_servico"]:checked')?.value || '';
+  if(cupom) dados.cupom_codigo = cupom.codigo;
   try {
     const r = await fetch('/api/checkout/finalizar', {
       method: 'POST',

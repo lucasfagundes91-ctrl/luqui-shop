@@ -34,7 +34,7 @@ PDVPRO_URL = os.environ.get('PDVPRO_URL', 'https://pdvpro.luqsys.com.br')
 PDVPRO_API_KEY = os.environ.get('PDVPRO_API_KEY', '')
 ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'lucasfagundes91@hotmail.com')
 ADMIN_SENHA_PADRAO = os.environ.get('ADMIN_SENHA', 'Lucasf123@')
-WHATSAPP_LOJA = os.environ.get('WHATSAPP_LOJA', '5545991077788')
+WHATSAPP_LOJA = os.environ.get('WHATSAPP_LOJA', '5545991119800')
 ASAAS_API_KEY = os.environ.get('ASAAS_API_KEY', '')
 ASAAS_WEBHOOK_TOKEN = os.environ.get('ASAAS_WEBHOOK_TOKEN', '')
 ASAAS_BASE = 'https://api.asaas.com/v3'
@@ -42,6 +42,12 @@ RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
 EMAIL_FROM = os.environ.get('EMAIL_FROM',
                             'Luqui Brinquedos <contato@luquibrinquedos.com.br>')
 SITE_URL = os.environ.get('SITE_URL', 'https://www.luquibrinquedos.com.br')
+ZAPI_INSTANCE = os.environ.get('ZAPI_INSTANCE', '')
+ZAPI_TOKEN = os.environ.get('ZAPI_TOKEN', '')
+ZAPI_CLIENT_TOKEN = os.environ.get('ZAPI_CLIENT_TOKEN', '')
+ADMIN_WHATSAPP = os.environ.get('ADMIN_WHATSAPP', '5545991119800')
+META_PIXEL_ID = os.environ.get('META_PIXEL_ID', '')
+GOOGLE_TAG_ID = os.environ.get('GOOGLE_TAG_ID', '')
 
 
 def get_conn():
@@ -196,11 +202,32 @@ def init_db():
         """CREATE TABLE IF NOT EXISTS banners (
             id SERIAL PRIMARY KEY,
             titulo VARCHAR(160),
+            subtitulo VARCHAR(200),
             imagem_url TEXT,
             link TEXT,
+            cta_texto VARCHAR(40) DEFAULT 'Ver',
+            cor_fundo VARCHAR(20) DEFAULT '#4FB8FF',
             ordem INT DEFAULT 0,
             ativo BOOLEAN DEFAULT TRUE
         )""",
+        # Cupons de desconto
+        """CREATE TABLE IF NOT EXISTS cupons (
+            id SERIAL PRIMARY KEY,
+            codigo VARCHAR(40) UNIQUE NOT NULL,
+            tipo VARCHAR(10) NOT NULL,
+            valor NUMERIC(10,2) NOT NULL,
+            valor_min NUMERIC(10,2) DEFAULT 0,
+            usos_max INT,
+            usos INT DEFAULT 0,
+            valido_ate DATE,
+            ativo BOOLEAN DEFAULT TRUE,
+            criado_em TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        "ALTER TABLE banners ADD COLUMN IF NOT EXISTS subtitulo VARCHAR(200)",
+        "ALTER TABLE banners ADD COLUMN IF NOT EXISTS cta_texto VARCHAR(40) DEFAULT 'Ver'",
+        "ALTER TABLE banners ADD COLUMN IF NOT EXISTS cor_fundo VARCHAR(20) DEFAULT '#4FB8FF'",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_codigo VARCHAR(40)",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_desconto NUMERIC(10,2) DEFAULT 0",
     ]
     for ddl in ddls:
         try:
@@ -309,7 +336,32 @@ app.jinja_env.globals['whatsapp_loja'] = lambda: cfg('whatsapp_loja', WHATSAPP_L
 
 @app.context_processor
 def _ctx_globals():
-    return {'ano': datetime.now(SP_TZ).year}
+    return {'ano': datetime.now(SP_TZ).year,
+            'META_PIXEL_ID': META_PIXEL_ID,
+            'GOOGLE_TAG_ID': GOOGLE_TAG_ID}
+
+
+@app.route('/api/checkout/cupom')
+def checkout_aplicar_cupom():
+    codigo = (request.args.get('codigo') or '').strip().upper()
+    subtotal = float(request.args.get('subtotal') or 0)
+    if not codigo:
+        return jsonify({'erro': 'Digite o código'}), 400
+    c = db_execute("""SELECT * FROM cupons WHERE UPPER(codigo)=%s AND ativo
+                      AND (valido_ate IS NULL OR valido_ate >= CURRENT_DATE)
+                      AND (usos_max IS NULL OR usos < usos_max)""",
+                   [codigo], fetch='one')
+    if not c:
+        return jsonify({'erro': 'Cupom inválido ou expirado'}), 404
+    if subtotal < float(c['valor_min'] or 0):
+        return jsonify({'erro': f'Pedido mínimo de R$ {c["valor_min"]} pra usar esse cupom'}), 400
+    if c['tipo'] == 'pct':
+        desconto = round(subtotal * float(c['valor']) / 100, 2)
+    else:  # 'rs'
+        desconto = min(float(c['valor']), subtotal)
+    return jsonify({'ok': True, 'codigo': c['codigo'],
+                    'tipo': c['tipo'], 'valor': float(c['valor']),
+                    'desconto': desconto})
 
 
 def cliente_logado():
@@ -403,6 +455,246 @@ def carrinho_total(itens):
 
 
 # ─── Rotas públicas ───────────────────────────────────────────────────────────
+PAGINAS_LEGAIS = {
+    'trocas-devolucoes': {
+        'titulo': 'Trocas e devoluções',
+        'conteudo': """
+<h3>Direito de arrependimento (7 dias)</h3>
+<p>Conforme o <b>Código de Defesa do Consumidor (CDC, art. 49)</b>, você tem até
+<b>7 dias corridos</b> a partir do recebimento pra desistir da compra e pedir
+o reembolso integral, sem necessidade de justificativa.</p>
+
+<h3>Produto com defeito</h3>
+<p>Se o brinquedo chegou quebrado ou com algum problema de fabricação, você tem
+<b>30 dias</b> pra entrar em contato. Vamos trocar ou devolver o valor pago
+(o que você preferir).</p>
+
+<h3>Como fazer a troca</h3>
+<ol>
+  <li>Manda mensagem no WhatsApp <b>(45) 99111-9800</b> em até 7 dias do recebimento</li>
+  <li>Envie o produto pelos Correios (nós cobrimos o frete da troca/devolução em caso de defeito)</li>
+  <li>Após receber e conferir, processamos a troca ou estorno em até 7 dias úteis</li>
+</ol>
+
+<h3>O que NÃO podemos trocar</h3>
+<ul>
+  <li>Produtos lacrados que foram abertos (por higiene), exceto se houver defeito</li>
+  <li>Brinquedos com uso evidente (sujos, riscados, sem embalagem)</li>
+  <li>Itens personalizados sob encomenda</li>
+</ul>
+
+<h3>Reembolso</h3>
+<p>O estorno é feito pela mesma forma de pagamento original:</p>
+<ul>
+  <li><b>PIX/Boleto:</b> em até 7 dias úteis após recebermos o produto</li>
+  <li><b>Cartão de crédito:</b> em até 2 faturas dependendo da operadora</li>
+</ul>
+""",
+    },
+    'entregas': {
+        'titulo': 'Entregas e prazos',
+        'conteudo': """
+<h3>Frete grátis</h3>
+<p>Entrega <b>GRÁTIS</b> para Cascavel e Toledo (PR)! Prazo: 1 a 2 dias úteis.</p>
+
+<h3>Demais regiões do Paraná</h3>
+<ul>
+  <li><b>PAC</b>: R$ 24,90 · 3 a 5 dias úteis</li>
+  <li><b>SEDEX</b>: R$ 38,90 · 2 a 3 dias úteis</li>
+</ul>
+
+<h3>Resto do Brasil</h3>
+<ul>
+  <li><b>PAC</b>: R$ 39,90 · 5 a 9 dias úteis</li>
+  <li><b>SEDEX</b>: R$ 62,90 · 2 a 4 dias úteis</li>
+</ul>
+<p><i>Em breve cotação automática via Melhor Envio com mais transportadoras.</i></p>
+
+<h3>Prazos</h3>
+<p>O prazo conta a partir da <b>confirmação do pagamento</b>, não do pedido.
+Pagamentos PIX confirmam na hora; boleto leva 1-2 dias úteis pra compensar.</p>
+
+<h3>Acompanhar pedido</h3>
+<p>Você recebe e-mail e WhatsApp com o código de rastreio assim que postamos
+seu pedido. Pode acompanhar também em <a href="/minha-conta">Minha conta</a>.</p>
+
+<h3>Retirada na loja física</h3>
+<p>Mora em Cascavel? Pode retirar grátis em nossa loja na
+<b>R. Engenheiro Rebouças, 2053 — Centro</b>. Estacionamento gratuito em frente!
+Horário: segunda a sexta 9h-18h · sábado 9h-13h.</p>
+""",
+    },
+    'formas-pagamento': {
+        'titulo': 'Formas de pagamento',
+        'conteudo': """
+<h3>💳 Cartão de crédito</h3>
+<p>Aceitamos as principais bandeiras: Visa, Mastercard, Elo, Hipercard, Amex.</p>
+<ul>
+  <li>Parcelamento em até <b>12x sem juros</b></li>
+  <li>Pagamento processado com segurança via <b>Asaas</b></li>
+  <li>Aprovação imediata na maioria dos casos</li>
+</ul>
+
+<h3>📱 PIX</h3>
+<p>Forma mais rápida e com <b>5% de desconto</b>!</p>
+<ul>
+  <li>Desconto aplicado automaticamente no checkout</li>
+  <li>Confirmação em segundos</li>
+  <li>Pedido entra em separação na hora</li>
+</ul>
+
+<h3>📄 Boleto bancário</h3>
+<p>Também tem <b>5% de desconto</b>:</p>
+<ul>
+  <li>Vencimento em 3 dias úteis</li>
+  <li>Compensa em até 2 dias úteis após o pagamento</li>
+  <li>Pode pagar no app do banco, lotérica ou agência</li>
+</ul>
+
+<h3>🔒 Segurança</h3>
+<p>Não armazenamos dados do seu cartão. Todo o processamento é feito pela
+plataforma Asaas, certificada PCI-DSS. Os dados trafegam por HTTPS com
+certificado SSL válido.</p>
+""",
+    },
+    'privacidade': {
+        'titulo': 'Política de privacidade',
+        'conteudo': """
+<h3>Quem somos</h3>
+<p><b>Luqui Brinquedos LTDA</b> (CNPJ 32.650.888/0001-02) — R. Engenheiro Rebouças,
+2053 — Centro — Cascavel/PR. E-mail: contato@luquibrinquedos.com.br.</p>
+
+<h3>Dados que coletamos</h3>
+<ul>
+  <li><b>Cadastrais:</b> nome, CPF, e-mail, telefone, endereço (necessários pra entrega e emissão de nota fiscal)</li>
+  <li><b>De compra:</b> histórico de pedidos, formas de pagamento usadas, produtos visitados</li>
+  <li><b>Técnicos:</b> IP, navegador, cookies de sessão (pra manter o carrinho e seu login funcionando)</li>
+</ul>
+
+<h3>Pra que usamos</h3>
+<ul>
+  <li>Processar pedidos, emitir nota e fazer a entrega</li>
+  <li>Enviar atualizações do pedido por e-mail e WhatsApp</li>
+  <li>Atender solicitações e dúvidas</li>
+  <li>Cumprir obrigações legais (notas fiscais, prazo de guarda de 5 anos)</li>
+  <li><b>Marketing</b> apenas se você optar (e-mail de promoções) — você pode descadastrar a qualquer momento</li>
+</ul>
+
+<h3>Com quem compartilhamos</h3>
+<ul>
+  <li><b>Asaas</b>: processamento dos pagamentos</li>
+  <li><b>Correios / Melhor Envio</b>: entrega das encomendas</li>
+  <li><b>Resend</b>: envio de e-mails transacionais</li>
+  <li><b>SEFAZ</b>: emissão de NFC-e/NF-e quando obrigatório</li>
+</ul>
+<p>Não vendemos nem cedemos seus dados pra terceiros sem relação com a compra.</p>
+
+<h3>Seus direitos (LGPD)</h3>
+<p>Conforme a <b>Lei 13.709/2018 (LGPD)</b>, você pode:</p>
+<ul>
+  <li>Pedir confirmação dos dados que temos</li>
+  <li>Acessar, corrigir ou atualizar seus dados</li>
+  <li>Pedir a eliminação (exceto os que somos obrigados a guardar por lei fiscal)</li>
+  <li>Revogar consentimento de marketing a qualquer momento</li>
+</ul>
+<p>Pra exercer qualquer direito, mande e-mail pra
+<a href="mailto:privacidade@luquibrinquedos.com.br">privacidade@luquibrinquedos.com.br</a>
+ou WhatsApp <b>(45) 99111-9800</b>. Respondemos em até 15 dias.</p>
+
+<h3>Cookies</h3>
+<p>Usamos cookies essenciais (sessão, carrinho) e analíticos (entender quais
+produtos são mais vistos). Você pode desabilitar no seu navegador, mas algumas
+funções podem parar de funcionar.</p>
+
+<h3>Segurança</h3>
+<p>Site protegido por HTTPS (SSL). Senhas armazenadas com hash criptográfico
+(nunca em texto puro). Acesso aos dados restrito à equipe Luqui.</p>
+""",
+    },
+    'termos': {
+        'titulo': 'Termos de uso',
+        'conteudo': """
+<h3>1. Aceite</h3>
+<p>Ao usar luquibrinquedos.com.br você concorda com estes termos. Se não
+concordar, por favor não use o site.</p>
+
+<h3>2. Cadastro</h3>
+<ul>
+  <li>Você precisa ter <b>18 anos ou mais</b> pra fazer compras (ou autorização dos pais/responsáveis)</li>
+  <li>Os dados informados devem ser verdadeiros e atualizados</li>
+  <li>Você é responsável por manter sua senha em segredo</li>
+</ul>
+
+<h3>3. Preços e disponibilidade</h3>
+<p>Preços e estoque podem variar. O preço válido é o que aparece no momento da
+finalização do pedido. Em caso de erro grosseiro (ex.: brinquedo de R$ 200
+listado por R$ 2), reservamos o direito de cancelar o pedido devolvendo
+integralmente o valor pago.</p>
+
+<h3>4. Clube Caixa Misteriosa</h3>
+<ul>
+  <li>Cobrança mensal automática via Asaas</li>
+  <li>Sem fidelidade — cancele quando quiser na sua área "Minha conta" ou pelo WhatsApp</li>
+  <li>A primeira caixa é despachada em até 7 dias após confirmação do 1º pagamento</li>
+  <li>Brinquedos são <b>selecionados pela equipe Luqui</b> conforme o plano escolhido — não há possibilidade de escolher itens específicos</li>
+  <li>Em caso de falha no pagamento, a entrega do mês fica suspensa até regularização</li>
+</ul>
+
+<h3>5. Propriedade intelectual</h3>
+<p>Logos, fotos, descrições e código do site pertencem à Luqui Brinquedos.
+Marcas de produtos pertencem aos respectivos fabricantes.</p>
+
+<h3>6. Limitação de responsabilidade</h3>
+<p>Não nos responsabilizamos por:</p>
+<ul>
+  <li>Atrasos causados pelos Correios/transportadora</li>
+  <li>Endereço incorreto informado pelo cliente</li>
+  <li>Uso inadequado do brinquedo (siga sempre a faixa etária recomendada)</li>
+</ul>
+
+<h3>7. Foro</h3>
+<p>Eventuais conflitos serão resolvidos no foro da comarca de Cascavel/PR.</p>
+""",
+    },
+}
+
+
+def _render_pagina_legal(slug):
+    p = PAGINAS_LEGAIS.get(slug)
+    if not p:
+        abort(404)
+    return render_template('pagina.html',
+                           titulo=p['titulo'], conteudo=p['conteudo'],
+                           categorias=listar_categorias(),
+                           cliente=cliente_logado(),
+                           carrinho=carrinho_ler())
+
+
+@app.route('/trocas-devolucoes')
+def pag_trocas():
+    return _render_pagina_legal('trocas-devolucoes')
+
+
+@app.route('/entregas')
+def pag_entregas():
+    return _render_pagina_legal('entregas')
+
+
+@app.route('/formas-pagamento')
+def pag_formas_pagto():
+    return _render_pagina_legal('formas-pagamento')
+
+
+@app.route('/privacidade')
+def pag_privacidade():
+    return _render_pagina_legal('privacidade')
+
+
+@app.route('/termos')
+def pag_termos():
+    return _render_pagina_legal('termos')
+
+
 @app.route('/healthz')
 def healthz():
     try:
@@ -1095,6 +1387,31 @@ def asaas_buscar_pix_qr(payment_id):
     return {}
 
 
+# ─── WhatsApp (Z-API) ─────────────────────────────────────────────────────────
+def enviar_whatsapp(numero, mensagem):
+    """Manda mensagem via Z-API. `numero` em E164 sem '+', ex '5545991119800'."""
+    if not (ZAPI_INSTANCE and ZAPI_TOKEN):
+        log.info("Z-API não configurado — WhatsApp pulado")
+        return False
+    numero = ''.join(c for c in (numero or '') if c.isdigit())
+    if not numero:
+        return False
+    if not numero.startswith('55'):
+        numero = '55' + numero
+    url = f"https://api.z-api.io/instances/{ZAPI_INSTANCE}/token/{ZAPI_TOKEN}/send-text"
+    try:
+        r = requests.post(url, json={'phone': numero, 'message': mensagem},
+                          headers={'Client-Token': ZAPI_CLIENT_TOKEN,
+                                   'Content-Type': 'application/json'},
+                          timeout=15)
+        if r.status_code in (200, 201):
+            return True
+        log.error("Z-API %s pra %s: %s", r.status_code, numero, r.text[:300])
+    except Exception as e:
+        log.error("Z-API exc: %s", e)
+    return False
+
+
 # ─── Email (Resend) ───────────────────────────────────────────────────────────
 def enviar_email(para, assunto, html):
     if not RESEND_API_KEY:
@@ -1138,7 +1455,21 @@ def checkout_finalizar():
     desconto = 0.0
     if d['forma_pagto'] in ('pix', 'boleto'):
         desconto = round(subtotal * desconto_pct / 100, 2)
-    total = round(subtotal + frete - desconto, 2)
+    # Cupom
+    cupom_codigo = (d.get('cupom_codigo') or '').strip().upper()
+    cupom_desconto = 0.0
+    if cupom_codigo:
+        c = db_execute("""SELECT * FROM cupons WHERE UPPER(codigo)=%s AND ativo
+                          AND (valido_ate IS NULL OR valido_ate >= CURRENT_DATE)
+                          AND (usos_max IS NULL OR usos < usos_max)""",
+                       [cupom_codigo], fetch='one')
+        if c and subtotal >= float(c['valor_min'] or 0):
+            if c['tipo'] == 'pct':
+                cupom_desconto = round(subtotal * float(c['valor']) / 100, 2)
+            else:
+                cupom_desconto = min(float(c['valor']), subtotal)
+            db_execute("UPDATE cupons SET usos=usos+1 WHERE id=%s", [c['id']])
+    total = max(0, round(subtotal + frete - desconto - cupom_desconto, 2))
     parcelas = max(1, min(int(cfg('parcelamento_max', '12')),
                           int(d.get('parcelas') or 1)))
     # Cria pedido no banco (status aguardando_pagto)
@@ -1147,18 +1478,20 @@ def checkout_finalizar():
         INSERT INTO pedidos
           (cliente_id, email, nome, telefone, cpf, cep, endereco, numero,
            complemento, bairro, cidade, uf, subtotal, frete, desconto, total,
-           forma_pagto, parcelas, frete_servico, frete_prazo, observacao)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+           forma_pagto, parcelas, frete_servico, frete_prazo, observacao,
+           cupom_codigo, cupom_desconto)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         RETURNING id""",
         [cli['id'] if cli else None,
          d['email'].strip().lower(), d['nome'].strip(), d['telefone'].strip(),
          d['cpf'].strip(), d['cep'].strip(), d['endereco'].strip(),
          d['numero'].strip(), d.get('complemento') or None,
          d['bairro'].strip(), d['cidade'].strip(), d['uf'].strip().upper(),
-         subtotal, frete, desconto, total,
+         subtotal, frete, desconto + cupom_desconto, total,
          d['forma_pagto'], parcelas,
          d.get('frete_servico') or 'A definir',
-         d.get('frete_prazo') or '', d.get('observacao') or None],
+         d.get('frete_prazo') or '', d.get('observacao') or None,
+         cupom_codigo or None, cupom_desconto],
         fetch='one')
     pid = ped['id']
     # Insere itens
@@ -1280,10 +1613,31 @@ expedição. Te avisamos com o código de rastreio assim que sair!</p>
 <p>Valor mensal: <b>R$ {ass['preco_mensal']}</b><br>
 Próxima cobrança: dia {(datetime.now(SP_TZ).date()+timedelta(days=30)).strftime('%d/%m/%Y')}</p>
 <p>Bora brincar muito? 🧸<br>
-Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp (45) 99107-7788</a></p>
+Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp (45) 99111-9800</a></p>
 <p>Abraço,<br>Luqui Brinquedos</p>""")
             except Exception as e:
                 log.error("email clube ativa: %s", e)
+            # WhatsApp cliente
+            cli_tel = db_execute("SELECT telefone FROM clientes_site WHERE id=%s",
+                                 [ass['cliente_id']], fetch='one') or {}
+            try:
+                enviar_whatsapp(cli_tel.get('telefone'),
+                    f"🎁 {ass['cliente_nome'].split()[0]}, sua assinatura do "
+                    f"*Clube Luqui* está ativa!\n\n"
+                    f"Plano: *{ass['plano_nome']}* (R$ {ass['preco_mensal']}/mês)\n\n"
+                    f"Sua 1ª Caixa Misteriosa sai em até 7 dias úteis 📦\n"
+                    f"Bora brincar! 🧸")
+            except Exception as e:
+                log.error("WA clube cliente: %s", e)
+            # WhatsApp admin
+            try:
+                enviar_whatsapp(ADMIN_WHATSAPP,
+                    f"🎁 *Novo assinante Clube Luqui!*\n\n"
+                    f"Cliente: {ass['cliente_nome']}\n"
+                    f"Plano: {ass['plano_nome']} (R$ {ass['preco_mensal']}/mês)\n\n"
+                    f"Preparar caixa: https://www.luquibrinquedos.com.br/admin/clube/envio-mensal")
+            except Exception as e:
+                log.error("WA clube admin: %s", e)
         elif event in ('PAYMENT_OVERDUE',):
             db_execute("UPDATE clube_assinaturas SET status='atrasado' "
                        "WHERE id=%s", [aid])
@@ -1351,10 +1705,33 @@ Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp
 <b>Total pago:</b> R$ {p['total']}<br>
 <b>Entrega em:</b> {p['endereco']}, {p['numero']} — {p['cidade']}/{p['uf']}</p>
 <p>Te avisamos quando sair pra entrega! 🚚</p>
-<p>Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp (45) 99107-7788</a></p>
+<p>Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp (45) 99111-9800</a></p>
 <p>Abraço,<br>Luqui Brinquedos 🧸</p>""")
         except Exception as e:
             log.error("email confirma: %s", e)
+        # WhatsApp pro CLIENTE
+        try:
+            enviar_whatsapp(p['telefone'],
+                f"💛 Oi {p['nome'].split()[0]}! Sou a Luqui Brinquedos.\n\n"
+                f"Seu pagamento do *Pedido #{pid}* foi confirmado! 🎉\n"
+                f"Total: *R$ {p['total']}*\n"
+                f"Entrega: {p['cidade']}/{p['uf']}\n\n"
+                f"Já estamos preparando tudo com muito carinho 🧸\n"
+                f"Te aviso quando sair pra entrega!")
+        except Exception as e:
+            log.error("WA cliente: %s", e)
+        # WhatsApp pro ADMIN (você)
+        try:
+            enviar_whatsapp(ADMIN_WHATSAPP,
+                f"🛒 *Novo pedido pago #{pid}*\n\n"
+                f"Cliente: {p['nome']}\n"
+                f"Telefone: {p['telefone']}\n"
+                f"Total: *R$ {p['total']}*\n"
+                f"Forma: {p['forma_pagto']}\n"
+                f"Endereço: {p['endereco']}, {p['numero']} - {p['cidade']}/{p['uf']}\n\n"
+                f"Ver: https://www.luquibrinquedos.com.br/admin/pedidos")
+        except Exception as e:
+            log.error("WA admin: %s", e)
     elif event in ('PAYMENT_OVERDUE',):
         db_execute("UPDATE pedidos SET status='atrasado' WHERE id=%s", [pid])
     elif event in ('PAYMENT_DELETED', 'PAYMENT_REFUNDED'):

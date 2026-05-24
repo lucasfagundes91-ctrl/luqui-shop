@@ -181,6 +181,32 @@
   }
 </style>
 {% block extra_head %}{% endblock %}
+
+{% if META_PIXEL_ID %}
+<!-- Meta Pixel -->
+<script>
+!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
+document,'script','https://connect.facebook.net/en_US/fbevents.js');
+fbq('init', '{{ META_PIXEL_ID }}');
+fbq('track', 'PageView');
+</script>
+<noscript><img height="1" width="1" style="display:none" alt=""
+src="https://www.facebook.com/tr?id={{ META_PIXEL_ID }}&ev=PageView&noscript=1"/></noscript>
+{% endif %}
+
+{% if GOOGLE_TAG_ID %}
+<!-- Google Tag -->
+<script async src="https://www.googletagmanager.com/gtag/js?id={{ GOOGLE_TAG_ID }}"></script>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', '{{ GOOGLE_TAG_ID }}');
+</script>
+{% endif %}
 </head>
 <body>
 
@@ -284,7 +310,7 @@
       </p>
       <p style="font-size:12px;color:#cbd5e1;margin-top:14px">
         📍 R. Engenheiro Rebouças, 2053 — Centro — Cascavel/PR<br>
-        📞 (45) 99107-7788<br>
+        📞 (45) 99111-9800<br>
         ✉️ contato@luquibrinquedos.com.br
       </p>
     </div>
@@ -302,6 +328,8 @@
       <a href="/trocas-devolucoes">Trocas e devoluções</a>
       <a href="/entregas">Prazo de entrega</a>
       <a href="/formas-pagamento">Formas de pagamento</a>
+      <a href="/privacidade">Privacidade (LGPD)</a>
+      <a href="/termos">Termos de uso</a>
     </div>
     <div>
       <h4>Siga a Luqui</h4>

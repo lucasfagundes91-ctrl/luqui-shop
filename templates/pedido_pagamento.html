@@ -1,6 +1,16 @@
 {% extends "base.html" %}
 {% block titulo %}Pedido #{{ p.id }} — Pagamento{% endblock %}
 {% block conteudo %}
+{% if p.status == 'pago' %}
+<script>
+if(typeof fbq !== 'undefined'){
+  fbq('track','Purchase',{value:{{ p.total }},currency:'BRL',content_ids:['pedido-{{ p.id }}']});
+}
+if(typeof gtag !== 'undefined'){
+  gtag('event','purchase',{transaction_id:'{{ p.id }}',value:{{ p.total }},currency:'BRL'});
+}
+</script>
+{% endif %}
 <div style="max-width:780px;margin:30px auto;padding:0 16px">
   <div style="background:#fff;padding:30px;border-radius:18px">
     {% if p.status == 'pago' %}

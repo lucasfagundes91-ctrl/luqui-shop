@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block titulo %}{{ titulo }} — Luqui Brinquedos{% endblock %}
+{% block conteudo %}
+<div style="max-width:860px;margin:30px auto;padding:0 16px">
+  <a href="/" style="color:var(--mut);font-size:13px">← Voltar pra loja</a>
+  <div style="background:#fff;padding:36px;border-radius:18px;margin-top:14px">
+    <h1 style="color:var(--azul);margin-bottom:18px">{{ titulo }}</h1>
+    <div style="line-height:1.7;color:var(--txt);font-size:14px">{{ conteudo|safe }}</div>
+    <p style="margin-top:30px;font-size:12px;color:var(--mut);border-top:1px solid var(--linha);padding-top:14px">
+      Atualizado em {{ ano }} · Dúvidas?
+      <a href="https://wa.me/{{ whatsapp_loja() }}" target="_blank" style="color:var(--azul);font-weight:700">WhatsApp (45) 99111-9800</a>
+    </p>
+  </div>
+</div>
+{% endblock %}
