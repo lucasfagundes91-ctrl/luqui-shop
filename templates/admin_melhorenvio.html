@@ -118,6 +118,35 @@
   </div>
 </div>
 
+<!-- Frete local (entrega própria) -->
+<div class="card">
+  <h3 style="font-size:16px;margin-bottom:6px">🚚 Frete local (entrega própria)</h3>
+  <p style="font-size:12.5px;color:#64748B;margin-bottom:14px">
+    Cidades atendidas pela entrega da Luqui — pagam um valor FIXO no checkout
+    (em vez de cotar pelos Correios). Outras cidades cotam pelo Melhor Envio
+    normalmente.
+  </p>
+  <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px">
+    <div>
+      <label style="font-size:12px;color:#64748B">Cidades atendidas (separe por vírgula)</label>
+      <input name="frete_fixo_cidades" value="{{ cfg('frete_fixo_cidades') or 'Cascavel' }}"
+             placeholder="Ex: Cascavel, Cascavel Velho"
+             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    </div>
+    <div>
+      <label style="font-size:12px;color:#64748B">UF</label>
+      <input name="frete_fixo_uf" value="{{ cfg('frete_fixo_uf') or 'PR' }}" maxlength="2"
+             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    </div>
+    <div>
+      <label style="font-size:12px;color:#64748B">Valor fixo (R$)</label>
+      <input name="frete_fixo_cascavel" type="number" step="0.01" min="0"
+             value="{{ cfg('frete_fixo_cascavel') or '10' }}"
+             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    </div>
+  </div>
+</div>
+
 <!-- Caixa padrão / fallback -->
 <div class="card">
   <h3 style="font-size:16px;margin-bottom:6px">Caixa "fallback"</h3>

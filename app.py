@@ -757,7 +757,10 @@ def admin_melhorenvio():
                   'me_remetente_complemento', 'me_remetente_bairro',
                   'me_remetente_cidade', 'me_remetente_uf',
                   'me_caixa_padrao_largura', 'me_caixa_padrao_altura',
-                  'me_caixa_padrao_comprimento', 'me_caixa_padrao_peso_kg'):
+                  'me_caixa_padrao_comprimento', 'me_caixa_padrao_peso_kg',
+                  # Frete local (entrega própria) — Cascavel etc
+                  'frete_fixo_cidades', 'frete_fixo_uf',
+                  'frete_fixo_cascavel'):
             v = (request.form.get(k) or '').strip()
             cfg_set(k, v)
         return redirect('/admin/melhorenvio?salvo=1')
