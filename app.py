@@ -472,12 +472,26 @@ def pdv_get(path, params=None, ttl=60):
         return None
 
 
-def listar_produtos(busca=None, categoria=None, limite=24, offset=0):
+_FILTROS_VALIDOS = ('departamento', 'grupo', 'subgrupo', 'marca', 'fornecedor')
+
+
+def listar_produtos(busca=None, categoria=None, limite=24, offset=0, **filtros):
+    """`categoria` ainda é aceito como alias de `departamento` pra compat.
+    Filtros extras (departamento/grupo/subgrupo/marca/fornecedor) podem ser
+    string única ou lista — viram CSV pro PDV."""
     p = {'limite': limite, 'offset': offset}
     if busca:
         p['busca'] = busca
     if categoria:
         p['categoria'] = categoria
+    for k in _FILTROS_VALIDOS:
+        v = filtros.get(k)
+        if not v:
+            continue
+        if isinstance(v, (list, tuple, set)):
+            v = ','.join(str(x) for x in v if x)
+        if v:
+            p[k] = v
     r = pdv_get('/api/integracao/produtos', p) or {}
     return r.get('produtos', []), r.get('total', 0)
 
@@ -490,6 +504,29 @@ def buscar_produto(produto_id):
 def listar_categorias():
     r = pdv_get('/api/integracao/categorias') or {}
     return r.get('categorias', [])
+
+
+def listar_filtros():
+    """Hierarquia departamento > grupo > subgrupo + marca + fornecedor."""
+    r = pdv_get('/api/integracao/filtros') or {}
+    return {
+        'departamentos': r.get('departamentos', []),
+        'grupos':        r.get('grupos', []),
+        'subgrupos':     r.get('subgrupos', []),
+        'marcas':        r.get('marcas', []),
+        'fornecedores':  r.get('fornecedores', []),
+    }
+
+
+def filtros_da_querystring(req):
+    """Lê ?departamento=&grupo=&subgrupo=&marca=&fornecedor= (multi-valor)
+    do request e devolve dict pronto pra `listar_produtos(**dict)`."""
+    out = {}
+    for k in _FILTROS_VALIDOS:
+        vs = [v for v in req.args.getlist(k) if v]
+        if vs:
+            out[k] = vs
+    return out
 
 
 # ─── Carrinho na sessão ───────────────────────────────────────────────────────
@@ -1128,11 +1165,12 @@ def home():
 def categoria(slug):
     pagina = max(1, int(request.args.get('p', 1)))
     por_pagina = 24
-    ordem = request.args.get('ordem', 'destaque')  # destaque, barato, caro, novidade, promo
+    ordem = request.args.get('ordem', 'destaque')
     so_promo = request.args.get('promo') == '1'
+    extras = filtros_da_querystring(request)
     produtos, total = listar_produtos(
-        categoria=slug, limite=por_pagina, offset=(pagina - 1) * por_pagina)
-    # Filtro de promo + ordenação no LADO PYTHON (PDV Pro não tem esses params)
+        categoria=slug, limite=por_pagina,
+        offset=(pagina - 1) * por_pagina, **extras)
     if so_promo:
         produtos = [p for p in produtos if p.get('preco_promo')]
     if ordem == 'barato':
@@ -1145,6 +1183,7 @@ def categoria(slug):
     elif ordem == 'promo':
         produtos.sort(key=lambda p: 0 if p.get('preco_promo') else 1)
     categorias = listar_categorias()
+    filtros = listar_filtros()
     cat_nome = next((c['nome'] for c in categorias if c['slug'] == slug), slug)
     return render_template('categoria.html',
                            produtos=produtos,
@@ -1155,6 +1194,8 @@ def categoria(slug):
                            categoria_nome=cat_nome,
                            categoria_slug=slug,
                            ordem=ordem, so_promo=so_promo,
+                           filtros=filtros,
+                           filtros_ativos=extras,
                            cliente=cliente_logado(),
                            carrinho=carrinho_ler())
 
@@ -1162,10 +1203,14 @@ def categoria(slug):
 @app.route('/buscar')
 def buscar():
     q = (request.args.get('q') or '').strip()
-    produtos, total = listar_produtos(busca=q, limite=48) if q else ([], 0)
+    extras = filtros_da_querystring(request)
+    produtos, total = (listar_produtos(busca=q, limite=48, **extras)
+                       if (q or extras) else ([], 0))
     return render_template('busca.html',
                            produtos=produtos, total=total, termo=q,
                            categorias=listar_categorias(),
+                           filtros=listar_filtros(),
+                           filtros_ativos=extras,
                            cliente=cliente_logado(),
                            carrinho=carrinho_ler())
 
