@@ -1,0 +1,164 @@
+{% extends "admin_base.html" %}
+{% set pagina = 'melhorenvio' %}
+{% block titulo %}Melhor Envio — Admin{% endblock %}
+{% block conteudo %}
+
+<h2>📮 Melhor Envio</h2>
+
+{% if request.args.get('conectado') %}
+  <div class="card" style="background:#D1FAE5;color:#065F46;border-left:4px solid #16A34A">
+    ✓ Conectado ao Melhor Envio com sucesso!
+  </div>
+{% endif %}
+{% if request.args.get('salvo') %}
+  <div class="card" style="background:#DBEAFE;color:#1E40AF;border-left:4px solid #1652C7">
+    ✓ Dados salvos.
+  </div>
+{% endif %}
+
+<!-- Status da conexão -->
+<div class="card">
+  <h3 style="font-size:16px;margin-bottom:10px">Conexão ({{ ambiente|upper }})</h3>
+  {% if not configurado %}
+    <p style="color:#92400E;background:#FEF3C7;padding:10px;border-radius:8px">
+      ⚠️ Configure as variáveis no Railway:<br>
+      <code>MELHOR_ENVIO_CLIENT_ID</code>, <code>MELHOR_ENVIO_CLIENT_SECRET</code>,
+      <code>MELHOR_ENVIO_AMBIENTE</code> (sandbox/prod) e
+      <code>MELHOR_ENVIO_REDIRECT_URI</code>.
+    </p>
+  {% elif conectado %}
+    <p>
+      <span class="pill verde">CONECTADO</span>
+      {% if saldo %}
+        — Saldo: <b>R$ {{ '%.2f'|format(saldo.balance or 0) }}</b>
+      {% endif %}
+    </p>
+    <form action="/admin/melhorenvio/desconectar" method="post" style="margin-top:10px"
+          onsubmit="return confirm('Desconectar Melhor Envio? Vai precisar reautorizar pra emitir etiquetas.')">
+      <button type="submit" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;
+              padding:8px 14px;border-radius:8px;font-weight:700;cursor:pointer">
+        Desconectar
+      </button>
+    </form>
+  {% else %}
+    <p><span class="pill cinza">DESCONECTADO</span></p>
+    <a href="/admin/melhorenvio/conectar"
+       style="display:inline-block;margin-top:10px;background:#1652C7;color:#fff;
+              padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700">
+      Conectar com Melhor Envio
+    </a>
+    <p style="margin-top:8px;font-size:12.5px;color:#64748B">
+      Vai abrir o Melhor Envio pra você autorizar o LuquiShop a cotar/emitir etiquetas.
+    </p>
+  {% endif %}
+</div>
+
+<!-- Dados do remetente / origem -->
+<form method="post">
+<div class="card">
+  <h3 style="font-size:16px;margin-bottom:14px">Remetente / origem dos envios</h3>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+    <div>
+      <label style="font-size:12px;color:#64748B">Nome da loja</label>
+      <input name="me_remetente_nome" value="{{ cfg('me_remetente_nome') }}"
+             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    </div>
+    <div>
+      <label style="font-size:12px;color:#64748B">CNPJ (só números)</label>
+      <input name="me_remetente_cnpj" value="{{ cfg('me_remetente_cnpj') }}"
+             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    </div>
+    <div>
+      <label style="font-size:12px;color:#64748B">Telefone</label>
+      <input name="me_remetente_telefone" value="{{ cfg('me_remetente_telefone') }}"
+             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    </div>
+    <div>
+      <label style="font-size:12px;color:#64748B">E-mail</label>
+      <input name="me_remetente_email" value="{{ cfg('me_remetente_email') }}"
+             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    </div>
+    <div>
+      <label style="font-size:12px;color:#64748B">CEP de origem</label>
+      <input name="me_cep_origem" value="{{ cfg('me_cep_origem') }}"
+             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    </div>
+    <div></div>
+    <div>
+      <label style="font-size:12px;color:#64748B">Logradouro</label>
+      <input name="me_remetente_logradouro" value="{{ cfg('me_remetente_logradouro') }}"
+             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    </div>
+    <div>
+      <label style="font-size:12px;color:#64748B">Número</label>
+      <input name="me_remetente_numero" value="{{ cfg('me_remetente_numero') }}"
+             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    </div>
+    <div>
+      <label style="font-size:12px;color:#64748B">Complemento</label>
+      <input name="me_remetente_complemento" value="{{ cfg('me_remetente_complemento') }}"
+             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    </div>
+    <div>
+      <label style="font-size:12px;color:#64748B">Bairro</label>
+      <input name="me_remetente_bairro" value="{{ cfg('me_remetente_bairro') }}"
+             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    </div>
+    <div>
+      <label style="font-size:12px;color:#64748B">Cidade</label>
+      <input name="me_remetente_cidade" value="{{ cfg('me_remetente_cidade') }}"
+             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    </div>
+    <div>
+      <label style="font-size:12px;color:#64748B">UF</label>
+      <input name="me_remetente_uf" value="{{ cfg('me_remetente_uf') }}" maxlength="2"
+             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    </div>
+  </div>
+</div>
+
+<!-- Caixa padrão / fallback -->
+<div class="card">
+  <h3 style="font-size:16px;margin-bottom:6px">Caixa "fallback"</h3>
+  <p style="font-size:12.5px;color:#64748B;margin-bottom:14px">
+    Usada na cotação quando o produto não tem dimensão cadastrada.
+  </p>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
+    <div>
+      <label style="font-size:12px;color:#64748B">Largura (cm)</label>
+      <input name="me_caixa_padrao_largura" type="number" step="0.1"
+             value="{{ cfg('me_caixa_padrao_largura') }}"
+             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    </div>
+    <div>
+      <label style="font-size:12px;color:#64748B">Altura (cm)</label>
+      <input name="me_caixa_padrao_altura" type="number" step="0.1"
+             value="{{ cfg('me_caixa_padrao_altura') }}"
+             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    </div>
+    <div>
+      <label style="font-size:12px;color:#64748B">Comprimento (cm)</label>
+      <input name="me_caixa_padrao_comprimento" type="number" step="0.1"
+             value="{{ cfg('me_caixa_padrao_comprimento') }}"
+             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    </div>
+    <div>
+      <label style="font-size:12px;color:#64748B">Peso (kg)</label>
+      <input name="me_caixa_padrao_peso_kg" type="number" step="0.01"
+             value="{{ cfg('me_caixa_padrao_peso_kg') }}"
+             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    </div>
+  </div>
+</div>
+
+<div style="margin-bottom:30px">
+  <button type="submit"
+          style="background:#1652C7;color:#fff;border:0;padding:11px 22px;
+                 border-radius:8px;font-weight:700;cursor:pointer">
+    Salvar configurações
+  </button>
+</div>
+</form>
+
+{% endblock %}

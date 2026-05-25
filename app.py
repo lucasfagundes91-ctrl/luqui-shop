@@ -229,6 +229,13 @@ def init_db():
         "ALTER TABLE banners ADD COLUMN IF NOT EXISTS cor_fundo VARCHAR(20) DEFAULT '#4FB8FF'",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_codigo VARCHAR(40)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_desconto NUMERIC(10,2) DEFAULT 0",
+        # Melhor Envio: além do etiqueta_id+rastreio que já existem,
+        # precisamos guardar URL do PDF, nome do serviço, valor cotado.
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS melhorenvio_etiqueta_url TEXT",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS melhorenvio_servico_nome VARCHAR(80)",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS melhorenvio_servico_id VARCHAR(20)",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS melhorenvio_valor NUMERIC(12,2)",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS melhorenvio_pago_em TIMESTAMPTZ",
         "ALTER TABLE clientes_site ADD COLUMN IF NOT EXISTS data_nascimento DATE",
         "ALTER TABLE clientes_site ADD COLUMN IF NOT EXISTS ganhou_primeira BOOLEAN DEFAULT FALSE",
         "ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS foto_url TEXT",
@@ -358,6 +365,23 @@ def init_db():
             'desconto_pix_pct': '5',
             'parcelamento_max': '12',
             'whatsapp_loja': WHATSAPP_LOJA,
+            # Melhor Envio — preencher em /admin/melhorenvio
+            'me_cep_origem': '85801080',  # Luqui Brinquedos Cascavel
+            'me_remetente_nome': 'Luqui Brinquedos',
+            'me_remetente_cnpj': '',
+            'me_remetente_telefone': '',
+            'me_remetente_email': '',
+            'me_remetente_logradouro': '',
+            'me_remetente_numero': '',
+            'me_remetente_complemento': '',
+            'me_remetente_bairro': '',
+            'me_remetente_cidade': 'Cascavel',
+            'me_remetente_uf': 'PR',
+            # Caixa "padrão" pra produto que não tem dimensão (cm) — usado na cotação
+            'me_caixa_padrao_largura': '20',
+            'me_caixa_padrao_altura': '15',
+            'me_caixa_padrao_comprimento': '25',
+            'me_caixa_padrao_peso_kg': '0.5',
         }
         for k, v in defaults.items():
             db_execute("""INSERT INTO site_config (chave, valor) VALUES (%s,%s)
@@ -371,6 +395,215 @@ def cfg(chave, default=''):
     r = db_execute("SELECT valor FROM site_config WHERE chave=%s",
                    [chave], fetch='one')
     return r['valor'] if r else default
+
+
+def cfg_set(chave, valor):
+    db_execute("""INSERT INTO site_config (chave, valor) VALUES (%s,%s)
+                  ON CONFLICT (chave) DO UPDATE SET valor=EXCLUDED.valor""",
+               [chave, '' if valor is None else str(valor)])
+
+
+# ─── Melhor Envio — OAuth + cotação + etiqueta ───────────────────────────────
+ME_CLIENT_ID     = os.environ.get('MELHOR_ENVIO_CLIENT_ID', '')
+ME_CLIENT_SECRET = os.environ.get('MELHOR_ENVIO_CLIENT_SECRET', '')
+# 'sandbox' (default) ou 'prod'
+ME_AMBIENTE      = os.environ.get('MELHOR_ENVIO_AMBIENTE', 'sandbox').lower()
+ME_USER_AGENT    = os.environ.get(
+    'MELHOR_ENVIO_USER_AGENT',
+    'LuquiShop (lucasfagundes91@hotmail.com)')
+ME_REDIRECT_URI  = os.environ.get('MELHOR_ENVIO_REDIRECT_URI', '')
+ME_SCOPES = (
+    'cart-read cart-write shipping-calculate shipping-cancel '
+    'shipping-checkout shipping-companies shipping-generate shipping-preview '
+    'shipping-print shipping-share shipping-tracking ecommerce-shared-data '
+    'users-read')
+
+
+def me_base():
+    return ('https://www.melhorenvio.com.br' if ME_AMBIENTE == 'prod'
+            else 'https://sandbox.melhorenvio.com.br')
+
+
+def me_redirect_uri():
+    if ME_REDIRECT_URI:
+        return ME_REDIRECT_URI
+    base = (request.url_root.rstrip('/') if request else
+            os.environ.get('SITE_URL', '').rstrip('/'))
+    return f"{base}/admin/melhorenvio/callback"
+
+
+def me_configurado():
+    return bool(ME_CLIENT_ID and ME_CLIENT_SECRET)
+
+
+def me_token_atual():
+    """Devolve access_token válido ou None. Faz refresh se vencendo."""
+    tok = cfg('me_access_token')
+    if not tok:
+        return None
+    venc = cfg('me_expires_at')
+    try:
+        venc_t = float(venc) if venc else 0
+    except ValueError:
+        venc_t = 0
+    if venc_t and time.time() < venc_t - 60:
+        return tok
+    # Vencendo ou vencido — tenta refresh
+    rt = cfg('me_refresh_token')
+    if not rt:
+        return tok or None  # tenta com o que tem (pode falhar)
+    try:
+        r = requests.post(
+            f"{me_base()}/oauth/token",
+            json={
+                'grant_type': 'refresh_token',
+                'refresh_token': rt,
+                'client_id': ME_CLIENT_ID,
+                'client_secret': ME_CLIENT_SECRET,
+            },
+            headers={'Accept': 'application/json',
+                     'User-Agent': ME_USER_AGENT},
+            timeout=20)
+        if r.ok:
+            d = r.json()
+            cfg_set('me_access_token', d.get('access_token', ''))
+            if d.get('refresh_token'):
+                cfg_set('me_refresh_token', d['refresh_token'])
+            exp_in = int(d.get('expires_in') or 0)
+            if exp_in:
+                cfg_set('me_expires_at', str(time.time() + exp_in))
+            return d.get('access_token')
+        log.warning("ME refresh falhou: %s %s", r.status_code, r.text[:200])
+    except Exception as e:
+        log.error("ME refresh erro: %s", e)
+    return tok or None
+
+
+def me_request(method, path, *, json_body=None, params=None, timeout=30):
+    """Chamada à API do Melhor Envio com Bearer + User-Agent."""
+    tok = me_token_atual()
+    if not tok:
+        raise RuntimeError('Melhor Envio não conectado. '
+                           'Configure em /admin/melhorenvio.')
+    headers = {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {tok}',
+        'User-Agent': ME_USER_AGENT,
+    }
+    url = f"{me_base()}{path}"
+    r = requests.request(method, url, headers=headers, json=json_body,
+                         params=params, timeout=timeout)
+    return r
+
+
+def me_remetente_dict():
+    """Monta o payload `from` esperado pelo Melhor Envio nos endpoints
+    de carrinho (precisa de dados completos do remetente)."""
+    cnpj = ''.join(c for c in cfg('me_remetente_cnpj', '') if c.isdigit())
+    return {
+        'name':         cfg('me_remetente_nome', 'Luqui Brinquedos'),
+        'phone':        cfg('me_remetente_telefone', ''),
+        'email':        cfg('me_remetente_email', ''),
+        'document':     cnpj if len(cnpj) == 11 else '',
+        'company_document': cnpj if len(cnpj) == 14 else '',
+        'address':      cfg('me_remetente_logradouro', ''),
+        'complement':   cfg('me_remetente_complemento', ''),
+        'number':       cfg('me_remetente_numero', ''),
+        'district':     cfg('me_remetente_bairro', ''),
+        'city':         cfg('me_remetente_cidade', 'Cascavel'),
+        'state_abbr':   cfg('me_remetente_uf', 'PR'),
+        'country_id':   'BR',
+        'postal_code':  ''.join(c for c in cfg('me_cep_origem', '')
+                                if c.isdigit()),
+    }
+
+
+def me_caixa_default():
+    """Caixa fallback pra produto sem dimensão cadastrada."""
+    def _f(k, default):
+        try: return float(cfg(k, default) or default)
+        except ValueError: return float(default)
+    return {
+        'width':  _f('me_caixa_padrao_largura', 20),
+        'height': _f('me_caixa_padrao_altura', 15),
+        'length': _f('me_caixa_padrao_comprimento', 25),
+        'weight': _f('me_caixa_padrao_peso_kg', 0.5),
+    }
+
+
+def me_volume_dos_itens(itens):
+    """Soma peso e usa MAIORES dimensões dos itens — formato `products` do
+    endpoint de cotação. Cada item vira um 'package' separado conforme
+    quantidade (ME prefere assim que volumes consolidados)."""
+    cx = me_caixa_default()
+    out = []
+    for i, it in enumerate(itens):
+        # Tenta puxar dimensão real do produto do PDV (já vem em /api/integracao/produtos)
+        p = it.get('produto') or {}
+        try:
+            largura = float(p.get('largura_cm') or 0)
+        except (TypeError, ValueError):
+            largura = 0
+        try:
+            altura = float(p.get('altura_cm') or 0)
+        except (TypeError, ValueError):
+            altura = 0
+        try:
+            comprimento = float(p.get('comprimento_cm') or 0)
+        except (TypeError, ValueError):
+            comprimento = 0
+        try:
+            peso = float(p.get('peso_bruto') or 0)
+        except (TypeError, ValueError):
+            peso = 0
+        qtd = max(1, int(float(it.get('qtd') or 1)))
+        valor = float(it.get('preco') or 0)
+        out.append({
+            'id':              str(i + 1),
+            'width':           largura  if largura  > 0 else cx['width'],
+            'height':          altura   if altura   > 0 else cx['height'],
+            'length':          comprimento if comprimento > 0 else cx['length'],
+            'weight':          peso     if peso     > 0 else cx['weight'],
+            'insurance_value': round(valor * qtd, 2),
+            'quantity':        qtd,
+        })
+    return out
+
+
+def me_cotar(cep_destino, itens):
+    """Retorna lista de opções de frete (servico, valor, prazo, id)."""
+    cep_destino = ''.join(c for c in (cep_destino or '') if c.isdigit())
+    if len(cep_destino) != 8:
+        return []
+    body = {
+        'from':     {'postal_code': ''.join(c for c in cfg('me_cep_origem','')
+                                            if c.isdigit())},
+        'to':       {'postal_code': cep_destino},
+        'products': me_volume_dos_itens(itens),
+    }
+    r = me_request('POST', '/api/v2/me/shipment/calculate', json_body=body)
+    if not r.ok:
+        log.warning("ME cotar %s: %s", r.status_code, r.text[:300])
+        return []
+    out = []
+    for opt in r.json() or []:
+        if opt.get('error'):
+            continue  # serviço indisponível pra esse trecho
+        out.append({
+            'id':       opt.get('id'),
+            'servico':  f"{opt.get('company',{}).get('name','')} "
+                        f"{opt.get('name','')}".strip(),
+            'valor':    float(opt.get('custom_price') or opt.get('price') or 0),
+            'prazo':    f"{opt.get('delivery_time') or '?'} dias úteis",
+            'company':  opt.get('company', {}).get('name', ''),
+        })
+    return out
+
+
+# Rotas Melhor Envio que precisam de @requer_admin: definidas logo após
+# a definição do requer_admin (mais abaixo neste arquivo).
+# ─── Fim Melhor Envio (helpers) ──────────────────────────────────────────────
 
 
 def rs(v):
@@ -437,6 +670,236 @@ def requer_admin(f):
             return redirect(url_for('admin_login', next=request.path))
         return f(*a, **kw)
     return w
+
+
+# ─── Melhor Envio: rotas que dependem de requer_admin ────────────────────────
+@app.route('/admin/melhorenvio/conectar')
+@requer_admin
+def melhorenvio_conectar():
+    if not me_configurado():
+        return ('Configure as variáveis MELHOR_ENVIO_CLIENT_ID e '
+                'MELHOR_ENVIO_CLIENT_SECRET no Railway antes.'), 400
+    state = os.urandom(12).hex()
+    session['me_oauth_state'] = state
+    qs = urlencode({
+        'client_id':     ME_CLIENT_ID,
+        'redirect_uri':  me_redirect_uri(),
+        'response_type': 'code',
+        'scope':         ME_SCOPES,
+        'state':         state,
+    })
+    return redirect(f"{me_base()}/oauth/authorize?{qs}")
+
+
+@app.route('/admin/melhorenvio/callback')
+@requer_admin
+def melhorenvio_callback():
+    code = request.args.get('code')
+    state = request.args.get('state')
+    if not code:
+        return f"Erro do Melhor Envio: {request.args.get('error','sem código')}", 400
+    if state and session.pop('me_oauth_state', None) != state:
+        return 'state inválido — refaça o fluxo.', 400
+    try:
+        r = requests.post(
+            f"{me_base()}/oauth/token",
+            json={
+                'grant_type':    'authorization_code',
+                'client_id':     ME_CLIENT_ID,
+                'client_secret': ME_CLIENT_SECRET,
+                'redirect_uri':  me_redirect_uri(),
+                'code':          code,
+            },
+            headers={'Accept': 'application/json',
+                     'User-Agent': ME_USER_AGENT},
+            timeout=20)
+        if not r.ok:
+            return f"Token falhou: {r.status_code} — {r.text[:300]}", 400
+        d = r.json()
+        cfg_set('me_access_token', d.get('access_token', ''))
+        cfg_set('me_refresh_token', d.get('refresh_token', ''))
+        if d.get('expires_in'):
+            cfg_set('me_expires_at',
+                    str(time.time() + int(d['expires_in'])))
+        cfg_set('me_ambiente', ME_AMBIENTE)
+    except Exception as e:
+        return f'Erro conectando: {e}', 500
+    return redirect('/admin/melhorenvio?conectado=1')
+
+
+@app.route('/admin/melhorenvio/desconectar', methods=['POST'])
+@requer_admin
+def melhorenvio_desconectar():
+    cfg_set('me_access_token', '')
+    cfg_set('me_refresh_token', '')
+    cfg_set('me_expires_at', '')
+    return redirect('/admin/melhorenvio')
+
+
+@app.route('/admin/melhorenvio', methods=['GET', 'POST'])
+@requer_admin
+def admin_melhorenvio():
+    if request.method == 'POST':
+        for k in ('me_cep_origem', 'me_remetente_nome', 'me_remetente_cnpj',
+                  'me_remetente_telefone', 'me_remetente_email',
+                  'me_remetente_logradouro', 'me_remetente_numero',
+                  'me_remetente_complemento', 'me_remetente_bairro',
+                  'me_remetente_cidade', 'me_remetente_uf',
+                  'me_caixa_padrao_largura', 'me_caixa_padrao_altura',
+                  'me_caixa_padrao_comprimento', 'me_caixa_padrao_peso_kg'):
+            v = (request.form.get(k) or '').strip()
+            cfg_set(k, v)
+        return redirect('/admin/melhorenvio?salvo=1')
+    conectado = bool(cfg('me_access_token'))
+    saldo = None
+    if conectado:
+        try:
+            r = me_request('GET', '/api/v2/me/balance')
+            if r.ok:
+                saldo = r.json()
+        except Exception as e:
+            log.warning("ME balance: %s", e)
+    return render_template('admin_melhorenvio.html',
+                           configurado=me_configurado(),
+                           ambiente=ME_AMBIENTE,
+                           conectado=conectado,
+                           saldo=saldo,
+                           cfg=cfg)
+
+
+@app.route('/api/admin/pedidos/<int:pid>/cotar', methods=['GET'])
+@requer_admin
+def admin_pedido_cotar(pid):
+    ped = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one')
+    if not ped:
+        return jsonify({'erro': 'pedido não encontrado'}), 404
+    itens = db_execute(
+        "SELECT * FROM pedido_itens WHERE pedido_id=%s", [pid], fetch='all') or []
+    for it in itens:
+        try:
+            it['produto'] = buscar_produto(it['produto_pdv_id']) or {}
+        except Exception:
+            it['produto'] = {}
+        it['qtd'] = it['quantidade']
+        it['preco'] = it['preco_unitario']
+    try:
+        opcoes = me_cotar(ped.get('cep'), itens)
+    except RuntimeError as e:
+        return jsonify({'erro': str(e)}), 400
+    return jsonify({'opcoes': opcoes})
+
+
+@app.route('/api/admin/pedidos/<int:pid>/etiqueta', methods=['POST'])
+@requer_admin
+def admin_pedido_gerar_etiqueta(pid):
+    """Fluxo completo Melhor Envio: cart → checkout → generate → print."""
+    d = request.get_json() or {}
+    service_id = d.get('service_id')
+    if not service_id:
+        return jsonify({'erro': 'service_id obrigatório'}), 400
+    ped = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one')
+    if not ped:
+        return jsonify({'erro': 'pedido não encontrado'}), 404
+    if ped.get('melhorenvio_etiqueta_id'):
+        return jsonify({'erro': 'pedido já tem etiqueta gerada'}), 400
+    itens = db_execute(
+        "SELECT * FROM pedido_itens WHERE pedido_id=%s", [pid], fetch='all') or []
+    if not itens:
+        return jsonify({'erro': 'pedido sem itens'}), 400
+    for it in itens:
+        try:
+            it['produto'] = buscar_produto(it['produto_pdv_id']) or {}
+        except Exception:
+            it['produto'] = {}
+        it['qtd'] = it['quantidade']
+        it['preco'] = it['preco_unitario']
+    vol = me_volume_dos_itens(itens)
+    vol_resumo = [{'height': v['height'], 'width': v['width'],
+                   'length': v['length'], 'weight': v['weight']} for v in vol]
+    produtos_carrinho = [
+        {'name': (it.get('descricao') or 'Produto')[:80],
+         'quantity': int(float(it.get('quantidade') or 1)),
+         'unitary_value': float(it.get('preco_unitario') or 0)}
+        for it in itens
+    ]
+    cep_destino = ''.join(c for c in (ped.get('cep') or '') if c.isdigit())
+    body = {
+        'service': service_id,
+        'from':    me_remetente_dict(),
+        'to': {
+            'name':        ped.get('nome') or '',
+            'phone':       ''.join(c for c in (ped.get('telefone') or '')
+                                   if c.isdigit()),
+            'email':       ped.get('email') or '',
+            'document':    ''.join(c for c in (ped.get('cpf') or '')
+                                   if c.isdigit()),
+            'address':     ped.get('logradouro') or '',
+            'complement':  ped.get('complemento') or '',
+            'number':      ped.get('numero') or '',
+            'district':    ped.get('bairro') or '',
+            'city':        ped.get('cidade') or '',
+            'state_abbr':  ped.get('uf') or '',
+            'country_id':  'BR',
+            'postal_code': cep_destino,
+        },
+        'products': produtos_carrinho,
+        'volumes':  vol_resumo,
+        'options': {
+            'insurance_value': float(ped.get('subtotal') or 0),
+            'receipt': False, 'own_hand': False,
+            'reverse': False, 'non_commercial': False,
+        },
+    }
+    try:
+        r = me_request('POST', '/api/v2/me/cart', json_body=body)
+        if not r.ok:
+            return jsonify({'erro': 'cart falhou', 'detalhe': r.text[:500]}), 502
+        cart = r.json()
+        order_id = cart.get('id')
+        if not order_id:
+            return jsonify({'erro': 'sem id do envio', 'detalhe': cart}), 502
+        r2 = me_request('POST', '/api/v2/me/shipment/checkout',
+                        json_body={'orders': [order_id]})
+        if not r2.ok:
+            return jsonify({'erro': 'checkout falhou — confira saldo',
+                            'detalhe': r2.text[:500]}), 502
+        r3 = me_request('POST', '/api/v2/me/shipment/generate',
+                        json_body={'orders': [order_id]})
+        if not r3.ok:
+            return jsonify({'erro': 'generate falhou',
+                            'detalhe': r3.text[:500]}), 502
+        url_pdf = None
+        r4 = me_request('POST', '/api/v2/me/shipment/print',
+                        json_body={'mode': 'private', 'orders': [order_id]})
+        if r4.ok:
+            try: url_pdf = r4.json().get('url')
+            except Exception: pass
+        rastreio = None
+        try:
+            r5 = me_request('POST', '/api/v2/me/shipment/tracking',
+                            json_body={'orders': [order_id]})
+            if r5.ok:
+                t = r5.json()
+                if isinstance(t, dict) and t.get(order_id):
+                    rastreio = t[order_id].get('tracking')
+        except Exception:
+            pass
+        db_execute("""UPDATE pedidos SET
+                        melhorenvio_etiqueta_id  = %s,
+                        melhorenvio_etiqueta_url = %s,
+                        melhorenvio_rastreio     = %s,
+                        melhorenvio_servico_id   = %s,
+                        melhorenvio_servico_nome = %s,
+                        melhorenvio_pago_em      = NOW(),
+                        atualizado_em            = NOW()
+                       WHERE id=%s""",
+                   [order_id, url_pdf, rastreio, str(service_id),
+                    (d.get('servico_nome') or '')[:80], pid])
+    except Exception as e:
+        log.exception("ME etiqueta")
+        return jsonify({'erro': str(e)}), 500
+    return jsonify({'ok': True, 'etiqueta_id': order_id,
+                    'rastreio': rastreio, 'pdf_url': url_pdf})
 
 
 # ─── Cliente API PDV Pro (cache 60s) ──────────────────────────────────────────
@@ -1370,26 +1833,57 @@ def checkout_cep():
 
 @app.route('/api/checkout/frete')
 def checkout_frete():
-    """Cálculo simples por enquanto: grátis em Cascavel/Toledo PR, R$ 24,90
-    fixo no resto do PR e R$ 39,90 no resto do Brasil. Melhor Envio entra na
-    fase 2 (token OAuth)."""
+    """Cota o frete pelo Melhor Envio. Se Cascavel/Toledo (PR), oferece
+    retirada/entrega grátis local. Cai pro fallback hardcoded se ME não
+    estiver conectado ou falhar."""
     cidade = (request.args.get('cidade') or '').strip().lower()
     uf = (request.args.get('uf') or '').upper()
+    cep = (request.args.get('cep') or '').strip()
+    opcoes = []
     cidades_gratis = [c.strip().lower() for c in
                       cfg('frete_gratis_cidades', 'Cascavel,Toledo').split(',')]
     if uf == cfg('frete_gratis_uf', 'PR') and cidade in cidades_gratis:
-        opcoes = [{'servico': 'Retirada/Entrega Luqui',
-                   'valor': 0, 'prazo': '1-2 dias úteis'}]
-    elif uf == 'PR':
-        opcoes = [
-            {'servico': 'PAC', 'valor': 24.90, 'prazo': '3-5 dias úteis'},
-            {'servico': 'SEDEX', 'valor': 38.90, 'prazo': '2-3 dias úteis'},
-        ]
-    else:
-        opcoes = [
-            {'servico': 'PAC', 'valor': 39.90, 'prazo': '5-9 dias úteis'},
-            {'servico': 'SEDEX', 'valor': 62.90, 'prazo': '2-4 dias úteis'},
-        ]
+        opcoes.append({'servico': 'Retirada/Entrega Luqui',
+                       'valor': 0, 'prazo': '1-2 dias úteis',
+                       'id': 'LOCAL'})
+    # Tenta Melhor Envio se tiver CEP + carrinho + conexão
+    itens_sess = carrinho_ler() or []
+    if cep and itens_sess and cfg('me_access_token'):
+        # Enriquece com produto pra ter dimensão
+        itens_full = []
+        for it in itens_sess:
+            try:
+                p = buscar_produto(it.get('produto_id')) or {}
+            except Exception:
+                p = {}
+            itens_full.append({
+                'produto': p,
+                'qtd':     it.get('qtd') or 1,
+                'preco':   it.get('preco') or 0,
+            })
+        try:
+            ops_me = me_cotar(cep, itens_full)
+            for o in ops_me:
+                opcoes.append({
+                    'id':      o.get('id'),
+                    'servico': o.get('servico'),
+                    'valor':   o.get('valor'),
+                    'prazo':   o.get('prazo'),
+                })
+        except Exception as e:
+            log.warning("ME cotação falhou (fallback hardcode): %s", e)
+    # Fallback hardcode (sem ME ou sem CEP) — sempre devolve algo
+    if not [o for o in opcoes if (o.get('id') or '') != 'LOCAL']:
+        if uf == 'PR':
+            opcoes += [
+                {'servico': 'PAC',   'valor': 24.90, 'prazo': '3-5 dias úteis'},
+                {'servico': 'SEDEX', 'valor': 38.90, 'prazo': '2-3 dias úteis'},
+            ]
+        else:
+            opcoes += [
+                {'servico': 'PAC',   'valor': 39.90, 'prazo': '5-9 dias úteis'},
+                {'servico': 'SEDEX', 'valor': 62.90, 'prazo': '2-4 dias úteis'},
+            ]
     return jsonify({'opcoes': opcoes})
 
 

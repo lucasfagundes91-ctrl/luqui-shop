@@ -176,14 +176,15 @@ async function buscarCep(cep){
 async function buscarFrete(){
   const cidade = document.getElementById('cidade').value;
   const uf = document.getElementById('uf').value;
+  const cep = (document.getElementById('cep').value || '').replace(/\D/g,'');
   if(!cidade || !uf) return;
-  const r = await fetch(`/api/checkout/frete?cidade=${encodeURIComponent(cidade)}&uf=${uf}`);
+  const r = await fetch(`/api/checkout/frete?cidade=${encodeURIComponent(cidade)}&uf=${uf}&cep=${cep}`);
   const d = await r.json();
   const box = document.getElementById('opcoes-frete');
   box.innerHTML = d.opcoes.map((o,i)=>`
     <label style="display:flex;justify-content:space-between;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-bottom:8px;cursor:pointer">
       <span>
-        <input type="radio" name="frete_servico" value="${o.servico}" data-valor="${o.valor}" ${i===0?'checked':''} onchange="aoTrocarFrete()" style="margin-right:8px">
+        <input type="radio" name="frete_servico" value="${o.servico}" data-valor="${o.valor}" data-id="${o.id||''}" ${i===0?'checked':''} onchange="aoTrocarFrete()" style="margin-right:8px">
         <b>${o.servico}</b><br><span style="font-size:12px;color:var(--mut);margin-left:24px">${o.prazo}</span>
       </span>
       <b style="color:${o.valor===0?'var(--verde)':'var(--txt)'}">${o.valor===0?'GRÁTIS':'R$ '+o.valor.toFixed(2).replace('.',',')}</b>

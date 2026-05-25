@@ -5,7 +5,7 @@
 <div class="card">
   {% if pedidos %}
     <table>
-      <thead><tr><th>#</th><th>Cliente</th><th>Cidade</th><th>Data</th><th>Total</th><th>Status</th><th>Atualizar</th></tr></thead>
+      <thead><tr><th>#</th><th>Cliente</th><th>Cidade</th><th>Data</th><th>Total</th><th>Status</th><th>Etiqueta ME</th><th>Atualizar</th></tr></thead>
       <tbody>
         {% for p in pedidos %}
           <tr>
@@ -15,6 +15,22 @@
             <td>{{ p.criado_em.strftime('%d/%m %H:%M') if p.criado_em else '—' }}</td>
             <td><b>{{ rs(p.total) }}</b><br><span style="font-size:11px;color:#64748B">{{ p.forma_pagto }}</span></td>
             <td><span class="pill {{ 'verde' if p.status in ('pago','entregue') else 'amarelo' if p.status == 'aguardando_pagto' else 'azul' }}">{{ p.status }}</span></td>
+            <td>
+              {% if p.melhorenvio_etiqueta_url %}
+                <a href="{{ p.melhorenvio_etiqueta_url }}" target="_blank"
+                   style="background:#0E3D9E;color:#fff;padding:5px 10px;border-radius:6px;text-decoration:none;font-size:12px">📄 PDF</a>
+                {% if p.melhorenvio_rastreio %}
+                  <br><small style="color:#64748B">{{ p.melhorenvio_rastreio }}</small>
+                {% endif %}
+              {% elif p.status in ('pago','preparando') and p.cep %}
+                <button onclick="cotarEEtiqueta({{ p.id }})"
+                        style="background:#FFC700;color:#082B7A;border:0;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700">
+                  Cotar + emitir
+                </button>
+              {% else %}
+                <span style="color:#94a3b8;font-size:12px">—</span>
+              {% endif %}
+            </td>
             <td>
               <select onchange="atualizarStatus({{ p.id }}, this.value, this)" style="font-size:12px;padding:4px;border:1px solid #E2E8F0;border-radius:4px">
                 <option value="">Mudar pra...</option>
@@ -33,6 +49,37 @@
   {% endif %}
 </div>
 <script>
+async function cotarEEtiqueta(pid){
+  try {
+    const r = await fetch('/api/admin/pedidos/'+pid+'/cotar');
+    const d = await r.json();
+    if(d.erro){ alert('Erro cotando: '+d.erro); return; }
+    if(!d.opcoes || !d.opcoes.length){ alert('Nenhuma opção de frete disponível.'); return; }
+    // Pergunta qual serviço
+    let lista = 'Escolha o serviço (digite o número):\n\n';
+    d.opcoes.forEach((o,i)=>{
+      lista += (i+1)+') '+o.servico+' — R$ '+(o.valor||0).toFixed(2)+' · '+o.prazo+'\n';
+    });
+    const esc = prompt(lista);
+    if(esc === null) return;
+    const idx = parseInt(esc, 10) - 1;
+    if(isNaN(idx) || idx < 0 || idx >= d.opcoes.length){ alert('Opção inválida.'); return; }
+    const op = d.opcoes[idx];
+    if(!confirm('Emitir etiqueta '+op.servico+' por R$ '+op.valor.toFixed(2)+'?\nVai debitar do saldo do Melhor Envio.')) return;
+    const r2 = await fetch('/api/admin/pedidos/'+pid+'/etiqueta', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({service_id: op.id, servico_nome: op.servico}),
+    });
+    const d2 = await r2.json();
+    if(d2.erro){
+      alert('Erro emitindo: '+d2.erro+'\n\n'+(d2.detalhe || ''));
+      return;
+    }
+    alert('Etiqueta emitida! Rastreio: '+(d2.rastreio||'(pendente)'));
+    if(d2.pdf_url) window.open(d2.pdf_url, '_blank');
+    location.reload();
+  } catch(e){ alert('Erro: '+e.message); }
+}
 async function atualizarStatus(pid, novo, sel){
   if(!novo) return;
   let rastreio = null;
