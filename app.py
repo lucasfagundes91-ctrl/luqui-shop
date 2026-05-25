@@ -413,10 +413,9 @@ ME_USER_AGENT    = os.environ.get(
     'LuquiShop (lucasfagundes91@hotmail.com)')
 ME_REDIRECT_URI  = os.environ.get('MELHOR_ENVIO_REDIRECT_URI', '')
 ME_SCOPES = (
-    'cart-read cart-write shipping-calculate shipping-cancel '
-    'shipping-checkout shipping-companies shipping-generate shipping-preview '
-    'shipping-print shipping-share shipping-tracking ecommerce-shared-data '
-    'users-read')
+    'cart-read cart-write shipping-calculate shipping-checkout '
+    'shipping-generate shipping-print shipping-tracking shipping-cancel '
+    'shipping-companies')
 
 
 def me_base():
