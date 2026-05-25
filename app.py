@@ -360,8 +360,14 @@ def init_db():
     # Configs default
     try:
         defaults = {
-            'frete_gratis_cidades': 'Cascavel,Toledo',
-            'frete_gratis_uf': 'PR',
+            # Cidades com frete LOCAL FIXO (default só Cascavel, R$ 10).
+            # Toledo saiu — usa cotação ME normal.
+            'frete_fixo_cidades': 'Cascavel',
+            'frete_fixo_uf': 'PR',
+            'frete_fixo_cascavel': '10',
+            # Deprecated (mantido por compat com configs antigas no banco)
+            'frete_gratis_cidades': '',
+            'frete_gratis_uf': '',
             'desconto_pix_pct': '5',
             'parcelamento_max': '12',
             'whatsapp_loja': WHATSAPP_LOJA,
@@ -386,6 +392,12 @@ def init_db():
         for k, v in defaults.items():
             db_execute("""INSERT INTO site_config (chave, valor) VALUES (%s,%s)
                           ON CONFLICT (chave) DO NOTHING""", [k, v])
+        # Migração one-time: tira Toledo da lista de frete-grátis antiga
+        # (agora a regra é frete_fixo_cidades=Cascavel, Toledo cota no ME)
+        db_execute("UPDATE site_config SET valor='' "
+                   "WHERE chave='frete_gratis_cidades' "
+                   "  AND valor IN ('Cascavel,Toledo','Toledo,Cascavel',"
+                   "                'Cascavel','Toledo')")
     except Exception as e:
         log.error("seed config: %s", e)
 
@@ -1832,18 +1844,26 @@ def checkout_cep():
 
 @app.route('/api/checkout/frete')
 def checkout_frete():
-    """Cota o frete pelo Melhor Envio. Se Cascavel/Toledo (PR), oferece
-    retirada/entrega grátis local. Cai pro fallback hardcoded se ME não
-    estiver conectado ou falhar."""
+    """Cota o frete pelo Melhor Envio. Cascavel (PR) tem entrega local
+    com VALOR FIXO (configurável em frete_fixo_cascavel, default 10).
+    Demais cidades — inclusive Toledo — usam cotação real do ME."""
     cidade = (request.args.get('cidade') or '').strip().lower()
     uf = (request.args.get('uf') or '').upper()
     cep = (request.args.get('cep') or '').strip()
     opcoes = []
-    cidades_gratis = [c.strip().lower() for c in
-                      cfg('frete_gratis_cidades', 'Cascavel,Toledo').split(',')]
-    if uf == cfg('frete_gratis_uf', 'PR') and cidade in cidades_gratis:
-        opcoes.append({'servico': 'Retirada/Entrega Luqui',
-                       'valor': 0, 'prazo': '1-2 dias úteis',
+    # Cidades com frete fixo (entrega local). Default: só Cascavel.
+    # Toledo SAIU — agora cota pelo ME normalmente.
+    try:
+        fixo_valor = float(cfg('frete_fixo_cascavel', '10') or 10)
+    except (TypeError, ValueError):
+        fixo_valor = 10.0
+    cidades_fixo = [c.strip().lower() for c in
+                    cfg('frete_fixo_cidades', 'Cascavel').split(',') if c.strip()]
+    uf_fixo = cfg('frete_fixo_uf', 'PR')
+    if uf == uf_fixo and cidade in cidades_fixo:
+        opcoes.append({'servico': 'Entrega Luqui (local)',
+                       'valor': fixo_valor,
+                       'prazo': '1-2 dias úteis',
                        'id': 'LOCAL'})
     # Tenta Melhor Envio se tiver CEP + carrinho + conexão
     itens_sess = carrinho_ler() or []
