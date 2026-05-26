@@ -382,6 +382,11 @@ gtag('config', '{{ GOOGLE_TAG_ID }}');
     <button class="fechar" onclick="fecharDeptos()" aria-label="Fechar">×</button>
   </div>
   <div class="drawer-lista">
+    <div class="dep sem-grupos" style="border-bottom:2px solid var(--linha)">
+      <a class="top" href="/produtos" style="background:#FFF8E1">
+        <span class="nome" style="color:var(--azul);font-weight:900">🛍️ Ver todos os produtos</span>
+      </a>
+    </div>
     {% if menu %}
       {% for d in menu %}
         {% if d.grupos %}

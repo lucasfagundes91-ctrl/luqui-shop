@@ -1814,6 +1814,20 @@ def _pagina_destaque(tag, titulo):
                            carrinho=carrinho_ler())
 
 
+@app.route('/produtos')
+def pag_todos_produtos():
+    """Lista todos os produtos da vitrine, sem filtro de categoria."""
+    produtos, total = listar_produtos(limite=48)
+    return render_template('busca.html',
+                           produtos=produtos, total=total,
+                           termo='Todos os produtos',
+                           categorias=listar_categorias(),
+                           filtros=listar_filtros(),
+                           filtros_ativos={},
+                           cliente=cliente_logado(),
+                           carrinho=carrinho_ler())
+
+
 @app.route('/novidades')
 def pag_novidades():
     return _pagina_destaque('novidade', '✨ Novidades')
