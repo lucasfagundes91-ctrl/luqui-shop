@@ -1915,7 +1915,7 @@ def pag_mais_vendidos():
 
 @app.route('/liquida-luqui')
 def pag_liquida_luqui():
-    return _pagina_destaque('liquida', '💥 LuquidaLuqui')
+    return _pagina_destaque('liquida', '💥 LiquidaLuqui')
 
 
 @app.route('/produto/<int:pid>')
