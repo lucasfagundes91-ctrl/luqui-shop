@@ -3101,6 +3101,46 @@ def admin_banner_excluir(bid):
     return redirect(url_for('admin_banners'))
 
 
+@app.route('/admin/banners/seed', methods=['POST'])
+@requer_admin
+def admin_banner_seed():
+    """Insere os 5 banners default (so os que ainda nao existem pelo titulo)."""
+    seeds = [
+        ('PAGUE NO PIX',
+         'Ganhe <b style="color:#FFC700">10% de desconto</b> em qualquer compra!',
+         '/produtos', 'Ver produtos',
+         'linear-gradient(135deg,#1652C7,#3B82F6)', 1),
+        ('PARCELE EM 12X',
+         'Sem juros (parcela mínima <b style="color:#FFC700">R$ 50</b>)',
+         '/produtos', 'Comprar agora',
+         'linear-gradient(135deg,#0E3D9E,#1652C7)', 2),
+        ('RETIRE NA LOJA',
+         '📍 Cascavel/PR — <b style="color:#FFC700">frete grátis</b>. Agende o horário no checkout!',
+         '/retirar-na-loja', 'Como funciona',
+         'linear-gradient(135deg,#1652C7,#4FB8FF)', 3),
+        ('CLUBE LUQUI 🎁',
+         'Descontos exclusivos + <b style="color:#FFC700">5% acumulativo</b> + 1 ponto a cada R$ 1',
+         '/clube', 'Quero entrar',
+         'linear-gradient(135deg,#A16207,#FFC700)', 4),
+        ('NOVIDADES ✨',
+         'Confere o que <b style="color:#FFC700">chegou</b> de mais legal!',
+         '/novidades', 'Ver novidades',
+         'linear-gradient(135deg,#1652C7,#3B82F6)', 5),
+    ]
+    inseridos = 0
+    for tit, sub, link, cta, cor, ordem in seeds:
+        ja = db_execute("SELECT id FROM banners WHERE titulo=%s",
+                        [tit], fetch='one')
+        if ja:
+            continue
+        db_execute("""INSERT INTO banners
+          (titulo, subtitulo, link, cta_texto, cor_fundo, ordem, ativo)
+          VALUES (%s,%s,%s,%s,%s,%s,true)""",
+          [tit, sub, link, cta, cor, ordem])
+        inseridos += 1
+    return redirect(url_for('admin_banners'))
+
+
 @app.route('/admin/cupons', methods=['GET', 'POST'])
 @requer_admin
 def admin_cupons():
