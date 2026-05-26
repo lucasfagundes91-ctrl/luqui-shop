@@ -233,6 +233,8 @@ def init_db():
         "ALTER TABLE banners ADD COLUMN IF NOT EXISTS subtitulo VARCHAR(200)",
         "ALTER TABLE banners ADD COLUMN IF NOT EXISTS cta_texto VARCHAR(40) DEFAULT 'Ver'",
         "ALTER TABLE banners ADD COLUMN IF NOT EXISTS cor_fundo VARCHAR(20) DEFAULT '#4FB8FF'",
+        # cor_fundo agora aceita gradientes longos (linear-gradient(...))
+        "ALTER TABLE banners ALTER COLUMN cor_fundo TYPE VARCHAR(200)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_codigo VARCHAR(40)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_desconto NUMERIC(10,2) DEFAULT 0",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS embrulho_presente BOOLEAN DEFAULT FALSE",
