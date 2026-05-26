@@ -237,6 +237,7 @@ def init_db():
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_desconto NUMERIC(10,2) DEFAULT 0",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS embrulho_presente BOOLEAN DEFAULT FALSE",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS embrulho_mensagem VARCHAR(300)",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS embrulho_tipo VARCHAR(10)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS juros_valor NUMERIC(10,2) DEFAULT 0",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_agendada VARCHAR(40)",
         # Melhor Envio: além do etiqueta_id+rastreio que já existem,
@@ -3170,6 +3171,8 @@ def checkout_finalizar():
     cli = cliente_logado()
     embrulho = bool(d.get('embrulho_presente'))
     embrulho_msg = ((d.get('embrulho_mensagem') or '').strip()[:300]) if embrulho else None
+    embrulho_tipo_raw = (d.get('embrulho_tipo') or '').strip().lower()
+    embrulho_tipo = embrulho_tipo_raw if (embrulho and embrulho_tipo_raw in ('menino', 'menina', 'neutro')) else None
     entrega_agendada = ((d.get('entrega_agendada') or '').strip()[:40]) or None
     ped = db_execute("""
         INSERT INTO pedidos
@@ -3177,8 +3180,8 @@ def checkout_finalizar():
            complemento, bairro, cidade, uf, subtotal, frete, desconto, total,
            forma_pagto, parcelas, frete_servico, frete_prazo, observacao,
            cupom_codigo, cupom_desconto, embrulho_presente, embrulho_mensagem,
-           juros_valor, entrega_agendada)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+           embrulho_tipo, juros_valor, entrega_agendada)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         RETURNING id""",
         [cli['id'] if cli else None,
          d['email'].strip().lower(), d['nome'].strip(), d['telefone'].strip(),
@@ -3190,7 +3193,7 @@ def checkout_finalizar():
          d.get('frete_servico') or 'A definir',
          d.get('frete_prazo') or '', d.get('observacao') or None,
          cupom_codigo or None, cupom_desconto,
-         embrulho, embrulho_msg, juros_valor, entrega_agendada],
+         embrulho, embrulho_msg, embrulho_tipo, juros_valor, entrega_agendada],
         fetch='one')
     pid = ped['id']
     # Insere itens

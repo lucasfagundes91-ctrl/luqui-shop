@@ -87,6 +87,21 @@
           </div>
         </label>
         <div id="embrulho-msg" style="display:none;margin-top:12px">
+          <label style="font-size:12px;color:var(--mut);font-weight:600;display:block;margin-bottom:6px">Papel de presente pra...</label>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
+            <label class="emb-tipo" style="border:2px solid var(--linha);padding:10px;border-radius:8px;cursor:pointer;text-align:center;font-size:13px;font-weight:600">
+              <input type="radio" name="embrulho_tipo" value="menino" style="display:none">
+              💙 Menino
+            </label>
+            <label class="emb-tipo" style="border:2px solid var(--linha);padding:10px;border-radius:8px;cursor:pointer;text-align:center;font-size:13px;font-weight:600">
+              <input type="radio" name="embrulho_tipo" value="menina" style="display:none">
+              💖 Menina
+            </label>
+            <label class="emb-tipo" style="border:2px solid var(--linha);padding:10px;border-radius:8px;cursor:pointer;text-align:center;font-size:13px;font-weight:600">
+              <input type="radio" name="embrulho_tipo" value="neutro" checked style="display:none">
+              🎨 Neutro
+            </label>
+          </div>
           <label style="font-size:12px;color:var(--mut);font-weight:600">Mensagem no cartãozinho (opcional)</label>
           <textarea name="embrulho_mensagem" maxlength="300" rows="2"
                     placeholder="Ex: Feliz aniversário, com carinho da tia Carla 💛"
@@ -183,6 +198,24 @@ document.querySelectorAll('.forma').forEach(l=>{
   });
 });
 document.querySelector('.forma').style.borderColor='var(--azul)';
+
+// Tipo do embrulho (menino/menina/neutro): destaca o selecionado
+document.querySelectorAll('.emb-tipo').forEach(l=>{
+  l.addEventListener('click',()=>{
+    document.querySelectorAll('.emb-tipo').forEach(x=>{
+      x.style.borderColor='var(--linha)';
+      x.style.background='#fff';
+    });
+    l.style.borderColor='var(--azul)';
+    l.style.background='#EFF6FF';
+  });
+});
+const _embDef = document.querySelector('.emb-tipo input[checked], .emb-tipo input:checked');
+if(_embDef){
+  const lbl = _embDef.closest('.emb-tipo');
+  lbl.style.borderColor='var(--azul)';
+  lbl.style.background='#EFF6FF';
+}
 
 async function buscarCep(cep){
   cep = cep.replace(/\D/g,'');
