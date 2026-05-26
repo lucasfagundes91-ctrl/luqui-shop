@@ -238,6 +238,32 @@ def init_db():
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS embrulho_presente BOOLEAN DEFAULT FALSE",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS embrulho_mensagem VARCHAR(300)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS embrulho_tipo VARCHAR(10)",
+        # Lista de aniversario (wishlist publica que a mae compartilha)
+        """CREATE TABLE IF NOT EXISTS listas_aniversario (
+            id SERIAL PRIMARY KEY,
+            cliente_id INT REFERENCES clientes_site(id) ON DELETE CASCADE,
+            nome_crianca VARCHAR(120) NOT NULL,
+            idade INT,
+            data_aniversario DATE,
+            slug VARCHAR(40) UNIQUE NOT NULL,
+            mensagem TEXT,
+            ativo BOOLEAN DEFAULT TRUE,
+            criado_em TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_listas_cliente ON listas_aniversario(cliente_id)",
+        "CREATE INDEX IF NOT EXISTS idx_listas_slug ON listas_aniversario(slug)",
+        """CREATE TABLE IF NOT EXISTS lista_aniversario_itens (
+            id SERIAL PRIMARY KEY,
+            lista_id INT REFERENCES listas_aniversario(id) ON DELETE CASCADE,
+            produto_pdv_id INT NOT NULL,
+            qtd INT DEFAULT 1,
+            comprado_por_nome VARCHAR(120),
+            pedido_id INT REFERENCES pedidos(id) ON DELETE SET NULL,
+            comprado_em TIMESTAMPTZ,
+            criado_em TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(lista_id, produto_pdv_id)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_lista_itens_lista ON lista_aniversario_itens(lista_id)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS juros_valor NUMERIC(10,2) DEFAULT 0",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_agendada VARCHAR(40)",
         # Melhor Envio: além do etiqueta_id+rastreio que já existem,
@@ -2642,6 +2668,198 @@ def minha_conta():
                            carrinho=carrinho_ler())
 
 
+# ─── Lista de aniversario (wishlist publica) ─────────────────────────────────
+def _lista_carregar_itens(lista_id):
+    """Carrega itens da lista enriquecidos com dados de produto do PDV."""
+    rows = db_execute("""
+        SELECT id, produto_pdv_id, qtd, comprado_por_nome, pedido_id, comprado_em
+        FROM lista_aniversario_itens
+        WHERE lista_id=%s ORDER BY criado_em DESC""",
+        [lista_id], fetch='all') or []
+    itens = []
+    for r in rows:
+        try:
+            p = buscar_produto(r['produto_pdv_id']) or {}
+        except Exception:
+            p = {}
+        itens.append({
+            **dict(r),
+            'descricao': p.get('descricao') or 'Produto',
+            'preco_venda': float(p.get('preco_venda') or 0),
+            'preco_promo': p.get('preco_promo'),
+            'foto_url': p.get('foto_url'),
+        })
+    return itens
+
+
+@app.route('/minhas-listas')
+def minhas_listas():
+    c = cliente_logado()
+    if not c:
+        return redirect(url_for('login', next=request.path))
+    listas = db_execute(
+        """SELECT l.*,
+                  (SELECT COUNT(*) FROM lista_aniversario_itens
+                   WHERE lista_id=l.id) AS qtd_itens,
+                  (SELECT COUNT(*) FROM lista_aniversario_itens
+                   WHERE lista_id=l.id AND comprado_em IS NOT NULL) AS qtd_comprados
+           FROM listas_aniversario l
+           WHERE cliente_id=%s AND ativo
+           ORDER BY criado_em DESC""",
+        [c['id']], fetch='all') or []
+    return render_template('minhas_listas.html',
+                           cliente=c, listas=listas,
+                           categorias=listar_categorias(),
+                           carrinho=carrinho_ler())
+
+
+@app.route('/minhas-listas/criar', methods=['POST'])
+def lista_criar():
+    c = cliente_logado()
+    if not c:
+        return jsonify({'erro': 'Faça login primeiro'}), 401
+    d = request.get_json() or {}
+    nome = (d.get('nome_crianca') or '').strip()[:120]
+    if not nome:
+        return jsonify({'erro': 'Informe o nome da criança'}), 400
+    try:
+        idade = int(d.get('idade') or 0) or None
+    except (TypeError, ValueError):
+        idade = None
+    data_aniv = (d.get('data_aniversario') or '').strip() or None
+    mensagem = (d.get('mensagem') or '').strip()[:1000] or None
+    slug = secrets.token_urlsafe(6)[:12]
+    row = db_execute("""
+        INSERT INTO listas_aniversario
+          (cliente_id, nome_crianca, idade, data_aniversario, slug, mensagem)
+        VALUES (%s,%s,%s,%s,%s,%s) RETURNING id, slug""",
+        [c['id'], nome, idade, data_aniv, slug, mensagem], fetch='one')
+    return jsonify({'ok': True, 'id': row['id'], 'slug': row['slug']})
+
+
+@app.route('/minhas-listas/<int:lid>')
+def lista_gerenciar(lid):
+    c = cliente_logado()
+    if not c:
+        return redirect(url_for('login', next=request.path))
+    lista = db_execute("""SELECT * FROM listas_aniversario
+                          WHERE id=%s AND cliente_id=%s""",
+                       [lid, c['id']], fetch='one')
+    if not lista:
+        return redirect(url_for('minhas_listas'))
+    itens = _lista_carregar_itens(lid)
+    return render_template('lista_gerenciar.html',
+                           cliente=c, lista=lista, itens=itens,
+                           categorias=listar_categorias(),
+                           carrinho=carrinho_ler())
+
+
+@app.route('/api/listas/<int:lid>/add', methods=['POST'])
+def lista_add_item(lid):
+    c = cliente_logado()
+    if not c:
+        return jsonify({'erro': 'Faça login primeiro'}), 401
+    lista = db_execute("""SELECT id FROM listas_aniversario
+                          WHERE id=%s AND cliente_id=%s AND ativo""",
+                       [lid, c['id']], fetch='one')
+    if not lista:
+        return jsonify({'erro': 'Lista não encontrada'}), 404
+    d = request.get_json() or {}
+    try:
+        pid = int(d.get('produto_pdv_id') or 0)
+    except (TypeError, ValueError):
+        pid = 0
+    if not pid:
+        return jsonify({'erro': 'produto_pdv_id obrigatório'}), 400
+    db_execute("""INSERT INTO lista_aniversario_itens
+                  (lista_id, produto_pdv_id, qtd)
+                  VALUES (%s,%s,1)
+                  ON CONFLICT (lista_id, produto_pdv_id) DO NOTHING""",
+               [lid, pid])
+    return jsonify({'ok': True})
+
+
+@app.route('/api/listas/<int:lid>/remover/<int:item_id>', methods=['POST'])
+def lista_remover_item(lid, item_id):
+    c = cliente_logado()
+    if not c:
+        return jsonify({'erro': 'Faça login primeiro'}), 401
+    db_execute("""DELETE FROM lista_aniversario_itens
+                  WHERE id=%s AND lista_id IN
+                    (SELECT id FROM listas_aniversario WHERE cliente_id=%s)""",
+               [item_id, c['id']])
+    return jsonify({'ok': True})
+
+
+@app.route('/api/listas/usuario')
+def listas_do_usuario():
+    """Devolve as listas do cliente logado pra dropdown no card de produto."""
+    c = cliente_logado()
+    if not c:
+        return jsonify({'listas': []})
+    listas = db_execute("""SELECT id, nome_crianca, slug FROM listas_aniversario
+                            WHERE cliente_id=%s AND ativo
+                            ORDER BY criado_em DESC""",
+                        [c['id']], fetch='all') or []
+    return jsonify({'listas': [dict(l) for l in listas]})
+
+
+@app.route('/lista/<slug>')
+def lista_publica(slug):
+    """Pagina publica da lista — qualquer um abre pelo link compartilhado."""
+    lista = db_execute("""SELECT l.*, cs.nome AS cliente_nome
+                          FROM listas_aniversario l
+                          LEFT JOIN clientes_site cs ON cs.id = l.cliente_id
+                          WHERE l.slug=%s AND l.ativo""",
+                       [slug], fetch='one')
+    if not lista:
+        return render_template('404.html'), 404
+    itens = _lista_carregar_itens(lista['id'])
+    return render_template('lista_publica.html',
+                           lista=lista, itens=itens,
+                           cliente=cliente_logado(),
+                           categorias=listar_categorias(),
+                           carrinho=carrinho_ler())
+
+
+@app.route('/api/lista/<slug>/presentear/<int:item_id>', methods=['POST'])
+def lista_presentear(slug, item_id):
+    """Convidada clica em "Presentear" — adiciona ao carrinho marcado."""
+    lista = db_execute("""SELECT id FROM listas_aniversario
+                          WHERE slug=%s AND ativo""",
+                       [slug], fetch='one')
+    if not lista:
+        return jsonify({'erro': 'Lista não encontrada'}), 404
+    item = db_execute("""SELECT * FROM lista_aniversario_itens
+                          WHERE id=%s AND lista_id=%s""",
+                       [item_id, lista['id']], fetch='one')
+    if not item:
+        return jsonify({'erro': 'Item não encontrado'}), 404
+    if item.get('comprado_em'):
+        return jsonify({'erro': 'Esse presente já foi comprado por outra pessoa'}), 409
+    try:
+        p = buscar_produto(item['produto_pdv_id']) or {}
+    except Exception:
+        p = {}
+    if not p.get('id'):
+        return jsonify({'erro': 'Produto indisponível'}), 404
+    # Adiciona no carrinho com flag lista_item_id pra marcar como comprado depois
+    itens = carrinho_ler()
+    # Remove o mesmo produto se ja estiver — sobrescreve com a flag de lista
+    itens = [it for it in itens if it.get('produto_id') != p['id']]
+    itens.append({
+        'produto_id': p['id'],
+        'descricao': p.get('descricao') or 'Produto',
+        'preco': float(p.get('preco_promo') or p.get('preco_venda') or 0),
+        'qtd': 1,
+        'foto_url': p.get('foto_url'),
+        'codigo_barras': p.get('codigo_barras'),
+        'lista_item_id': item['id'],
+    })
+    carrinho_salvar(itens)
+    return jsonify({'ok': True, 'redirect': '/checkout'})
+
+
 # ─── Admin (área restrita) ────────────────────────────────────────────────────
 @app.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
@@ -3239,7 +3457,7 @@ def checkout_finalizar():
          embrulho, embrulho_msg, embrulho_tipo, juros_valor, entrega_agendada],
         fetch='one')
     pid = ped['id']
-    # Insere itens
+    # Insere itens + reserva items da lista de aniversario (se houver)
     for it in itens:
         db_execute("""INSERT INTO pedido_itens
             (pedido_id, produto_pdv_id, codigo_barras, descricao,
@@ -3249,6 +3467,17 @@ def checkout_finalizar():
              it['descricao'], it['preco'], it['qtd'],
              float(it['preco']) * float(it['qtd']),
              it.get('foto_url')])
+        # Se esse item veio de uma lista de aniversario, marca como reservado
+        lista_item_id = it.get('lista_item_id')
+        if lista_item_id:
+            try:
+                db_execute("""UPDATE lista_aniversario_itens
+                              SET comprado_por_nome=%s, pedido_id=%s,
+                                  comprado_em=NOW()
+                              WHERE id=%s AND comprado_em IS NULL""",
+                           [d['nome'].strip()[:120], pid, int(lista_item_id)])
+            except Exception as e:
+                log.error(f"reservar lista item {lista_item_id}: {e}")
     # Cria customer + cobrança no Asaas
     customer_id = asaas_criar_customer(d['nome'], d['email'],
                                        d['cpf'], d['telefone'])

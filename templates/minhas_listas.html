@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block titulo %}Minhas listas de aniversário — Luqui Brinquedos{% endblock %}
+{% block conteudo %}
+<div style="max-width:900px;margin:30px auto;padding:0 16px">
+  <a href="/minha-conta" style="color:var(--mut);font-size:13px">← Voltar pra minha conta</a>
+  <h1 style="margin-top:8px;color:var(--azul)">🎂 Listas de aniversário</h1>
+  <p style="color:var(--mut);font-size:14px;margin-top:4px">
+    Crie uma lista com os brinquedos que seu filho ou filha quer ganhar e compartilhe o link com a família e amigos!
+  </p>
+
+  <button onclick="abrirCriar()" class="btn btn-amarelo" style="margin-top:18px">+ Criar nova lista</button>
+
+  {% if listas %}
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:24px">
+      {% for l in listas %}
+        <div style="background:#fff;border:1px solid var(--linha);border-radius:14px;padding:18px">
+          <h3 style="color:var(--azul);margin-bottom:4px">🎁 {{ l.nome_crianca }}</h3>
+          {% if l.idade %}<div style="font-size:13px;color:var(--mut)">{{ l.idade }} {{ 'aninho' if l.idade == 1 else 'aninhos' }}</div>{% endif %}
+          {% if l.data_aniversario %}<div style="font-size:13px;color:var(--mut)">📅 {{ l.data_aniversario.strftime('%d/%m/%Y') }}</div>{% endif %}
+          <div style="margin:12px 0;font-size:13px">
+            <b style="color:var(--verde)">{{ l.qtd_itens }}</b> {{ 'item' if l.qtd_itens == 1 else 'itens' }}
+            {% if l.qtd_comprados %}
+              · <b style="color:var(--azul)">{{ l.qtd_comprados }}</b> já presenteado{{ 's' if l.qtd_comprados != 1 else '' }}
+            {% endif %}
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <a href="/minhas-listas/{{ l.id }}" class="btn btn-primario" style="flex:1;padding:9px 12px;font-size:13px">Gerenciar</a>
+            <button onclick="copiarLink('{{ l.slug }}')" class="btn btn-ghost" style="flex:1;padding:9px 12px;font-size:13px">📋 Copiar link</button>
+          </div>
+          <div style="margin-top:8px;font-size:11px;color:var(--mut);word-break:break-all">
+            luquibrinquedos.com.br/lista/{{ l.slug }}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div style="background:#fff;border:1px dashed var(--linha);border-radius:14px;padding:40px;text-align:center;margin-top:24px;color:var(--mut)">
+      <div style="font-size:48px">🎈</div>
+      <p style="margin-top:12px">Você ainda não criou nenhuma lista.<br>Clica em "+ Criar nova lista" pra começar!</p>
+    </div>
+  {% endif %}
+</div>
+
+<!-- Modal de criar -->
+<div id="modal-criar" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:200;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:24px;max-width:440px;width:90%">
+    <h2 style="color:var(--azul);margin-bottom:14px">Criar lista de aniversário</h2>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div>
+        <label style="font-size:12px;color:var(--mut);font-weight:700">NOME DA CRIANÇA *</label>
+        <input id="lc-nome" placeholder="Ex: João" style="width:100%;padding:10px;border:1px solid var(--linha);border-radius:8px;margin-top:4px">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:10px">
+        <div>
+          <label style="font-size:12px;color:var(--mut);font-weight:700">IDADE</label>
+          <input id="lc-idade" type="number" min="0" max="18" placeholder="6" style="width:100%;padding:10px;border:1px solid var(--linha);border-radius:8px;margin-top:4px">
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--mut);font-weight:700">DATA DO ANIVERSÁRIO</label>
+          <input id="lc-data" type="date" style="width:100%;padding:10px;border:1px solid var(--linha);border-radius:8px;margin-top:4px">
+        </div>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--mut);font-weight:700">MENSAGEM (opcional)</label>
+        <textarea id="lc-msg" rows="2" maxlength="1000" placeholder="Ex: O João vai fazer 6 aninhos! Tema da festa: super-heróis 🦸"
+                  style="width:100%;padding:10px;border:1px solid var(--linha);border-radius:8px;margin-top:4px;resize:vertical;font-family:inherit"></textarea>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button onclick="fecharCriar()" class="btn btn-ghost" style="flex:1">Cancelar</button>
+      <button onclick="salvarLista()" class="btn btn-primario" style="flex:1">Criar lista</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function abrirCriar(){ document.getElementById('modal-criar').style.display='flex'; }
+function fecharCriar(){ document.getElementById('modal-criar').style.display='none'; }
+async function salvarLista(){
+  const nome = document.getElementById('lc-nome').value.trim();
+  if(!nome){ toast('Informe o nome da criança','err'); return; }
+  const body = {
+    nome_crianca: nome,
+    idade: document.getElementById('lc-idade').value || null,
+    data_aniversario: document.getElementById('lc-data').value || null,
+    mensagem: document.getElementById('lc-msg').value || null,
+  };
+  try {
+    const r = await fetch('/minhas-listas/criar', {method:'POST',
+      headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    const d = await r.json();
+    if(d.erro){ toast(d.erro,'err'); return; }
+    location.href = '/minhas-listas/'+d.id;
+  } catch(e){ toast('Erro: '+e.message,'err'); }
+}
+function copiarLink(slug){
+  const url = 'https://www.luquibrinquedos.com.br/lista/'+slug;
+  navigator.clipboard.writeText(url).then(()=>toast('Link copiado! 📋')).catch(()=>toast('Erro ao copiar','err'));
+}
+</script>
+{% endblock %}

@@ -707,6 +707,35 @@ async function comprarAgora(produto_id, qtd=1){
     location.href='/checkout';
   }catch(e){ toast('Erro: '+e.message,'err'); }
 }
+async function addNaLista(produto_id, btn){
+  try{
+    const r = await fetch('/api/listas/usuario');
+    const d = await r.json();
+    const listas = d.listas || [];
+    if(!listas.length){
+      if(confirm('Você ainda não tem uma lista de aniversário. Criar agora?')){
+        location.href = '/minhas-listas';
+      }
+      return;
+    }
+    let listaId;
+    if(listas.length === 1){
+      listaId = listas[0].id;
+    } else {
+      const opcoes = listas.map((l,i)=>`${i+1}) ${l.nome_crianca}`).join('\n');
+      const escolha = prompt('Em qual lista adicionar?\n'+opcoes+'\n\nDigite o número:');
+      const idx = parseInt(escolha)-1;
+      if(isNaN(idx) || idx < 0 || idx >= listas.length) return;
+      listaId = listas[idx].id;
+    }
+    const r2 = await fetch('/api/listas/'+listaId+'/add', {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({produto_pdv_id: produto_id})});
+    const d2 = await r2.json();
+    if(d2.erro){ toast(d2.erro,'err'); return; }
+    toast('Adicionado à lista! 🎁');
+  }catch(e){ toast('Erro: '+e.message,'err'); }
+}
 </script>
 {% block extra_scripts %}{% endblock %}
 </body>

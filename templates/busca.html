@@ -110,6 +110,11 @@
             <button class="btn-comprar" onclick="comprarAgora({{ p.id }})">🛒 Comprar</button>
             <button class="btn-add" onclick="carrinhoAdd({{ p.id }})">+ Carrinho</button>
           </div>
+          {% if cliente %}
+          <button onclick="addNaLista({{ p.id }}, this)" style="margin-top:6px;width:100%;background:transparent;color:#A16207;border:1.5px solid #FBBF24;padding:7px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">
+            🎁 Adicionar à lista de aniversário
+          </button>
+          {% endif %}
         </div>
       {% else %}
         <div style="grid-column:1/-1;padding:60px;text-align:center;color:var(--mut)">

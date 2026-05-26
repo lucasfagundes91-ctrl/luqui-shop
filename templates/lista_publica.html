@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block titulo %}Lista de aniversário de {{ lista.nome_crianca }} — Luqui Brinquedos{% endblock %}
+{% block conteudo %}
+<div style="max-width:1100px;margin:30px auto;padding:0 16px">
+  <div style="background:linear-gradient(135deg,#87CEFA,#4FB8FF);border-radius:18px;padding:36px 28px;color:#fff;text-align:center">
+    <div style="font-size:48px">🎂</div>
+    <h1 style="color:#FFC700;font-family:'Comic Sans MS','Marker Felt',sans-serif;font-size:42px;text-shadow:2px 2px 0 #1652C7;margin-top:8px">
+      Lista do(a) {{ lista.nome_crianca }}
+    </h1>
+    <div style="font-size:18px;font-weight:800;margin-top:6px">
+      {% if lista.idade %}{{ lista.idade }} {{ 'aninho' if lista.idade == 1 else 'aninhos' }}{% endif %}
+      {% if lista.idade and lista.data_aniversario %} · {% endif %}
+      {% if lista.data_aniversario %}📅 {{ lista.data_aniversario.strftime('%d/%m/%Y') }}{% endif %}
+    </div>
+    {% if lista.mensagem %}
+      <p style="margin-top:14px;font-size:15px;max-width:600px;margin-left:auto;margin-right:auto;line-height:1.5">
+        {{ lista.mensagem }}
+      </p>
+    {% endif %}
+    <p style="font-size:13px;margin-top:18px;opacity:.9">
+      Escolha um presente da lista — a gente embala, manda direto e marca como reservado pra ninguém comprar igual 💛
+    </p>
+  </div>
+
+  {% if itens %}
+    <section class="produtos" style="margin-top:30px">
+      {% for it in itens %}
+        <div class="prod-card" style="{% if it.comprado_em %}opacity:.5{% endif %}">
+          {% if it.comprado_em %}
+            <span class="selo" style="background:var(--verde);left:10px">✓ JÁ PRESENTEADO</span>
+          {% endif %}
+          <div class="foto">
+            {% if it.foto_url %}<img src="{{ it.foto_url }}" alt="">
+            {% else %}<span class="ph">📦</span>{% endif %}
+          </div>
+          <div class="desc">{{ it.descricao }}</div>
+          {% if it.preco_promo %}
+            <div class="preco-velho">{{ rs(it.preco_venda) }}</div>
+            <div class="preco">{{ rs(it.preco_promo) }}</div>
+          {% else %}
+            <div class="preco">{{ rs(it.preco_venda) }}</div>
+          {% endif %}
+          {% if it.comprado_em %}
+            <button class="btn" disabled style="background:#94A3B8;cursor:not-allowed">
+              Reservado por {{ it.comprado_por_nome or 'alguém' }}
+            </button>
+          {% else %}
+            <button class="btn" onclick="presentear({{ it.id }})" style="background:var(--verde)">
+              🎁 Presentear este
+            </button>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </section>
+  {% else %}
+    <div style="background:#fff;border:1px dashed var(--linha);border-radius:14px;padding:40px;text-align:center;margin-top:24px;color:var(--mut)">
+      <div style="font-size:48px">📭</div>
+      <p style="margin-top:12px">A lista ainda está vazia! Volte mais tarde.</p>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+async function presentear(itemId){
+  try {
+    const r = await fetch('/api/lista/{{ lista.slug }}/presentear/'+itemId, {method:'POST'});
+    const d = await r.json();
+    if(d.erro){ toast(d.erro,'err'); return; }
+    location.href = d.redirect || '/checkout';
+  } catch(e){ toast('Erro: '+e.message,'err'); }
+}
+</script>
+{% endblock %}

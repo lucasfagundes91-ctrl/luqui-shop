@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block titulo %}Lista de {{ lista.nome_crianca }} — Luqui Brinquedos{% endblock %}
+{% block conteudo %}
+<div style="max-width:1100px;margin:30px auto;padding:0 16px">
+  <a href="/minhas-listas" style="color:var(--mut);font-size:13px">← Voltar pras minhas listas</a>
+  <div style="background:#fff;border:1px solid var(--linha);border-radius:14px;padding:24px;margin-top:14px">
+    <h1 style="color:var(--azul)">🎁 Lista de {{ lista.nome_crianca }}</h1>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--mut);margin-top:6px">
+      {% if lista.idade %}<span>{{ lista.idade }} aninhos</span>{% endif %}
+      {% if lista.data_aniversario %}<span>📅 {{ lista.data_aniversario.strftime('%d/%m/%Y') }}</span>{% endif %}
+    </div>
+    {% if lista.mensagem %}
+      <p style="margin-top:10px;font-size:14px">{{ lista.mensagem }}</p>
+    {% endif %}
+
+    <div style="background:#F8FAFC;border-radius:10px;padding:14px;margin-top:18px">
+      <div style="font-size:12px;color:var(--mut);font-weight:700;margin-bottom:4px">📋 LINK PRA COMPARTILHAR</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <code style="flex:1;min-width:200px;background:#fff;padding:8px 12px;border-radius:6px;font-size:13px;word-break:break-all">https://www.luquibrinquedos.com.br/lista/{{ lista.slug }}</code>
+        <button onclick="copiarLink()" class="btn btn-primario" style="padding:8px 16px;font-size:13px">📋 Copiar</button>
+        <a target="_blank" href="https://wa.me/?text={{ ('Olha a lista de aniversário do(a) ' + lista.nome_crianca + '! 🎂 https://www.luquibrinquedos.com.br/lista/' + lista.slug)|urlencode }}" class="btn btn-verde" style="padding:8px 16px;font-size:13px">💬 WhatsApp</a>
+      </div>
+    </div>
+  </div>
+
+  <h2 style="margin-top:30px">Produtos na lista ({{ itens|length }})</h2>
+  <p style="color:var(--mut);font-size:13px;margin-top:4px">Pra adicionar mais, navegue pela loja e clique em "🎁 Adicionar à lista" no produto.</p>
+
+  {% if itens %}
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-top:14px">
+      {% for it in itens %}
+        <div style="background:#fff;border:1px solid var(--linha);border-radius:12px;overflow:hidden;display:flex;flex-direction:column">
+          <div style="aspect-ratio:1;background:#F1F5F9;display:flex;align-items:center;justify-content:center">
+            {% if it.foto_url %}<img src="{{ it.foto_url }}" style="max-width:100%;max-height:100%">
+            {% else %}<span style="font-size:48px">📦</span>{% endif %}
+          </div>
+          <div style="padding:12px;flex:1;display:flex;flex-direction:column">
+            <div style="font-size:13px;font-weight:600;line-height:1.3;flex:1">{{ it.descricao }}</div>
+            <div style="font-weight:800;color:var(--verde);margin-top:6px">{{ rs(it.preco_promo or it.preco_venda) }}</div>
+            {% if it.comprado_em %}
+              <div style="background:#DCFCE7;color:#15803D;padding:6px 10px;border-radius:6px;font-size:11px;font-weight:700;margin-top:8px;text-align:center">
+                ✓ Presenteado por {{ it.comprado_por_nome or 'alguém' }}
+              </div>
+            {% else %}
+              <button onclick="removerItem({{ it.id }})" style="background:transparent;color:var(--vermelho);border:1px solid var(--vermelho);padding:6px 10px;border-radius:6px;font-size:11px;font-weight:700;margin-top:8px;cursor:pointer">Remover da lista</button>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div style="background:#fff;border:1px dashed var(--linha);border-radius:14px;padding:40px;text-align:center;margin-top:14px;color:var(--mut)">
+      <div style="font-size:48px">📭</div>
+      <p style="margin-top:12px">Nenhum item ainda. Vá navegar pela loja e adicione brinquedos!</p>
+      <a href="/produtos" class="btn btn-primario" style="margin-top:12px;display:inline-block">Ver produtos</a>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+function copiarLink(){
+  const url = 'https://www.luquibrinquedos.com.br/lista/{{ lista.slug }}';
+  navigator.clipboard.writeText(url).then(()=>toast('Link copiado! 📋')).catch(()=>toast('Erro ao copiar','err'));
+}
+async function removerItem(id){
+  if(!confirm('Remover esse item da lista?')) return;
+  try {
+    const r = await fetch('/api/listas/{{ lista.id }}/remover/'+id, {method:'POST'});
+    const d = await r.json();
+    if(d.erro){ toast(d.erro,'err'); return; }
+    location.reload();
+  } catch(e){ toast('Erro: '+e.message,'err'); }
+}
+</script>
+{% endblock %}
