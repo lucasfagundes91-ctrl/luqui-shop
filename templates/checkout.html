@@ -196,6 +196,7 @@ async function buscarCep(cep){
   document.getElementById('uf').value = d.uf;
   buscarFrete();
 }
+let SLOTS_LOCAL = [];
 async function buscarFrete(){
   const cidade = document.getElementById('cidade').value;
   const uf = document.getElementById('uf').value;
@@ -204,22 +205,44 @@ async function buscarFrete(){
   const r = await fetch(`/api/checkout/frete?cidade=${encodeURIComponent(cidade)}&uf=${uf}&cep=${cep}`);
   const d = await r.json();
   const box = document.getElementById('opcoes-frete');
-  box.innerHTML = d.opcoes.map((o,i)=>`
+  box.innerHTML = d.opcoes.map((o,i)=>{
+    const isLocal = o.id === 'LOCAL';
+    if(isLocal) SLOTS_LOCAL = o.agendamento || [];
+    const prazoTexto = isLocal && SLOTS_LOCAL.length ? '📅 Agendar entrega' : o.prazo;
+    return `
     <label style="display:flex;justify-content:space-between;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-bottom:8px;cursor:pointer">
       <span>
         <input type="radio" name="frete_servico" value="${o.servico}" data-valor="${o.valor}" data-id="${o.id||''}" ${i===0?'checked':''} onchange="aoTrocarFrete()" style="margin-right:8px">
-        <b>${o.servico}</b><br><span style="font-size:12px;color:var(--mut);margin-left:24px">${o.prazo}</span>
+        <b>${o.servico}</b><br><span style="font-size:12px;color:var(--mut);margin-left:24px">${prazoTexto}</span>
       </span>
       <b style="color:${o.valor===0?'var(--verde)':'var(--txt)'}">${o.valor===0?'GRÁTIS':'R$ '+o.valor.toFixed(2).replace('.',',')}</b>
-    </label>
-  `).join('');
+    </label>`;
+  }).join('');
+  // Bloco do select de horario (so aparece quando a opcao LOCAL ta marcada)
+  box.innerHTML += `<div id="bloco-agendamento" style="display:none;margin:-4px 0 12px 24px;padding:12px;background:#F8FAFC;border-radius:8px">
+    <label style="font-size:12px;color:var(--mut);font-weight:700;display:block;margin-bottom:6px">⏰ ESCOLHA O HORÁRIO DE ENTREGA</label>
+    <select name="entrega_agendada" id="entrega-agendada" required style="width:100%;padding:10px;border:1px solid var(--linha);border-radius:8px;font-size:14px">
+      <option value="">Selecione um horário...</option>
+      ${SLOTS_LOCAL.map(s=>`<option value="${s.value}">${s.label}</option>`).join('')}
+    </select>
+    <p style="font-size:11px;color:var(--mut);margin-top:6px">A entrega chega dentro da janela escolhida. Pedidos feitos até meio-dia podem ser entregues no mesmo dia.</p>
+  </div>`;
   document.getElementById('bloco-frete').style.display='block';
   frete = d.opcoes[0].valor;
+  aoTrocarFrete();
   recalcular();
 }
 function aoTrocarFrete(){
   const r = document.querySelector('input[name="frete_servico"]:checked');
-  if(r){ frete = parseFloat(r.dataset.valor); recalcular(); }
+  if(r){
+    frete = parseFloat(r.dataset.valor);
+    const isLocal = r.dataset.id === 'LOCAL';
+    const bloco = document.getElementById('bloco-agendamento');
+    if(bloco) bloco.style.display = isLocal ? 'block' : 'none';
+    const sel = document.getElementById('entrega-agendada');
+    if(sel) sel.required = isLocal;
+    recalcular();
+  }
 }
 function aoTrocarForma(){
   const f = document.querySelector('input[name="forma_pagto"]:checked').value;
@@ -296,6 +319,18 @@ document.getElementById('form-checkout').addEventListener('submit', async (e)=>{
   dados.frete_valor = frete;
   dados.frete_servico = document.querySelector('input[name="frete_servico"]:checked')?.value || '';
   dados.embrulho_presente = document.getElementById('embrulho-check').checked;
+  // Horario de entrega agendada (so existe quando frete LOCAL)
+  const freteRadio = document.querySelector('input[name="frete_servico"]:checked');
+  if(freteRadio && freteRadio.dataset.id === 'LOCAL'){
+    const sel = document.getElementById('entrega-agendada');
+    if(!sel || !sel.value){
+      toast('Escolha o horário de entrega', 'err');
+      const btn2 = document.querySelector('button[type=submit]');
+      if(btn2){ btn2.disabled=false; btn2.textContent='Pagar e finalizar →'; }
+      return;
+    }
+    dados.entrega_agendada = sel.value;
+  }
   if(cupom) dados.cupom_codigo = cupom.codigo;
   try {
     const r = await fetch('/api/checkout/finalizar', {

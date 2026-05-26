@@ -238,6 +238,7 @@ def init_db():
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS embrulho_presente BOOLEAN DEFAULT FALSE",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS embrulho_mensagem VARCHAR(300)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS juros_valor NUMERIC(10,2) DEFAULT 0",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_agendada VARCHAR(40)",
         # Melhor Envio: além do etiqueta_id+rastreio que já existem,
         # precisamos guardar URL do PDF, nome do serviço, valor cotado.
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS melhorenvio_etiqueta_url TEXT",
@@ -1984,6 +1985,60 @@ def checkout_cep():
         return jsonify({'erro': str(e)}), 500
 
 
+def _slots_entrega_local():
+    """Gera horarios disponiveis pra entrega local (Cascavel).
+    Regras:
+    - Cliente compra ate 12:00 -> primeiro slot eh hoje 14:00.
+    - Compra depois das 12:00 -> primeiro slot eh amanha (primeiro horario do dia).
+    - Seg-sex: 09, 10, 11, 14, 15, 16, 17 (pula 12-13 do almoco).
+    - Sab: 09, 10, 11, 12.
+    - Dom: fechado.
+    Retorna lista de ate ~15 slots dos proximos 7 dias.
+    """
+    HORARIOS = {
+        0: [9, 10, 11, 14, 15, 16, 17],  # segunda
+        1: [9, 10, 11, 14, 15, 16, 17],
+        2: [9, 10, 11, 14, 15, 16, 17],
+        3: [9, 10, 11, 14, 15, 16, 17],
+        4: [9, 10, 11, 14, 15, 16, 17],  # sexta
+        5: [9, 10, 11, 12],              # sabado
+        6: [],                            # domingo fechado
+    }
+    DIA_LABEL = ['Segunda', 'Terça', 'Quarta', 'Quinta',
+                 'Sexta', 'Sábado', 'Domingo']
+    agora = datetime.now(SP_TZ)
+    hoje = agora.date()
+    # Se ja passou do meio-dia, comeca amanha
+    comeca_amanha = agora.hour >= 12
+    slots = []
+    for delta in range(0, 8):
+        dia = hoje + timedelta(days=delta)
+        dow = dia.weekday()
+        horas = HORARIOS.get(dow, [])
+        if not horas:
+            continue
+        for h in horas:
+            if delta == 0:
+                if comeca_amanha:
+                    continue
+                # Pra hoje, so aceita slots a partir das 14h (tempo pra preparar)
+                if h < 14:
+                    continue
+            if delta == 0:
+                label = f"Hoje ({dia.strftime('%d/%m')}) entre {h}h e {h+1}h"
+            elif delta == 1:
+                label = f"Amanhã ({dia.strftime('%d/%m')}) entre {h}h e {h+1}h"
+            else:
+                label = f"{DIA_LABEL[dow]} ({dia.strftime('%d/%m')}) entre {h}h e {h+1}h"
+            slots.append({
+                'value': f"{dia.strftime('%Y-%m-%d')} {h:02d}:00",
+                'label': label,
+            })
+        if len(slots) >= 15:
+            break
+    return slots[:15]
+
+
 @app.route('/api/checkout/frete')
 def checkout_frete():
     """Cota o frete pelo Melhor Envio. Cascavel (PR) tem entrega local
@@ -2003,10 +2058,12 @@ def checkout_frete():
                     cfg('frete_fixo_cidades', 'Cascavel').split(',') if c.strip()]
     uf_fixo = cfg('frete_fixo_uf', 'PR')
     if uf == uf_fixo and cidade in cidades_fixo:
+        slots = _slots_entrega_local()
         opcoes.append({'servico': 'Entrega Luqui (local)',
                        'valor': fixo_valor,
-                       'prazo': '1-2 dias úteis',
-                       'id': 'LOCAL'})
+                       'prazo': slots[0]['label'] if slots else 'Agendar',
+                       'id': 'LOCAL',
+                       'agendamento': slots})
     # Tenta Melhor Envio se tiver CEP + carrinho + conexão
     itens_sess = carrinho_ler() or []
     if cep and itens_sess and cfg('me_access_token'):
@@ -3099,14 +3156,15 @@ def checkout_finalizar():
     cli = cliente_logado()
     embrulho = bool(d.get('embrulho_presente'))
     embrulho_msg = ((d.get('embrulho_mensagem') or '').strip()[:300]) if embrulho else None
+    entrega_agendada = ((d.get('entrega_agendada') or '').strip()[:40]) or None
     ped = db_execute("""
         INSERT INTO pedidos
           (cliente_id, email, nome, telefone, cpf, cep, endereco, numero,
            complemento, bairro, cidade, uf, subtotal, frete, desconto, total,
            forma_pagto, parcelas, frete_servico, frete_prazo, observacao,
            cupom_codigo, cupom_desconto, embrulho_presente, embrulho_mensagem,
-           juros_valor)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+           juros_valor, entrega_agendada)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         RETURNING id""",
         [cli['id'] if cli else None,
          d['email'].strip().lower(), d['nome'].strip(), d['telefone'].strip(),
@@ -3118,7 +3176,7 @@ def checkout_finalizar():
          d.get('frete_servico') or 'A definir',
          d.get('frete_prazo') or '', d.get('observacao') or None,
          cupom_codigo or None, cupom_desconto,
-         embrulho, embrulho_msg, juros_valor],
+         embrulho, embrulho_msg, juros_valor, entrega_agendada],
         fetch='one')
     pid = ped['id']
     # Insere itens
