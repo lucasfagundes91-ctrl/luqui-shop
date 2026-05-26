@@ -201,6 +201,7 @@ const JUROS_AM = {{ juros_parcelamento_am }} / 100;
 let PONTOS_SALDO = {{ pontos_info.saldo if pontos_info else 0 }};
 let PONTOS_VPP = {{ pontos_info.valor_por_ponto if pontos_info else 0 }};
 let frete = 0;
+let freteCalculado = false;
 let cupom = null; // {codigo, desconto}
 
 async function aplicarCupom(){
@@ -295,6 +296,7 @@ async function buscarFrete(){
   </div>`;
   document.getElementById('bloco-frete').style.display='block';
   frete = d.opcoes[0].valor;
+  freteCalculado = true;
   aoTrocarFrete();
   recalcular();
 }
@@ -402,7 +404,7 @@ function recalcular(){
       total = totalParc;
     }
   }
-  document.getElementById('resumo-frete').textContent = frete===0?'GRÁTIS':'R$ '+frete.toFixed(2).replace('.',',');
+  document.getElementById('resumo-frete').textContent = !freteCalculado ? 'A calcular' : (frete===0 ? 'GRÁTIS' : 'R$ '+frete.toFixed(2).replace('.',','));
   document.getElementById('bloco-desconto').style.display = desconto>0?'flex':'none';
   document.getElementById('resumo-desconto').textContent = '-R$ '+desconto.toFixed(2).replace('.',',');
   document.getElementById('bloco-cupom').style.display = dcupom>0?'flex':'none';
@@ -425,6 +427,12 @@ document.getElementById('form-checkout').addEventListener('submit', async (e)=>{
   e.preventDefault();
   const btn = e.target.querySelector('button[type=submit]');
   btn.disabled = true; btn.textContent = 'Processando...';
+  if(!freteCalculado){
+    toast('Preencha o CEP pra calcular o frete antes de finalizar', 'err');
+    const btn2 = document.querySelector('button[type=submit]');
+    if(btn2){ btn2.disabled=false; btn2.textContent='Pagar e finalizar →'; }
+    return;
+  }
   const f = new FormData(e.target);
   const dados = Object.fromEntries(f.entries());
   dados.frete_valor = frete;
