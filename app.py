@@ -2616,11 +2616,20 @@ def cadastrar():
     if request.method == 'POST':
         d = {k: (request.form.get(k) or '').strip() for k in
              ('nome', 'email', 'senha', 'telefone', 'cpf', 'data_nascimento')}
+        cpf_digs = ''.join(c for c in d['cpf'] if c.isdigit())
+        tel_digs = ''.join(c for c in d['telefone'] if c.isdigit())
         if not d['nome'] or not d['email'] or len(d['senha']) < 6:
             erro = 'Preencha nome, e-mail e senha (mín 6 caracteres).'
+        elif not tel_digs or len(tel_digs) < 10:
+            erro = 'Informe o WhatsApp com DDD.'
+        elif len(cpf_digs) != 11:
+            erro = 'CPF é obrigatório (precisa ter 11 dígitos).'
         elif db_execute("SELECT 1 FROM clientes_site WHERE LOWER(email)=%s",
                         [d['email'].lower()], fetch='one'):
             erro = 'Esse e-mail já está cadastrado. Faça login.'
+        elif db_execute("SELECT 1 FROM clientes_site WHERE cpf=%s",
+                        [cpf_digs], fetch='one'):
+            erro = 'Esse CPF já está cadastrado. Faça login com o e-mail vinculado.'
         else:
             nv = db_execute(
                 """INSERT INTO clientes_site
@@ -2628,7 +2637,7 @@ def cadastrar():
                    VALUES (%s,%s,%s,%s,%s,%s) RETURNING id""",
                 [d['nome'], d['email'].lower(),
                  generate_password_hash(d['senha']),
-                 d['telefone'] or None, d['cpf'] or None,
+                 tel_digs, cpf_digs,
                  d['data_nascimento'] or None],
                 fetch='one')
             session.permanent = True

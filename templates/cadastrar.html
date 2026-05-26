@@ -26,10 +26,11 @@
              style="width:100%;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-bottom:10px">
       <input name="senha" type="password" placeholder="Senha (mín 6 caracteres) *" required minlength="6"
              style="width:100%;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-bottom:10px">
-      <input name="telefone" placeholder="WhatsApp"
+      <input name="telefone" placeholder="WhatsApp *" required
              style="width:100%;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-bottom:10px">
-      <input name="cpf" placeholder="CPF (opcional)"
-             style="width:100%;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-bottom:10px">
+      <input name="cpf" placeholder="CPF *" required inputmode="numeric"
+             style="width:100%;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-bottom:4px">
+      <p style="font-size:11px;color:var(--mut);margin-bottom:10px">Usamos pra vincular com o Clube de Pontos da loja física 🎁</p>
       <label style="font-size:11px;color:var(--mut);font-weight:700">🎂 Data de nascimento (ganha cupom no aniversário!)</label>
       <input name="data_nascimento" type="date"
              style="width:100%;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-bottom:16px;margin-top:4px">
