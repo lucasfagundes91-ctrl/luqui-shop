@@ -7,6 +7,7 @@ no PDV Pro automaticamente.
 import json
 import logging
 import os
+import secrets
 import time
 from datetime import datetime, timedelta
 from functools import wraps
@@ -101,6 +102,11 @@ def init_db():
             uf VARCHAR(2),
             criado_em TIMESTAMPTZ DEFAULT NOW()
         )""",
+        # OAuth Google: cadastro sem senha (sub = unique id do Google)
+        "ALTER TABLE clientes_site ALTER COLUMN senha_hash DROP NOT NULL",
+        "ALTER TABLE clientes_site ADD COLUMN IF NOT EXISTS google_sub VARCHAR(40)",
+        "ALTER TABLE clientes_site ADD COLUMN IF NOT EXISTS foto_url TEXT",
+        "CREATE INDEX IF NOT EXISTS idx_clientes_site_google ON clientes_site(google_sub)",
         # Pedidos da loja
         """CREATE TABLE IF NOT EXISTS pedidos (
             id SERIAL PRIMARY KEY,
@@ -2154,6 +2160,106 @@ def clube_cancelar():
 
 
 # ─── Login/cadastro do cliente ────────────────────────────────────────────────
+# ─── OAuth Google ────────────────────────────────────────────────────────────
+# Login com conta Google. Setup:
+# 1. Google Cloud Console → APIs & Services → Credentials → Create OAuth client ID
+# 2. Tipo: Web application
+# 3. Authorized redirect URI: https://www.luquibrinquedos.com.br/auth/google/callback
+# 4. Pegar Client ID + Client Secret, colocar em GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_OAUTH_CLIENT_ID', '')
+GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET', '')
+GOOGLE_OAUTH_HABILITADO = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
+app.jinja_env.globals['GOOGLE_OAUTH_HABILITADO'] = GOOGLE_OAUTH_HABILITADO
+
+
+@app.route('/auth/google/start')
+def auth_google_start():
+    """Inicia o fluxo OAuth: gera state, redireciona pro Google."""
+    if not GOOGLE_OAUTH_HABILITADO:
+        return 'Login com Google não configurado', 503
+    state = secrets.token_urlsafe(24)
+    session['google_oauth_state'] = state
+    next_url = request.args.get('next') or url_for('home')
+    session['google_oauth_next'] = next_url
+    redirect_uri = url_for('auth_google_callback', _external=True, _scheme='https')
+    params = {
+        'client_id': GOOGLE_CLIENT_ID,
+        'redirect_uri': redirect_uri,
+        'response_type': 'code',
+        'scope': 'openid email profile',
+        'state': state,
+        'access_type': 'online',
+        'prompt': 'select_account',
+    }
+    import urllib.parse
+    url = 'https://accounts.google.com/o/oauth2/v2/auth?' + urllib.parse.urlencode(params)
+    return redirect(url)
+
+
+@app.route('/auth/google/callback')
+def auth_google_callback():
+    """Volta do Google com code + state. Troca code por token, busca perfil,
+    loga ou cria cliente automaticamente."""
+    if not GOOGLE_OAUTH_HABILITADO:
+        return 'Login com Google não configurado', 503
+    code = request.args.get('code')
+    state = request.args.get('state')
+    if not code or not state or state != session.pop('google_oauth_state', None):
+        return render_template('login.html',
+                               erro='Sessão expirada ou inválida — tente entrar de novo.',
+                               categorias=listar_categorias(),
+                               carrinho=carrinho_ler()), 400
+    next_url = session.pop('google_oauth_next', None) or url_for('home')
+    redirect_uri = url_for('auth_google_callback', _external=True, _scheme='https')
+    # Troca code por access token
+    try:
+        tok = requests.post('https://oauth2.googleapis.com/token', data={
+            'code': code,
+            'client_id': GOOGLE_CLIENT_ID,
+            'client_secret': GOOGLE_CLIENT_SECRET,
+            'redirect_uri': redirect_uri,
+            'grant_type': 'authorization_code',
+        }, timeout=15).json()
+        access_token = tok.get('access_token')
+        if not access_token:
+            raise RuntimeError(f"token error: {tok.get('error_description') or tok}")
+        # Busca perfil
+        perfil = requests.get('https://www.googleapis.com/oauth2/v3/userinfo',
+                              headers={'Authorization': f'Bearer {access_token}'},
+                              timeout=15).json()
+        sub = perfil.get('sub')
+        email = (perfil.get('email') or '').strip().lower()
+        nome = (perfil.get('name') or perfil.get('given_name') or 'Cliente').strip()
+        foto = perfil.get('picture') or None
+        if not sub or not email:
+            raise RuntimeError('perfil sem sub/email')
+    except Exception as e:
+        print(f'[OAuth Google] erro: {e}', flush=True)
+        return render_template('login.html',
+                               erro='Falha ao conectar com o Google. Tente de novo.',
+                               categorias=listar_categorias(),
+                               carrinho=carrinho_ler()), 502
+    # Acha cliente: por google_sub primeiro, senao por email
+    c = db_execute("SELECT * FROM clientes_site WHERE google_sub=%s", [sub], fetch='one')
+    if not c:
+        c = db_execute("SELECT * FROM clientes_site WHERE LOWER(email)=%s",
+                       [email], fetch='one')
+        if c:
+            # Cliente ja existia com esse email (cadastro tradicional) — vincula Google
+            db_execute("UPDATE clientes_site SET google_sub=%s, foto_url=COALESCE(foto_url,%s) "
+                       "WHERE id=%s", [sub, foto, c['id']])
+    if not c:
+        # Cria novo cliente sem senha (so OAuth)
+        nv = db_execute(
+            "INSERT INTO clientes_site (nome, email, google_sub, foto_url) "
+            "VALUES (%s,%s,%s,%s) RETURNING id",
+            [nome[:160], email[:160], sub, foto], fetch='one')
+        c = {'id': nv['id']}
+    session.permanent = True
+    session['cliente_id'] = c['id']
+    return redirect(next_url)
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     erro = None
