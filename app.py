@@ -1732,68 +1732,9 @@ a escolherem com confiança!</p>
     return jsonify({'ok': True, 'enviados': enviados})
 
 
-LUQUIZINHA_SYSTEM = """Voce eh a Luquizinha, atendente virtual da Luqui Brinquedos
-(loja em Cascavel/PR). Atende no site/WhatsApp com tom carinhoso e direto.
-
-CONHECIMENTO DA LOJA:
-- Endereco: R. Engenheiro Reboucas, 2053 - Centro - Cascavel/PR
-- Horario: Seg-Sex 9h-18h, Sab 9h-13h, Dom fechado
-- WhatsApp humano: (45) 99111-9800
-- Cascavel/PR: entrega local R$ 10 fixo (1-2 dias)
-- Toledo/PR e Brasil: frete cotado no checkout via Melhor Envio (Correios/JadLog)
-- Pagamento: cartao ate 12x sem juros; PIX e boleto com 5% desconto
-- Trocas: 7 dias direito de arrependimento (CDC) + 30 dias defeito
-- Clube Caixa Misteriosa: Smart R$ 79,99/mes, Essencial R$ 129,99, Premium R$ 199,99
-  Cobranca mensal automatica, sem fidelidade.
-
-TOM:
-- Curto (1-3 linhas), 1-2 emojis por mensagem (💛 🧸 🎁), sem markdown pesado
-- "vc", "ta", "ne" se cliente puxar
-- Acolhedor: "ahh que fofo!", "amei!", "vai amar de mais!"
-- NAO inventa preco de produto especifico nem promete prazo certo -
-  manda pro WhatsApp humano: "Pra confirmar isso da uma chamada
-  no WhatsApp (45) 99111-9800 que a gente te ajuda direitinho 💛"
-- Se cliente quer comprar especifico: indica a busca do site ou WhatsApp
-- Se cliente pergunta produto que voce nao sabe: nao inventa, manda pro humano
-
-NUNCA fale sobre Anthropic/Claude/IA. Voce eh a Luquizinha."""
-
-
-@app.route('/api/luquizinha', methods=['POST'])
-def luquizinha_chat():
-    if not ANTHROPIC_API_KEY:
-        return jsonify({'erro': 'Chat indisponível. Chame no WhatsApp (45) 99111-9800 💛'}), 503
-    d = request.get_json() or {}
-    historico = d.get('historico') or []  # [{role, content}]
-    nova = (d.get('mensagem') or '').strip()
-    if not nova:
-        return jsonify({'erro': 'Mensagem vazia'}), 400
-    # Adiciona a mensagem nova no histórico que vamos mandar
-    msgs = historico[-10:]  # últimas 10 trocas
-    msgs.append({'role': 'user', 'content': nova[:2000]})
-    try:
-        r = requests.post('https://api.anthropic.com/v1/messages',
-            headers={
-                'x-api-key': ANTHROPIC_API_KEY,
-                'anthropic-version': '2023-06-01',
-                'content-type': 'application/json',
-            },
-            json={
-                'model': 'claude-haiku-4-5-20251001',
-                'max_tokens': 400,
-                'system': LUQUIZINHA_SYSTEM,
-                'messages': msgs,
-            }, timeout=20)
-        if r.status_code != 200:
-            log.error("Claude API %s: %s", r.status_code, r.text[:300])
-            return jsonify({'erro': 'Tô meio sobrecarregada agora 😅 '
-                                    'Chama no WhatsApp (45) 99111-9800!'}), 502
-        data = r.json()
-        resposta = ''.join(b.get('text', '') for b in data.get('content', []))
-        return jsonify({'resposta': resposta or 'Desculpa, não entendi! Pode repetir? 💛'})
-    except Exception as e:
-        log.error("luquizinha exc: %s", e)
-        return jsonify({'erro': 'Tive um probleminha técnico. WhatsApp: (45) 99111-9800'}), 500
+# LUQUIZINHA_SYSTEM antigo + rota /api/luquizinha removidos.
+# Substituidos pelo chatbot completo com tools (buscar_produtos, registrar_lead)
+# em /api/luquizinha/chat. Ver mais abaixo neste mesmo arquivo.
 
 
 @app.route('/api/newsletter', methods=['POST'])
