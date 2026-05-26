@@ -63,7 +63,11 @@ function copiarLink(){
   navigator.clipboard.writeText(url).then(()=>toast('Link copiado! 📋')).catch(()=>toast('Erro ao copiar','err'));
 }
 async function removerItem(id){
-  if(!confirm('Remover esse item da lista?')) return;
+  const ok = await luquiConfirm({
+    titulo:'Tirar da lista?',
+    msg:'O brinquedo sai da lista de aniversário. Você pode adicionar de novo depois.',
+    ok:'Tirar da lista', cancel:'Cancelar', perigo:true});
+  if(!ok) return;
   try {
     const r = await fetch('/api/listas/{{ lista.id }}/remover/'+id, {method:'POST'});
     const d = await r.json();

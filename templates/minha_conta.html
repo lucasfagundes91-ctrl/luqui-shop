@@ -71,10 +71,13 @@
 
     <script>
     async function pausarClube(){
-      if(!confirm('Pausar sua assinatura por 30 dias?')) return;
+      const ok = await luquiConfirm({titulo:'Pausar Clube Luqui?',
+        msg:'Sua assinatura fica pausada por 30 dias. Você não recebe a caixa misteriosa nesse período.',
+        ok:'Pausar', cancel:'Cancelar'});
+      if(!ok) return;
       const r=await fetch('/api/clube/pausar',{method:'POST'});
       const d=await r.json();
-      if(d.erro){ alert(d.erro); return; }
+      if(d.erro){ luquiAlert(d.erro); return; }
       location.reload();
     }
     async function reativarClube(){
@@ -85,20 +88,29 @@
       document.getElementById('modal-trocar').style.display='flex';
     }
     async function trocarPlano(slug){
-      if(!confirm('Trocar pro plano "'+slug+'"?')) return;
+      const ok = await luquiConfirm({titulo:'Trocar plano?',
+        msg:'Você vai trocar pro plano <b>'+slug+'</b>. Vamos gerar uma nova cobrança com o valor da nova mensalidade.',
+        ok:'Trocar', cancel:'Cancelar'});
+      if(!ok) return;
       const r=await fetch('/api/clube/trocar-plano',{
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({plano_slug:slug})
       });
       const d=await r.json();
-      if(d.erro){ alert(d.erro); return; }
-      alert('Troca feita! Confirme o pagamento da nova mensalidade.');
+      if(d.erro){ luquiAlert(d.erro); return; }
+      await luquiAlert('Troca feita! Confirme o pagamento da nova mensalidade.','✅ Plano trocado');
       location.reload();
     }
     async function cancelarClube(){
-      if(!confirm('Tem certeza que quer cancelar? Você perde os benefícios do plano.')) return;
+      const ok = await luquiConfirm({titulo:'Cancelar Clube Luqui?',
+        msg:'Você perde os benefícios do plano (caixa misteriosa, descontos exclusivos, acumulação de pontos extra). Tem certeza?',
+        ok:'Cancelar assinatura', cancel:'Manter assinatura', perigo:true});
+      if(!ok) return;
       const r=await fetch('/api/clube/cancelar',{method:'POST'});
-      if((await r.json()).ok){ alert('Assinatura cancelada.'); location.reload(); }
+      if((await r.json()).ok){
+        await luquiAlert('Assinatura cancelada.','Pronto');
+        location.reload();
+      }
     }
     </script>
   {% else %}

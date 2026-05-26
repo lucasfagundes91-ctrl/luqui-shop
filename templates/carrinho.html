@@ -69,7 +69,11 @@ async function atualizarQtd(pid, q){
   if((await r.json()).ok) location.reload();
 }
 async function removerItem(pid){
-  if(!confirm('Remover este item?')) return;
+  const ok = await luquiConfirm({
+    titulo:'Remover do carrinho?',
+    msg:'Esse item vai sair do seu carrinho. Você pode adicionar de novo quando quiser.',
+    ok:'Sim, remover', cancel:'Cancelar', perigo:true});
+  if(!ok) return;
   const r=await fetch('/api/carrinho/remove',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({produto_id:pid})});
   if((await r.json()).ok) location.reload();

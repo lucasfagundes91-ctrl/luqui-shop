@@ -702,6 +702,38 @@ function toast(msg, tipo='ok'){
   document.body.appendChild(d);
   setTimeout(()=>d.remove(), 3000);
 }
+// Modal de confirmacao padrao Luqui — substitui confirm() nativo do browser.
+// Uso: luquiConfirm({titulo, msg, ok, cancel, perigo}).then(confirmado => ...)
+function luquiConfirm(opts){
+  const o = Object.assign({titulo:'Confirmar', msg:'', ok:'Confirmar',
+    cancel:'Cancelar', perigo:false}, opts || {});
+  return new Promise(resolve=>{
+    const bg = document.createElement('div');
+    bg.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    const corOk = o.perigo ? '#DC2626' : '#1652C7';
+    bg.innerHTML = `
+      <div style="background:#fff;border-radius:16px;padding:24px 28px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <h3 style="color:${corOk};font-size:18px;font-weight:900;margin-bottom:8px">${o.titulo}</h3>
+        <p style="font-size:14px;color:#334155;line-height:1.5">${o.msg}</p>
+        <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
+          ${o.cancel ? `<button id="lq-cancel" style="background:#fff;color:#475569;border:1.5px solid #CBD5E1;padding:10px 20px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer">${o.cancel}</button>` : ''}
+          <button id="lq-ok" style="background:${corOk};color:#fff;border:0;padding:10px 22px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer">${o.ok}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(bg);
+    const close = (v)=>{ document.body.removeChild(bg); resolve(v); };
+    bg.querySelector('#lq-ok').onclick = ()=>close(true);
+    const elCancel = bg.querySelector('#lq-cancel');
+    if(elCancel) elCancel.onclick = ()=>close(false);
+    bg.onclick = (e)=>{ if(e.target===bg) close(false); };
+  });
+}
+
+// Alert estilizado — pra mensagens curtas use toast(); pra avisos longos use luquiAlert
+function luquiAlert(msg, titulo='Aviso'){
+  return luquiConfirm({titulo, msg, ok:'Ok', cancel:''}).then(()=>{});
+}
+
 async function carrinhoAdd(produto_id, qtd=1){
   try{
     const r=await fetch('/api/carrinho/add',{
@@ -731,9 +763,11 @@ async function addNaLista(produto_id, btn){
     const d = await r.json();
     const listas = d.listas || [];
     if(!listas.length){
-      if(confirm('Você ainda não tem uma lista de aniversário. Criar agora?')){
-        location.href = '/minhas-listas';
-      }
+      const criar = await luquiConfirm({
+        titulo:'🎂 Lista de aniversário',
+        msg:'Você ainda não tem uma lista de aniversário criada. Quer criar uma agora pro seu filho ou filha?',
+        ok:'Criar lista', cancel:'Agora não'});
+      if(criar) location.href = '/minhas-listas';
       return;
     }
     let listaId;
