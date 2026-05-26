@@ -696,6 +696,14 @@ def _menu_hierarquico():
     return out
 
 
+def _faixas_etarias_topbar():
+    """Lista de faixas etarias disponiveis no PDV, pro dropdown do header."""
+    try:
+        return listar_filtros().get('faixas_etarias', []) or []
+    except Exception:
+        return []
+
+
 @app.context_processor
 def _ctx_globals():
     # menu_hierarquico esta disponivel em TODA pagina (carrega cacheado)
@@ -706,7 +714,8 @@ def _ctx_globals():
     return {'ano': datetime.now(SP_TZ).year,
             'META_PIXEL_ID': META_PIXEL_ID,
             'GOOGLE_TAG_ID': GOOGLE_TAG_ID,
-            'menu_hierarquico': menu}
+            'menu_hierarquico': menu,
+            'faixas_etarias_topbar': _faixas_etarias_topbar()}
 
 
 @app.route('/api/checkout/cupom')
@@ -3058,13 +3067,16 @@ def checkout_finalizar():
             juros_valor = round(total - base, 2)
     # Cria pedido no banco (status aguardando_pagto)
     cli = cliente_logado()
+    embrulho = bool(d.get('embrulho_presente'))
+    embrulho_msg = ((d.get('embrulho_mensagem') or '').strip()[:300]) if embrulho else None
     ped = db_execute("""
         INSERT INTO pedidos
           (cliente_id, email, nome, telefone, cpf, cep, endereco, numero,
            complemento, bairro, cidade, uf, subtotal, frete, desconto, total,
            forma_pagto, parcelas, frete_servico, frete_prazo, observacao,
-           cupom_codigo, cupom_desconto)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+           cupom_codigo, cupom_desconto, embrulho_presente, embrulho_mensagem,
+           juros_valor)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         RETURNING id""",
         [cli['id'] if cli else None,
          d['email'].strip().lower(), d['nome'].strip(), d['telefone'].strip(),
@@ -3075,7 +3087,8 @@ def checkout_finalizar():
          d['forma_pagto'], parcelas,
          d.get('frete_servico') or 'A definir',
          d.get('frete_prazo') or '', d.get('observacao') or None,
-         cupom_codigo or None, cupom_desconto],
+         cupom_codigo or None, cupom_desconto,
+         embrulho, embrulho_msg, juros_valor],
         fetch='one')
     pid = ped['id']
     # Insere itens

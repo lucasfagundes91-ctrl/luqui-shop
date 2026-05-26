@@ -354,16 +354,18 @@ gtag('config', '{{ GOOGLE_TAG_ID }}');
     </button>
     <a href="/buscar?q=novidade">✨ Novidades</a>
     <a href="/buscar?q=mais+vendido">⭐ Mais vendidos</a>
+    {% if faixas_etarias_topbar %}
     <div class="idade-wrap" tabindex="0">
       <a href="#" onclick="event.preventDefault()">🎂 Presente por idade ▾</a>
       <div class="idade-drop">
-        <a href="/buscar?faixa_etaria=0+a+2+anos">0 a 2 anos</a>
-        <a href="/buscar?faixa_etaria=3+a+5+anos">3 a 5 anos</a>
-        <a href="/buscar?faixa_etaria=6+a+8+anos">6 a 8 anos</a>
-        <a href="/buscar?faixa_etaria=9+a+11+anos">9 a 11 anos</a>
-        <a href="/buscar?faixa_etaria=12%2B+anos">+12 anos</a>
+        {% for fx in faixas_etarias_topbar %}
+          <a href="/buscar?faixa_etaria={{ (fx.slug or fx.nome)|urlencode }}">
+            {{ fx.nome }}{% if fx.qtd %} <span style="color:var(--mut);font-size:11px">({{ fx.qtd }})</span>{% endif %}
+          </a>
+        {% endfor %}
       </div>
     </div>
+    {% endif %}
     <a href="/retirar-na-loja">🏪 Retire na loja</a>
     <span class="sep"></span>
     <a class="mlink promo" href="/promocoes">💥 LUQUIDA LUQUI</a>
