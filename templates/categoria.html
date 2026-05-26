@@ -8,9 +8,9 @@
   {%- set novos = ativos|reject('equalto', slug)|list if ja_marcado else (ativos + [slug]) -%}
   {%- set ns = namespace(qs='') -%}
   {%- for k, vs in filtros_ativos.items() if k != chave -%}
-    {%- for v in vs -%}{%- set ns.qs = ns.qs ~ k ~ '=' ~ v ~ '&' -%}{%- endfor -%}
+    {%- for v in vs -%}{%- set ns.qs = ns.qs ~ k ~ '=' ~ (v|urlencode) ~ '&' -%}{%- endfor -%}
   {%- endfor -%}
-  {%- for v in novos -%}{%- set ns.qs = ns.qs ~ chave ~ '=' ~ v ~ '&' -%}{%- endfor -%}
+  {%- for v in novos -%}{%- set ns.qs = ns.qs ~ chave ~ '=' ~ (v|urlencode) ~ '&' -%}{%- endfor -%}
   {%- if so_promo -%}{%- set ns.qs = ns.qs ~ 'promo=1&' -%}{%- endif -%}
   {%- if ordem and ordem != 'destaque' -%}{%- set ns.qs = ns.qs ~ 'ordem=' ~ ordem ~ '&' -%}{%- endif -%}
   <a href="?{{ ns.qs[:-1] if ns.qs else '' }}" class="filtro-link {% if ja_marcado %}on{% endif %}">
@@ -77,7 +77,7 @@
     {% if tem_ativos %}
       <div class="filtros-ativos">
         {% for k, vs in filtros_ativos.items() %}{% for v in vs %}
-          <a href="?{% for k2, vs2 in filtros_ativos.items() if k2 != k %}{% for v2 in vs2 %}{{ k2 }}={{ v2 }}&{% endfor %}{% endfor %}{% for v2 in vs if v2 != v %}{{ k }}={{ v2 }}&{% endfor %}" class="chip">✕ {{ v }}</a>
+          <a href="?{% for k2, vs2 in filtros_ativos.items() if k2 != k %}{% for v2 in vs2 %}{{ k2 }}={{ v2|urlencode }}&{% endfor %}{% endfor %}{% for v2 in vs if v2 != v %}{{ k }}={{ v2|urlencode }}&{% endfor %}" class="chip">✕ {{ v }}</a>
         {% endfor %}{% endfor %}
         <a href="/categoria/{{ categoria_slug }}" class="limpar">limpar tudo</a>
       </div>
