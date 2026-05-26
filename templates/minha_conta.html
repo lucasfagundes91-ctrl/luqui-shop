@@ -107,6 +107,25 @@
     </a>
   {% endif %}
 
+  {% if pontos_info and pontos_info.cliente_existe %}
+  <div style="background:linear-gradient(135deg,#FFF8E1,#FFE9A8);border:1px solid #FBBF24;padding:20px;border-radius:14px;margin-bottom:24px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
+      <div>
+        <div style="font-size:13px;color:#92400E;font-weight:700;text-transform:uppercase;letter-spacing:.5px">⭐ {{ pontos_info.nome_programa or 'Clube de Pontos' }}</div>
+        <div style="margin-top:6px;font-size:22px;font-weight:900;color:#92400E">
+          {{ '%.0f'|format(pontos_info.saldo) }} pontos
+        </div>
+        <div style="font-size:14px;color:#A16207;margin-top:2px">
+          Vale até <b>R$ {{ '%.2f'|format(pontos_info.valor_disponivel) }}</b> de desconto no checkout
+        </div>
+      </div>
+      <a href="/produtos" class="btn" style="background:#A16207;color:#fff;padding:10px 18px;border-radius:8px;font-weight:700;text-decoration:none">
+        Comprar e usar →
+      </a>
+    </div>
+  </div>
+  {% endif %}
+
   <a href="/minhas-listas" style="display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid var(--linha);padding:18px;border-radius:12px;margin-bottom:24px;text-decoration:none;color:var(--txt)">
     <div>
       <b style="color:var(--azul)">🎂 Listas de aniversário</b><br>

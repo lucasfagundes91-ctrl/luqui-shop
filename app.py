@@ -2771,9 +2771,11 @@ def minha_conta():
     planos = db_execute(
         "SELECT * FROM clube_planos WHERE ativo ORDER BY ordem",
         fetch='all') or []
+    pontos_info = pdv_consultar_pontos(c.get('cpf')) if c.get('cpf') else None
     return render_template('minha_conta.html',
                            cliente=c, pedidos=pedidos, assinatura=assinatura,
                            envios=envios, planos=planos,
+                           pontos_info=pontos_info,
                            categorias=listar_categorias(),
                            carrinho=carrinho_ler())
 
