@@ -410,6 +410,10 @@ def init_db():
                    "WHERE chave='frete_gratis_cidades' "
                    "  AND valor IN ('Cascavel,Toledo','Toledo,Cascavel',"
                    "                'Cascavel','Toledo')")
+        # Migração one-time: desconto PIX subiu de 5% pra 10% (so atualiza
+        # se ainda estiver no valor antigo padrao)
+        db_execute("UPDATE site_config SET valor='10' "
+                   "WHERE chave='desconto_pix_pct' AND valor='5'")
     except Exception as e:
         log.error("seed config: %s", e)
 
@@ -3051,7 +3055,7 @@ def checkout_finalizar():
     for c in obrig:
         if not (d.get(c) or '').strip():
             return jsonify({'erro': f'Campo {c} obrigatório'}), 400
-    if d['forma_pagto'] not in ('pix', 'cartao', 'boleto'):
+    if d['forma_pagto'] not in ('pix', 'cartao'):
         return jsonify({'erro': 'Forma de pagamento inválida'}), 400
     # Calcula totais
     subtotal = sum(float(it['preco']) * float(it['qtd']) for it in itens)
@@ -3061,8 +3065,6 @@ def checkout_finalizar():
     desconto = 0.0
     if d['forma_pagto'] == 'pix':
         desconto = round(subtotal * desconto_pix_pct / 100, 2)
-    elif d['forma_pagto'] == 'boleto':
-        desconto = round(subtotal * desconto_boleto_pct / 100, 2)
     # Cupom
     cupom_codigo = (d.get('cupom_codigo') or '').strip().upper()
     cupom_desconto = 0.0
@@ -3136,8 +3138,7 @@ def checkout_finalizar():
         db_execute("UPDATE pedidos SET status='erro_asaas' WHERE id=%s", [pid])
         return jsonify({'erro': 'Falha ao criar cliente Asaas. '
                                  'Tente novamente ou pedido pelo WhatsApp.'}), 502
-    billing = {'pix': 'PIX', 'cartao': 'CREDIT_CARD',
-               'boleto': 'BOLETO'}[d['forma_pagto']]
+    billing = {'pix': 'PIX', 'cartao': 'CREDIT_CARD'}[d['forma_pagto']]
     cobranca = asaas_criar_cobranca(
         customer_id, total, billing,
         descricao=f'Luqui Brinquedos — Pedido #{pid}',
