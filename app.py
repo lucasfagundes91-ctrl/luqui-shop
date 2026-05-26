@@ -235,6 +235,9 @@ def init_db():
         "ALTER TABLE banners ADD COLUMN IF NOT EXISTS cor_fundo VARCHAR(20) DEFAULT '#4FB8FF'",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_codigo VARCHAR(40)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_desconto NUMERIC(10,2) DEFAULT 0",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS embrulho_presente BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS embrulho_mensagem VARCHAR(300)",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS juros_valor NUMERIC(10,2) DEFAULT 0",
         # Melhor Envio: além do etiqueta_id+rastreio que já existem,
         # precisamos guardar URL do PDF, nome do serviço, valor cotado.
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS melhorenvio_etiqueta_url TEXT",
@@ -374,8 +377,11 @@ def init_db():
             # Deprecated (mantido por compat com configs antigas no banco)
             'frete_gratis_cidades': '',
             'frete_gratis_uf': '',
-            'desconto_pix_pct': '5',
+            'desconto_pix_pct': '10',
+            'desconto_boleto_pct': '5',
             'parcelamento_max': '12',
+            'parcela_minima': '50',  # parcela minima sem juros
+            'juros_parcelamento_am': '2.49',  # % ao mes, acima do limite sem juros
             'whatsapp_loja': WHATSAPP_LOJA,
             # Melhor Envio — preencher em /admin/melhorenvio
             'me_cep_origem': '85801080',  # Luqui Brinquedos Cascavel
@@ -1310,6 +1316,32 @@ def pag_sobre():
                            carrinho=carrinho_ler())
 
 
+@app.route('/retirar-na-loja')
+def pag_retirar_na_loja():
+    return render_template('pagina.html',
+                           titulo='🏪 Retire na loja',
+                           conteudo=(
+                               '<p>Compre no site e <b>retire grátis</b> na nossa loja em Cascavel/PR.</p>'
+                               '<h3>Como funciona</h3>'
+                               '<ol>'
+                               '<li>Faça o pedido no site e escolha <b>Retirar na loja</b> no frete.</li>'
+                               '<li>Aguarde a confirmação por WhatsApp — em geral em até 1 dia útil o pedido fica pronto.</li>'
+                               '<li>Vá até a loja com um documento com foto pra retirar.</li>'
+                               '</ol>'
+                               '<h3>Endereço</h3>'
+                               '<p>R. Engenheiro Rebouças, 2053 — Centro — Cascavel/PR<br>'
+                               'Estacionamento gratuito em frente</p>'
+                               '<h3>Horário</h3>'
+                               '<p>Seg a sex: 09:00 às 18:00<br>'
+                               'Sábado: 09:00 às 13:00<br>'
+                               'Domingo: fechado</p>'
+                               '<p>Dúvidas? <a href="https://wa.me/5545991119800">Fale com a gente no WhatsApp 💚</a></p>'
+                           ),
+                           categorias=listar_categorias(),
+                           cliente=cliente_logado(),
+                           carrinho=carrinho_ler())
+
+
 @app.route('/api/produto/<int:pid>/avaliacao', methods=['POST'])
 def avaliacao_criar(pid):
     c = cliente_logado()
@@ -1885,8 +1917,11 @@ def checkout_view():
                            categorias=listar_categorias(),
                            cliente=cliente_logado(),
                            carrinho=itens,
-                           desconto_pix_pct=float(cfg('desconto_pix_pct', '5')),
-                           parcelamento_max=int(cfg('parcelamento_max', '12')))
+                           desconto_pix_pct=float(cfg('desconto_pix_pct', '10')),
+                           desconto_boleto_pct=float(cfg('desconto_boleto_pct', '5')),
+                           parcelamento_max=int(cfg('parcelamento_max', '12')),
+                           parcela_minima=float(cfg('parcela_minima', '50')),
+                           juros_parcelamento_am=float(cfg('juros_parcelamento_am', '2.49')))
 
 
 @app.route('/api/checkout/cep')
@@ -2984,10 +3019,13 @@ def checkout_finalizar():
     # Calcula totais
     subtotal = sum(float(it['preco']) * float(it['qtd']) for it in itens)
     frete = float(d.get('frete_valor') or 0)
-    desconto_pct = float(cfg('desconto_pix_pct', '5'))
+    desconto_pix_pct = float(cfg('desconto_pix_pct', '10'))
+    desconto_boleto_pct = float(cfg('desconto_boleto_pct', '5'))
     desconto = 0.0
-    if d['forma_pagto'] in ('pix', 'boleto'):
-        desconto = round(subtotal * desconto_pct / 100, 2)
+    if d['forma_pagto'] == 'pix':
+        desconto = round(subtotal * desconto_pix_pct / 100, 2)
+    elif d['forma_pagto'] == 'boleto':
+        desconto = round(subtotal * desconto_boleto_pct / 100, 2)
     # Cupom
     cupom_codigo = (d.get('cupom_codigo') or '').strip().upper()
     cupom_desconto = 0.0
@@ -3002,9 +3040,22 @@ def checkout_finalizar():
             else:
                 cupom_desconto = min(float(c['valor']), subtotal)
             db_execute("UPDATE cupons SET usos=usos+1 WHERE id=%s", [c['id']])
-    total = max(0, round(subtotal + frete - desconto - cupom_desconto, 2))
+    base = max(0, round(subtotal + frete - desconto - cupom_desconto, 2))
     parcelas = max(1, min(int(cfg('parcelamento_max', '12')),
                           int(d.get('parcelas') or 1)))
+    # Parcelamento: sem juros enquanto parcela >= parcela_minima.
+    # Acima disso, aplica juros compostos (Tabela Price).
+    parc_min = float(cfg('parcela_minima', '50'))
+    juros_am = float(cfg('juros_parcelamento_am', '2.49')) / 100.0
+    juros_valor = 0.0
+    total = base
+    if d['forma_pagto'] == 'cartao' and parcelas > 1 and base > 0:
+        max_sem_juros = max(1, int(base // parc_min)) if parc_min > 0 else parcelas
+        if parcelas > max_sem_juros and juros_am > 0:
+            fator = (juros_am * (1 + juros_am) ** parcelas) / ((1 + juros_am) ** parcelas - 1)
+            parcela_valor = round(base * fator, 2)
+            total = round(parcela_valor * parcelas, 2)
+            juros_valor = round(total - base, 2)
     # Cria pedido no banco (status aguardando_pagto)
     cli = cliente_logado()
     ped = db_execute("""

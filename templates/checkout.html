@@ -16,16 +16,16 @@
         <h3 style="margin-bottom:16px">📍 Endereço de entrega</h3>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <input name="nome" placeholder="Nome completo *" required
-                 value="{{ cliente.nome if cliente else '' }}"
+                 value="{{ (cliente.nome if cliente else '') or '' }}"
                  style="padding:12px;border:1px solid var(--linha);border-radius:8px">
           <input name="email" type="email" placeholder="E-mail *" required
-                 value="{{ cliente.email if cliente else '' }}"
+                 value="{{ (cliente.email if cliente else '') or '' }}"
                  style="padding:12px;border:1px solid var(--linha);border-radius:8px">
           <input name="telefone" placeholder="WhatsApp *" required
-                 value="{{ cliente.telefone if cliente else '' }}"
+                 value="{{ (cliente.telefone if cliente else '') or '' }}"
                  style="padding:12px;border:1px solid var(--linha);border-radius:8px">
           <input name="cpf" placeholder="CPF *" required
-                 value="{{ cliente.cpf if cliente else '' }}"
+                 value="{{ (cliente.cpf if cliente else '') or '' }}"
                  style="padding:12px;border:1px solid var(--linha);border-radius:8px">
           <input name="cep" id="cep" placeholder="CEP *" required
                  onblur="buscarCep(this.value)"

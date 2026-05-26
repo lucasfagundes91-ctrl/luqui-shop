@@ -55,9 +55,19 @@
   /* ─── Barra de navegacao ─── */
   .menu{ background:var(--azul); position:relative; }
   .menu .container{ max-width:1200px; margin:0 auto; padding:0 12px;
-    display:flex; align-items:stretch; gap:4px; overflow-x:auto;
-    scrollbar-width:none; }
+    display:flex; align-items:stretch; justify-content:center; gap:4px;
+    overflow-x:auto; scrollbar-width:none; flex-wrap:nowrap; }
   .menu .container::-webkit-scrollbar{ display:none; }
+  .menu .idade-wrap{ position:relative; display:flex; align-items:center; }
+  .menu .idade-wrap > a{ cursor:pointer; }
+  .menu .idade-drop{ display:none; position:absolute; top:100%; left:0;
+    background:#fff; min-width:200px; box-shadow:0 8px 24px rgba(0,0,0,.18);
+    border-radius:0 0 12px 12px; padding:6px 0; z-index:60; }
+  .menu .idade-wrap:hover .idade-drop,
+  .menu .idade-wrap:focus-within .idade-drop{ display:block; }
+  .menu .idade-drop a{ display:block; color:var(--txt); padding:10px 18px;
+    font-size:13px; font-weight:600; white-space:nowrap; }
+  .menu .idade-drop a:hover{ background:#eaf2ff; color:var(--azul); }
   .menu a, .menu button.mlink{ color:#fff; font-weight:700; font-size:13.5px;
     padding:13px 16px; letter-spacing:.15px;
     transition:background .12s; display:inline-flex; align-items:center;
@@ -344,8 +354,19 @@ gtag('config', '{{ GOOGLE_TAG_ID }}');
     </button>
     <a href="/buscar?q=novidade">✨ Novidades</a>
     <a href="/buscar?q=mais+vendido">⭐ Mais vendidos</a>
+    <div class="idade-wrap" tabindex="0">
+      <a href="#" onclick="event.preventDefault()">🎂 Presente por idade ▾</a>
+      <div class="idade-drop">
+        <a href="/buscar?faixa_etaria=0+a+2+anos">0 a 2 anos</a>
+        <a href="/buscar?faixa_etaria=3+a+5+anos">3 a 5 anos</a>
+        <a href="/buscar?faixa_etaria=6+a+8+anos">6 a 8 anos</a>
+        <a href="/buscar?faixa_etaria=9+a+11+anos">9 a 11 anos</a>
+        <a href="/buscar?faixa_etaria=12%2B+anos">+12 anos</a>
+      </div>
+    </div>
+    <a href="/retirar-na-loja">🏪 Retire na loja</a>
     <span class="sep"></span>
-    <a class="mlink promo" href="/promocoes">🔥 Promoções</a>
+    <a class="mlink promo" href="/promocoes">💥 LUQUIDA LUQUI</a>
     <a class="mlink clube" href="/clube">🎁 Clube Luqui</a>
   </div>
 </nav>
