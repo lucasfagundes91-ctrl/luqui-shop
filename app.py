@@ -1028,7 +1028,7 @@ def pdv_get(path, params=None, ttl=60):
         return None
 
 
-_FILTROS_VALIDOS = ('departamento', 'grupo', 'subgrupo', 'marca', 'faixa_etaria')
+_FILTROS_VALIDOS = ('departamento', 'grupo', 'subgrupo', 'marca', 'faixa_etaria', 'destaque')
 
 
 def listar_produtos(busca=None, categoria=None, limite=24, offset=0, **filtros):
@@ -1794,6 +1794,34 @@ def buscar():
                            filtros_ativos=extras,
                            cliente=cliente_logado(),
                            carrinho=carrinho_ler())
+
+
+def _pagina_destaque(tag, titulo):
+    """Renderiza a pagina /novidades, /mais-vendidos, /liquida-luqui usando
+    o template de busca, filtrando produtos com a flag de destaque no PDV."""
+    produtos, total = listar_produtos(limite=48, destaque=tag)
+    return render_template('busca.html',
+                           produtos=produtos, total=total, termo=titulo,
+                           categorias=listar_categorias(),
+                           filtros=listar_filtros(),
+                           filtros_ativos={'destaque': [tag]},
+                           cliente=cliente_logado(),
+                           carrinho=carrinho_ler())
+
+
+@app.route('/novidades')
+def pag_novidades():
+    return _pagina_destaque('novidade', '✨ Novidades')
+
+
+@app.route('/mais-vendidos')
+def pag_mais_vendidos():
+    return _pagina_destaque('mais_vendido', '⭐ Mais vendidos')
+
+
+@app.route('/liquida-luqui')
+def pag_liquida_luqui():
+    return _pagina_destaque('liquida', '💥 LuquidaLuqui')
 
 
 @app.route('/produto/<int:pid>')
