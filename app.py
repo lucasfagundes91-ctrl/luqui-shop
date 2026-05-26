@@ -368,6 +368,43 @@ def init_db():
     except Exception as e:
         log.error("seed PRIMEIRO10: %s", e)
 
+    # Banners default (so insere se tabela estiver vazia — Lucas pode
+    # editar/desativar pelo /admin/banners depois)
+    try:
+        tem_banner = db_execute("SELECT COUNT(*) AS n FROM banners",
+                                fetch='one')
+        if not tem_banner or (tem_banner.get('n') or 0) == 0:
+            seeds = [
+                ('PAGUE NO PIX',
+                 'Ganhe <b style="color:#FFC700">10% de desconto</b> em qualquer compra!',
+                 '/produtos', 'Ver produtos',
+                 'linear-gradient(135deg,#15803D,#22C55E)', 1),
+                ('PARCELE EM 12X',
+                 'Sem juros (parcela mínima <b style="color:#FFC700">R$ 50</b>)',
+                 '/produtos', 'Comprar agora',
+                 'linear-gradient(135deg,#1652C7,#3B82F6)', 2),
+                ('RETIRE NA LOJA',
+                 '📍 Cascavel/PR — <b style="color:#FFC700">frete grátis</b>. Agende o horário no checkout!',
+                 '/retirar-na-loja', 'Como funciona',
+                 'linear-gradient(135deg,#0E7490,#06B6D4)', 3),
+                ('CLUBE LUQUI 🎁',
+                 'Descontos exclusivos + <b style="color:#FFC700">5% acumulativo</b> + 1 ponto a cada R$ 1',
+                 '/clube', 'Quero entrar',
+                 'linear-gradient(135deg,#A16207,#FFC700)', 4),
+                ('NOVIDADES ✨',
+                 'Confere o que <b style="color:#FFC700">chegou</b> de mais legal!',
+                 '/novidades', 'Ver novidades',
+                 'linear-gradient(135deg,#7C3AED,#EC4899)', 5),
+            ]
+            for tit, sub, link, cta, cor, ordem in seeds:
+                db_execute("""INSERT INTO banners
+                  (titulo, subtitulo, link, cta_texto, cor_fundo, ordem, ativo)
+                  VALUES (%s,%s,%s,%s,%s,%s,true)""",
+                  [tit, sub, link, cta, cor, ordem])
+            log.info("Seed: 5 banners default criados")
+    except Exception as e:
+        log.error("seed banners: %s", e)
+
     # Configs default
     try:
         defaults = {
