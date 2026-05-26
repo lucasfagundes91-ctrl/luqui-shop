@@ -53,12 +53,37 @@
     padding:1px 6px; border-radius:10px; font-weight:700; }
 
   /* ─── Mega-menu ─── */
-  .menu{ background:var(--azul); }
+  .menu{ background:var(--azul); position:relative; }
   .menu .container{ max-width:1200px; margin:0 auto; padding:0 16px;
     display:flex; flex-wrap:wrap; justify-content:center; gap:0; }
   .menu a{ color:#fff; font-weight:700; font-size:13px; padding:14px 14px;
     letter-spacing:.3px; text-transform:uppercase; transition:background .12s; }
   .menu a:hover, .menu a.atual{ background:var(--azul-d); }
+  /* item de departamento que tem grupos: vira dropdown */
+  .menu .has-sub{ position:relative; }
+  .menu .has-sub > a::after{ content:" ▾"; font-size:9px; opacity:.7; }
+  .menu .sub-panel{ display:none; position:absolute; top:100%; left:0;
+    background:#fff; min-width:240px; box-shadow:0 8px 24px rgba(0,0,0,.18);
+    border-radius:0 0 12px 12px; padding:8px 0; z-index:50; }
+  .menu .has-sub:hover > .sub-panel,
+  .menu .has-sub:focus-within > .sub-panel{ display:block; }
+  .menu .sub-panel a{ display:block; color:var(--azul); padding:9px 16px;
+    font-size:13px; font-weight:600; text-transform:none; letter-spacing:0; }
+  .menu .sub-panel a:hover{ background:#eaf2ff; }
+  /* grupo dentro do sub: dropdown lateral (subgrupos) */
+  .menu .grp{ position:relative; }
+  .menu .grp > a::after{ content:" ▸"; font-size:10px; color:#888; float:right; }
+  .menu .grp-panel{ display:none; position:absolute; top:0; left:100%;
+    background:#fff; min-width:220px; box-shadow:0 8px 24px rgba(0,0,0,.18);
+    border-radius:0 12px 12px 12px; padding:8px 0; }
+  .menu .grp:hover > .grp-panel{ display:block; }
+  .menu .grp-panel a{ color:#444; font-weight:500; font-size:12.5px; }
+  .menu .grp-panel a:hover{ background:#f5f8ff; color:var(--azul); }
+  @media (max-width:760px){
+    /* Em mobile: dropdowns viram clique, e cada nivel empilha */
+    .menu .sub-panel, .menu .grp-panel{ position:static; box-shadow:none; min-width:0; }
+    .menu .has-sub > a::after, .menu .grp > a::after{ display:none; }
+  }
 
   /* ─── Hero / Banners ─── */
   .hero{ max-width:1200px; margin:18px auto; padding:0 16px; }
@@ -284,29 +309,40 @@ gtag('config', '{{ GOOGLE_TAG_ID }}');
 <!-- MEGA-MENU -->
 <nav class="menu">
   <div class="container">
-    {% set cats = categorias or [] %}
-    {% if cats %}
-      {% for c in cats[:22] %}
-        <a href="/categoria/{{ c.slug }}">{{ c.nome }}</a>
+    {% set menu = menu_hierarquico or [] %}
+    {% if menu %}
+      {% for d in menu[:14] %}
+        {% if d.grupos %}
+          <div class="has-sub">
+            <a href="/categoria/{{ d.slug }}">{{ d.nome }}</a>
+            <div class="sub-panel">
+              {% for g in d.grupos %}
+                {% if g.subgrupos %}
+                  <div class="grp">
+                    <a href="/categoria/{{ d.slug }}?grupo={{ g.slug }}">{{ g.nome }}</a>
+                    <div class="grp-panel">
+                      {% for s in g.subgrupos %}
+                        <a href="/categoria/{{ d.slug }}?grupo={{ g.slug }}&subgrupo={{ s.slug }}">{{ s.nome }}</a>
+                      {% endfor %}
+                    </div>
+                  </div>
+                {% else %}
+                  <a href="/categoria/{{ d.slug }}?grupo={{ g.slug }}">{{ g.nome }}</a>
+                {% endif %}
+              {% endfor %}
+            </div>
+          </div>
+        {% else %}
+          <a href="/categoria/{{ d.slug }}">{{ d.nome }}</a>
+        {% endif %}
       {% endfor %}
+      <a href="/promocoes" style="background:#F59E0B; color:#fff;">🔥 Promoções</a>
+      <a href="/clube" style="background:var(--amarelo); color:var(--azul);">🎁 Clube Luqui</a>
     {% else %}
+      {# Fallback se a API estiver fora — links genericos #}
       <a href="/buscar?q=bebes">Bebês</a>
       <a href="/buscar?q=pelucia">Pelúcias</a>
       <a href="/buscar?q=boneca">Bonecas</a>
-      <a href="/buscar?q=boneco">Bonecos</a>
-      <a href="/buscar?q=praia">Praia e Piscina</a>
-      <a href="/buscar?q=esporte">Esporte e Lazer</a>
-      <a href="/buscar?q=rodados">Rodados</a>
-      <a href="/buscar?q=quebra-cabeca">Quebra-cabeça</a>
-      <a href="/buscar?q=artes">Artes</a>
-      <a href="/buscar?q=playground">Playground</a>
-      <a href="/buscar?q=pokemon">Pokémon</a>
-      <a href="/buscar?q=fantasia">Fantasia</a>
-      <a href="/buscar?q=nerf">Nerf</a>
-      <a href="/buscar?q=dinossauros">Dinossauros</a>
-      <a href="/buscar?q=lego">Lego</a>
-      <a href="/buscar?q=ferramentas">Ferramentas</a>
-      <a href="/buscar?q=carrinho">Carrinhos</a>
       <a href="/buscar?q=hot wheels">Hot Wheels</a>
       <a href="/promocoes" style="background:#F59E0B; color:#fff;">🔥 Promoções</a>
       <a href="/clube" style="background:var(--amarelo); color:var(--azul);">🎁 Clube Luqui</a>

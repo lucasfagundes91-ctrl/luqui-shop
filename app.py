@@ -632,11 +632,55 @@ app.jinja_env.globals['cfg'] = cfg
 app.jinja_env.globals['whatsapp_loja'] = lambda: cfg('whatsapp_loja', WHATSAPP_LOJA)
 
 
+# Cache do mega-menu pra nao bater /api/integracao/filtros em todo request
+_MENU_CACHE = {'data': None, 'ts': 0}
+_MENU_TTL = 300  # 5 minutos
+
+def _menu_hierarquico():
+    """Devolve a hierarquia depto > grupo > subgrupo pronta pro mega-menu.
+    Estrutura:
+      [{slug, nome, qtd, grupos: [{slug, nome, qtd, subgrupos: [...]}]}, ...]
+    Cacheado por 5 min porque sao usados em todas as paginas (header)."""
+    import time
+    agora = time.time()
+    if _MENU_CACHE['data'] and (agora - _MENU_CACHE['ts']) < _MENU_TTL:
+        return _MENU_CACHE['data']
+    f = listar_filtros()
+    deps = f.get('departamentos', []) or []
+    grupos = f.get('grupos', []) or []
+    subs = f.get('subgrupos', []) or []
+    # Indexa subs por pai_slug (grupo_slug)
+    subs_por_grupo = {}
+    for s in subs:
+        subs_por_grupo.setdefault(s.get('pai_slug') or '', []).append(s)
+    # Indexa grupos por pai_slug (depto_slug) + anexa subgrupos
+    grps_por_depto = {}
+    for g in grupos:
+        g2 = dict(g)
+        g2['subgrupos'] = subs_por_grupo.get(g.get('slug') or '', [])
+        grps_por_depto.setdefault(g.get('pai_slug') or '', []).append(g2)
+    # Monta a lista de departamentos com grupos aninhados
+    out = []
+    for d in deps:
+        d2 = dict(d)
+        d2['grupos'] = grps_por_depto.get(d.get('slug') or '', [])
+        out.append(d2)
+    _MENU_CACHE['data'] = out
+    _MENU_CACHE['ts'] = agora
+    return out
+
+
 @app.context_processor
 def _ctx_globals():
+    # menu_hierarquico esta disponivel em TODA pagina (carrega cacheado)
+    try:
+        menu = _menu_hierarquico()
+    except Exception:
+        menu = []
     return {'ano': datetime.now(SP_TZ).year,
             'META_PIXEL_ID': META_PIXEL_ID,
-            'GOOGLE_TAG_ID': GOOGLE_TAG_ID}
+            'GOOGLE_TAG_ID': GOOGLE_TAG_ID,
+            'menu_hierarquico': menu}
 
 
 @app.route('/api/checkout/cupom')
@@ -1062,8 +1106,8 @@ o reembolso integral, sem necessidade de justificativa.</p>
     'entregas': {
         'titulo': 'Entregas e prazos',
         'conteudo': """
-<h3>Frete grátis</h3>
-<p>Entrega <b>GRÁTIS</b> para Cascavel e Toledo (PR)! Prazo: 1 a 2 dias úteis.</p>
+<h3>Entrega local Cascavel</h3>
+<p>Cascavel/PR: <b>R$ 10 fixo</b>, entrega em 1 a 2 dias úteis. Toledo/PR e demais cidades: frete calculado no checkout pelo Melhor Envio.</p>
 
 <h3>Demais regiões do Paraná</h3>
 <ul>
@@ -1455,9 +1499,8 @@ CONHECIMENTO DA LOJA:
 - Endereco: R. Engenheiro Reboucas, 2053 - Centro - Cascavel/PR
 - Horario: Seg-Sex 9h-18h, Sab 9h-13h, Dom fechado
 - WhatsApp humano: (45) 99111-9800
-- Frete GRATIS em Cascavel e Toledo/PR
-- Resto do Brasil: PAC R$ 39,90 (5-9 dias) ou SEDEX R$ 62,90 (2-4 dias)
-- Resto do PR: PAC R$ 24,90 ou SEDEX R$ 38,90
+- Cascavel/PR: entrega local R$ 10 fixo (1-2 dias)
+- Toledo/PR e Brasil: frete cotado no checkout via Melhor Envio (Correios/JadLog)
 - Pagamento: cartao ate 12x sem juros; PIX e boleto com 5% desconto
 - Trocas: 7 dias direito de arrependimento (CDC) + 30 dias defeito
 - Clube Caixa Misteriosa: Smart R$ 79,99/mes, Essencial R$ 129,99, Premium R$ 199,99
