@@ -54,12 +54,15 @@
 
   /* ─── Mega-menu ─── */
   .menu{ background:var(--azul); position:relative; }
-  .menu .container{ max-width:1200px; margin:0 auto; padding:0 16px;
-    display:flex; flex-wrap:wrap; justify-content:center; align-items:stretch; gap:0; }
-  .menu a, .menu .has-sub > a{ color:#fff; font-weight:700; font-size:12.5px;
-    padding:12px 14px; letter-spacing:.3px; text-transform:uppercase;
+  .menu .container{ max-width:1200px; margin:0 auto; padding:0 8px;
+    display:flex; flex-wrap:wrap; justify-content:center; align-items:stretch;
+    gap:2px; }
+  .menu a, .menu .has-sub > a{ color:#fff; font-weight:600; font-size:13.5px;
+    padding:11px 13px; letter-spacing:.15px;
     transition:background .12s; display:flex; align-items:center;
-    max-width:200px; line-height:1.25; }
+    max-width:180px; line-height:1.2;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    border-radius:6px; }
   .menu a:hover, .menu a.atual, .menu .has-sub:hover > a{ background:var(--azul-d); }
   /* item de departamento que tem grupos: vira dropdown */
   .menu .has-sub{ position:relative; }
@@ -321,26 +324,26 @@ gtag('config', '{{ GOOGLE_TAG_ID }}');
       {% for d in menu[:14] %}
         {% if d.grupos %}
           <div class="has-sub">
-            <a href="/categoria/{{ d.slug }}">{{ d.nome }}</a>
+            <a href="/categoria/{{ d.slug }}" title="{{ d.nome|titulo }}">{{ d.nome|titulo }}</a>
             <div class="sub-panel">
               {% for g in d.grupos %}
                 {% if g.subgrupos %}
                   <div class="grp">
-                    <a href="/categoria/{{ d.slug }}?grupo={{ g.slug }}">{{ g.nome }}</a>
+                    <a href="/categoria/{{ d.slug }}?grupo={{ g.slug }}">{{ g.nome|titulo }}</a>
                     <div class="grp-panel">
                       {% for s in g.subgrupos %}
-                        <a href="/categoria/{{ d.slug }}?grupo={{ g.slug }}&subgrupo={{ s.slug }}">{{ s.nome }}</a>
+                        <a href="/categoria/{{ d.slug }}?grupo={{ g.slug }}&subgrupo={{ s.slug }}">{{ s.nome|titulo }}</a>
                       {% endfor %}
                     </div>
                   </div>
                 {% else %}
-                  <a href="/categoria/{{ d.slug }}?grupo={{ g.slug }}">{{ g.nome }}</a>
+                  <a href="/categoria/{{ d.slug }}?grupo={{ g.slug }}">{{ g.nome|titulo }}</a>
                 {% endif %}
               {% endfor %}
             </div>
           </div>
         {% else %}
-          <a href="/categoria/{{ d.slug }}">{{ d.nome }}</a>
+          <a href="/categoria/{{ d.slug }}" title="{{ d.nome|titulo }}">{{ d.nome|titulo }}</a>
         {% endif %}
       {% endfor %}
       <a href="/promocoes" style="background:#F59E0B; color:#fff;">🔥 Promoções</a>

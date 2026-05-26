@@ -638,6 +638,20 @@ app.jinja_env.globals['cfg'] = cfg
 app.jinja_env.globals['whatsapp_loja'] = lambda: cfg('whatsapp_loja', WHATSAPP_LOJA)
 
 
+@app.template_filter('titulo')
+def _filtro_titulo(s):
+    """Title case PT-BR: 'CARRO MOTO NAVAL AVIAO' -> 'Carro Moto Naval Aviao'.
+    Preposicoes/artigos curtos ficam em minuscula."""
+    if not s:
+        return s
+    pequenas = {'de', 'da', 'do', 'das', 'dos', 'e', 'a', 'o', 'as', 'os'}
+    palavras = str(s).lower().split()
+    return ' '.join(
+        p.capitalize() if (i == 0 or p not in pequenas) else p
+        for i, p in enumerate(palavras)
+    )
+
+
 # Cache do mega-menu pra nao bater /api/integracao/filtros em todo request
 _MENU_CACHE = {'data': None, 'ts': 0}
 _MENU_TTL = 300  # 5 minutos
