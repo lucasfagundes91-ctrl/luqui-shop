@@ -52,48 +52,68 @@
   .cart-badge{ background:var(--vermelho); color:#fff; font-size:11px;
     padding:1px 6px; border-radius:10px; font-weight:700; }
 
-  /* ─── Mega-menu ─── */
+  /* ─── Barra de navegacao ─── */
   .menu{ background:var(--azul); position:relative; }
-  .menu .container{ max-width:1200px; margin:0 auto; padding:0 8px;
-    display:flex; flex-wrap:wrap; justify-content:center; align-items:stretch;
-    gap:2px; }
-  .menu a, .menu .has-sub > a{ color:#fff; font-weight:600; font-size:13.5px;
-    padding:11px 13px; letter-spacing:.15px;
-    transition:background .12s; display:flex; align-items:center;
-    max-width:180px; line-height:1.2;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-    border-radius:6px; }
-  .menu a:hover, .menu a.atual, .menu .has-sub:hover > a{ background:var(--azul-d); }
-  /* item de departamento que tem grupos: vira dropdown */
-  .menu .has-sub{ position:relative; }
-  .menu .has-sub > a::after{ content:" ▾"; font-size:9px; opacity:.7;
-    margin-left:5px; display:inline-block; }
-  .menu .sub-panel{ display:none; position:absolute; top:100%; left:0;
-    background:#fff; min-width:260px; box-shadow:0 8px 24px rgba(0,0,0,.18);
-    border-radius:0 0 12px 12px; padding:8px 0; z-index:50; }
-  .menu .has-sub:hover > .sub-panel,
-  .menu .has-sub:focus-within > .sub-panel{ display:block; }
-  .menu .sub-panel a{ display:flex; justify-content:space-between; align-items:center;
-    color:var(--azul); padding:10px 18px; font-size:13px; font-weight:600;
-    text-transform:none; letter-spacing:0; max-width:none; line-height:1.3; }
-  .menu .sub-panel a:hover{ background:#eaf2ff; }
-  /* grupo dentro do sub: dropdown lateral (subgrupos) */
-  .menu .grp{ position:relative; }
-  .menu .grp > a::after{ content:"▸"; font-size:11px; color:#aaa;
-    margin-left:8px; }
-  .menu .grp-panel{ display:none; position:absolute; top:-8px; left:100%;
-    background:#fff; min-width:240px; box-shadow:0 8px 24px rgba(0,0,0,.18);
-    border-radius:0 12px 12px 12px; padding:8px 0; }
-  .menu .grp:hover > .grp-panel{ display:block; }
-  .menu .grp-panel a{ color:#444; font-weight:500; font-size:12.5px;
-    padding:9px 18px; justify-content:flex-start; }
-  .menu .grp-panel a:hover{ background:#f5f8ff; color:var(--azul); }
-  @media (max-width:760px){
-    /* Em mobile: dropdowns viram clique, e cada nivel empilha */
-    .menu .sub-panel, .menu .grp-panel{ position:static; box-shadow:none; min-width:0; }
-    .menu .has-sub > a::after, .menu .grp > a::after{ display:none; }
-    .menu a, .menu .has-sub > a{ max-width:none; }
-  }
+  .menu .container{ max-width:1200px; margin:0 auto; padding:0 12px;
+    display:flex; align-items:stretch; gap:4px; overflow-x:auto;
+    scrollbar-width:none; }
+  .menu .container::-webkit-scrollbar{ display:none; }
+  .menu a, .menu button.mlink{ color:#fff; font-weight:700; font-size:13.5px;
+    padding:13px 16px; letter-spacing:.15px;
+    transition:background .12s; display:inline-flex; align-items:center;
+    gap:6px; line-height:1.2; white-space:nowrap; border-radius:6px;
+    background:transparent; cursor:pointer; }
+  .menu a:hover, .menu a.atual, .menu button.mlink:hover{ background:var(--azul-d); }
+  .menu .deptos-btn{ background:var(--amarelo); color:var(--azul);
+    font-weight:900; padding:11px 18px; border-radius:8px; margin:6px 8px 6px 0;
+    font-size:14px; box-shadow:0 2px 0 var(--amarelo-d); }
+  .menu .deptos-btn:hover{ background:var(--amarelo-d); }
+  .menu .sep{ width:1px; background:rgba(255,255,255,.18); margin:8px 4px; }
+  .menu .mlink.promo{ background:#F59E0B; }
+  .menu .mlink.promo:hover{ background:#D97706; }
+  .menu .mlink.clube{ background:var(--amarelo); color:var(--azul); }
+  .menu .mlink.clube:hover{ background:var(--amarelo-d); }
+
+  /* ─── Drawer lateral (todos os departamentos) ─── */
+  .drawer-bg{ position:fixed; inset:0; background:rgba(15,23,42,.55);
+    z-index:90; opacity:0; pointer-events:none; transition:opacity .2s; }
+  .drawer-bg.aberto{ opacity:1; pointer-events:auto; }
+  .drawer{ position:fixed; top:0; left:0; bottom:0; width:340px; max-width:90vw;
+    background:#fff; z-index:100; transform:translateX(-100%);
+    transition:transform .25s ease; display:flex; flex-direction:column; }
+  .drawer.aberto{ transform:translateX(0); }
+  .drawer-h{ display:flex; align-items:center; justify-content:space-between;
+    padding:18px 20px; border-bottom:1px solid var(--linha); flex:none; }
+  .drawer-h h3{ font-size:16px; font-weight:900; color:var(--azul);
+    text-transform:uppercase; letter-spacing:1px; }
+  .drawer-h .fechar{ background:transparent; font-size:24px; color:var(--mut);
+    line-height:1; padding:0 6px; }
+  .drawer-h .fechar:hover{ color:var(--azul); }
+  .drawer-lista{ flex:1; overflow-y:auto; padding:8px 0; }
+  .drawer-lista .dep{ }
+  .drawer-lista .dep > .top{ display:flex; align-items:center;
+    justify-content:space-between; padding:13px 22px; cursor:pointer;
+    font-weight:700; font-size:14px; color:var(--txt); border-bottom:1px solid #F1F5F9; }
+  .drawer-lista .dep > .top:hover{ background:#F8FAFC; color:var(--azul); }
+  .drawer-lista .dep > .top .nome{ flex:1; }
+  .drawer-lista .dep > .top .chev{ font-size:13px; color:var(--mut);
+    transition:transform .2s; }
+  .drawer-lista .dep.aberto > .top .chev{ transform:rotate(90deg);
+    color:var(--azul); }
+  .drawer-lista .sub-list{ display:none; background:#F8FAFC; padding:4px 0; }
+  .drawer-lista .dep.aberto > .sub-list{ display:block; }
+  .drawer-lista .sub-list a{ display:block; padding:9px 38px;
+    font-size:13px; color:#475569; border:0; }
+  .drawer-lista .sub-list a:hover{ background:#E8F0FE; color:var(--azul);
+    font-weight:600; }
+  .drawer-lista .sub-list .gr{ display:block; padding:10px 32px 4px;
+    font-size:11px; font-weight:800; color:var(--azul);
+    text-transform:uppercase; letter-spacing:.5px; }
+  .drawer-f{ padding:14px 20px; border-top:1px solid var(--linha);
+    background:#F8FAFC; display:flex; flex-direction:column; gap:8px; }
+  .drawer-f a{ display:flex; align-items:center; gap:8px; padding:10px 12px;
+    border-radius:8px; font-size:13.5px; font-weight:700; color:var(--azul); }
+  .drawer-f a:hover{ background:#fff; }
 
   /* ─── Hero / Banners ─── */
   .hero{ max-width:1200px; margin:18px auto; padding:0 16px; }
@@ -212,8 +232,8 @@
   @media (max-width: 900px){
     .topo .container{ flex-wrap:wrap; }
     .busca{ order:3; flex-basis:100%; }
-    .menu .container{ overflow-x:auto; flex-wrap:nowrap; justify-content:flex-start; }
-    .menu a{ white-space:nowrap; }
+    .menu a, .menu button.mlink{ padding:11px 12px; font-size:12.5px; }
+    .menu .deptos-btn{ padding:9px 14px; font-size:13px; }
     .hero .slide h2{ font-size:36px; }
     .badges{ grid-template-columns:repeat(2,1fr); }
     .produtos{ grid-template-columns:repeat(2,1fr); }
@@ -316,49 +336,87 @@ gtag('config', '{{ GOOGLE_TAG_ID }}');
   </div>
 </header>
 
-<!-- MEGA-MENU -->
+<!-- BARRA DE NAVEGACAO -->
 <nav class="menu">
   <div class="container">
-    {% set menu = menu_hierarquico or [] %}
-    {% if menu %}
-      {% for d in menu[:14] %}
-        {% if d.grupos %}
-          <div class="has-sub">
-            <a href="/categoria/{{ d.slug }}" title="{{ d.nome|titulo }}">{{ d.nome|titulo }}</a>
-            <div class="sub-panel">
-              {% for g in d.grupos %}
-                {% if g.subgrupos %}
-                  <div class="grp">
-                    <a href="/categoria/{{ d.slug }}?grupo={{ g.slug }}">{{ g.nome|titulo }}</a>
-                    <div class="grp-panel">
-                      {% for s in g.subgrupos %}
-                        <a href="/categoria/{{ d.slug }}?grupo={{ g.slug }}&subgrupo={{ s.slug }}">{{ s.nome|titulo }}</a>
-                      {% endfor %}
-                    </div>
-                  </div>
-                {% else %}
-                  <a href="/categoria/{{ d.slug }}?grupo={{ g.slug }}">{{ g.nome|titulo }}</a>
-                {% endif %}
-              {% endfor %}
-            </div>
-          </div>
-        {% else %}
-          <a href="/categoria/{{ d.slug }}" title="{{ d.nome|titulo }}">{{ d.nome|titulo }}</a>
-        {% endif %}
-      {% endfor %}
-      <a href="/promocoes" style="background:#F59E0B; color:#fff;">🔥 Promoções</a>
-      <a href="/clube" style="background:var(--amarelo); color:var(--azul);">🎁 Clube Luqui</a>
-    {% else %}
-      {# Fallback se a API estiver fora — links genericos #}
-      <a href="/buscar?q=bebes">Bebês</a>
-      <a href="/buscar?q=pelucia">Pelúcias</a>
-      <a href="/buscar?q=boneca">Bonecas</a>
-      <a href="/buscar?q=hot wheels">Hot Wheels</a>
-      <a href="/promocoes" style="background:#F59E0B; color:#fff;">🔥 Promoções</a>
-      <a href="/clube" style="background:var(--amarelo); color:var(--azul);">🎁 Clube Luqui</a>
-    {% endif %}
+    <button class="mlink deptos-btn" onclick="abrirDeptos()" aria-label="Todos os departamentos">
+      ☰ Todos os departamentos
+    </button>
+    <a href="/buscar?q=novidade">✨ Novidades</a>
+    <a href="/buscar?q=mais+vendido">⭐ Mais vendidos</a>
+    <span class="sep"></span>
+    <a class="mlink promo" href="/promocoes">🔥 Promoções</a>
+    <a class="mlink clube" href="/clube">🎁 Clube Luqui</a>
   </div>
 </nav>
+
+<!-- DRAWER de departamentos -->
+{% set menu = menu_hierarquico or [] %}
+<div class="drawer-bg" id="drawer-bg" onclick="fecharDeptos()"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-h">
+    <h3>🏬 Departamentos</h3>
+    <button class="fechar" onclick="fecharDeptos()" aria-label="Fechar">×</button>
+  </div>
+  <div class="drawer-lista">
+    {% if menu %}
+      {% for d in menu %}
+        <div class="dep">
+          <div class="top" onclick="toggleDep(this)">
+            <a href="/categoria/{{ d.slug }}" class="nome" style="color:inherit">{{ d.nome|titulo }}</a>
+            {% if d.grupos %}<span class="chev">›</span>{% endif %}
+          </div>
+          {% if d.grupos %}
+          <div class="sub-list">
+            <a href="/categoria/{{ d.slug }}" style="font-weight:700;color:var(--azul)">Ver tudo de {{ d.nome|titulo }} →</a>
+            {% for g in d.grupos %}
+              {% if g.subgrupos %}
+                <span class="gr">{{ g.nome|titulo }}</span>
+                {% for s in g.subgrupos %}
+                  <a href="/categoria/{{ d.slug }}?grupo={{ g.slug }}&subgrupo={{ s.slug }}">{{ s.nome|titulo }}</a>
+                {% endfor %}
+              {% else %}
+                <a href="/categoria/{{ d.slug }}?grupo={{ g.slug }}">{{ g.nome|titulo }}</a>
+              {% endif %}
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    {% else %}
+      <div style="padding:20px;color:var(--mut);font-size:13px;text-align:center">
+        Catálogo carregando...
+      </div>
+    {% endif %}
+  </div>
+  <div class="drawer-f">
+    <a href="/promocoes">🔥 Promoções</a>
+    <a href="/clube">🎁 Clube Luqui</a>
+    <a href="/sobre">ℹ️ Sobre a Luqui</a>
+  </div>
+</aside>
+<script>
+function abrirDeptos(){
+  document.getElementById('drawer-bg').classList.add('aberto');
+  document.getElementById('drawer').classList.add('aberto');
+  document.getElementById('drawer').setAttribute('aria-hidden','false');
+  document.body.style.overflow='hidden';
+}
+function fecharDeptos(){
+  document.getElementById('drawer-bg').classList.remove('aberto');
+  document.getElementById('drawer').classList.remove('aberto');
+  document.getElementById('drawer').setAttribute('aria-hidden','true');
+  document.body.style.overflow='';
+}
+function toggleDep(el){
+  // Se o clique foi no link "nome", deixa navegar normalmente
+  if(event.target.tagName==='A') return;
+  el.parentElement.classList.toggle('aberto');
+}
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape') fecharDeptos();
+});
+</script>
 
 {% block conteudo %}{% endblock %}
 
