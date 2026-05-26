@@ -1136,8 +1136,30 @@ def listar_categorias():
     return r.get('categorias', [])
 
 
+def _dedupe_por_slug(items):
+    """Junta items com mesmo slug somando qtd. Usado pra remover
+    duplicacao quando um grupo/subgrupo aparece em mais de um departamento
+    (ex: o endpoint do PDV agrupa por (grupo, depto), entao "FAZENDA E
+    ANIMAIS" pode vir 2x se tiver em 2 deptos). Mantem o primeiro 'pai'."""
+    if not items:
+        return []
+    acc = {}
+    ordem = []
+    for it in items:
+        s = it.get('slug') or ''
+        if s not in acc:
+            acc[s] = dict(it)
+            ordem.append(s)
+        else:
+            acc[s]['qtd'] = (acc[s].get('qtd') or 0) + (it.get('qtd') or 0)
+    return [acc[s] for s in ordem]
+
+
 def listar_filtros():
-    """Hierarquia departamento > grupo > subgrupo + marca + faixa etária."""
+    """Hierarquia departamento > grupo > subgrupo + marca + faixa etária.
+    Retorna RAW com pai_slug — categoria.html usa pra filtrar grupos do
+    departamento atual. Pra paginas "planas" (busca/produtos/destaques),
+    use listar_filtros_planos() pra remover duplicatas."""
     r = pdv_get('/api/integracao/filtros') or {}
     return {
         'departamentos':  r.get('departamentos', []),
@@ -1145,6 +1167,20 @@ def listar_filtros():
         'subgrupos':      r.get('subgrupos', []),
         'marcas':         r.get('marcas', []),
         'faixas_etarias': r.get('faixas_etarias', []),
+    }
+
+
+def listar_filtros_planos():
+    """Versao dedupada pra paginas sem hierarquia (busca, /produtos,
+    /novidades, /mais-vendidos, /liquida-luqui). Junta grupos com mesmo
+    slug somando qtd."""
+    f = listar_filtros()
+    return {
+        'departamentos':  f['departamentos'],
+        'grupos':         _dedupe_por_slug(f['grupos']),
+        'subgrupos':      _dedupe_por_slug(f['subgrupos']),
+        'marcas':         f['marcas'],
+        'faixas_etarias': f['faixas_etarias'],
     }
 
 
@@ -1865,7 +1901,7 @@ def buscar():
                            produtos=produtos, total=total,
                            termo=q or 'Busca', termo_q=q,
                            categorias=listar_categorias(),
-                           filtros=listar_filtros(),
+                           filtros=listar_filtros_planos(),
                            filtros_ativos=extras,
                            cliente=cliente_logado(),
                            carrinho=carrinho_ler())
@@ -1882,7 +1918,7 @@ def _pagina_destaque(tag, titulo):
                            produtos=produtos, total=total,
                            termo=titulo, termo_q='',
                            categorias=listar_categorias(),
-                           filtros=listar_filtros(),
+                           filtros=listar_filtros_planos(),
                            filtros_ativos={k: v for k, v in extras.items() if k != 'destaque'},
                            cliente=cliente_logado(),
                            carrinho=carrinho_ler())
@@ -1897,7 +1933,7 @@ def pag_todos_produtos():
                            produtos=produtos, total=total,
                            termo='Todos os produtos', termo_q='',
                            categorias=listar_categorias(),
-                           filtros=listar_filtros(),
+                           filtros=listar_filtros_planos(),
                            filtros_ativos=extras,
                            cliente=cliente_logado(),
                            carrinho=carrinho_ler())
