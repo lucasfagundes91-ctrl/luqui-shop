@@ -20,7 +20,10 @@
         <div class="desc">{{ p.descricao }}</div>
       </a>
       <div class="preco">{{ rs(p.preco_promo or p.preco_venda) }}</div>
-      <button class="btn" onclick="carrinhoAdd({{ p.id }})">+ Adicionar</button>
+      <div class="acoes">
+        <button class="btn-mini-add" onclick="carrinhoAdd({{ p.id }})">+ Carrinho</button>
+        <button class="btn-mini-buy" onclick="comprarAgora({{ p.id }})">Comprar</button>
+      </div>
     </div>
   {% endfor %}
 </section>

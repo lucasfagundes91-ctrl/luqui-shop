@@ -21,7 +21,10 @@
     <div class="preco">{{ rs(p.preco_promo) }}</div>
     {% set economia = (p.preco_venda - p.preco_promo) %}
     <div style="font-size:11px;color:var(--verde);font-weight:700">Você economiza {{ rs(economia) }}</div>
-    <button class="btn" onclick="carrinhoAdd({{ p.produto_id }})">+ Adicionar</button>
+    <div class="acoes">
+      <button class="btn-mini-add" onclick="carrinhoAdd({{ p.produto_id }})">+ Carrinho</button>
+      <button class="btn-mini-buy" onclick="comprarAgora({{ p.produto_id }})">Comprar</button>
+    </div>
   </div>
   {% endfor %}
 </section>

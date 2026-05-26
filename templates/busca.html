@@ -44,16 +44,6 @@
   .filtros-ativos .chip:hover { background:#0E3D9E; }
   .filtros-ativos .limpar { color:#666; padding:4px 10px; text-decoration:underline;
     font-size:12px; }
-  .prod-card .btn-row { display:grid; grid-template-columns:1fr 1fr; gap:6px;
-    margin-top:auto; }
-  .prod-card .btn-comprar { background:var(--verde); color:#fff; padding:10px 6px;
-    border-radius:8px; font-weight:700; text-align:center; font-size:12.5px;
-    cursor:pointer; border:0; }
-  .prod-card .btn-comprar:hover { background:#15803d; }
-  .prod-card .btn-add { background:#fff; color:var(--azul); padding:10px 6px;
-    border-radius:8px; font-weight:700; text-align:center; font-size:12.5px;
-    cursor:pointer; border:1.5px solid var(--azul); }
-  .prod-card .btn-add:hover { background:#EFF6FF; }
 </style>
 
 <div class="layout-busca">
@@ -106,13 +96,13 @@
           {% else %}
             <div class="preco">{{ rs(p.preco_venda) }}</div>
           {% endif %}
-          <div class="btn-row">
-            <button class="btn-comprar" onclick="comprarAgora({{ p.id }})">🛒 Comprar</button>
-            <button class="btn-add" onclick="carrinhoAdd({{ p.id }})">+ Carrinho</button>
+          <div class="acoes">
+            <button class="btn-mini-add" onclick="carrinhoAdd({{ p.id }})">+ Carrinho</button>
+            <button class="btn-mini-buy" onclick="comprarAgora({{ p.id }})">Comprar</button>
           </div>
           {% if cliente %}
-          <button onclick="addNaLista({{ p.id }}, this)" style="margin-top:6px;width:100%;background:transparent;color:#A16207;border:1.5px solid #FBBF24;padding:7px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">
-            🎁 Adicionar à lista de aniversário
+          <button class="btn-mini-lista" onclick="addNaLista({{ p.id }}, this)">
+            🎁 Lista de aniversário
           </button>
           {% endif %}
         </div>

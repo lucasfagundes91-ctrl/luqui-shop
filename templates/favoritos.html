@@ -25,7 +25,10 @@
       {% else %}
         <div class="preco">{{ rs(p.preco_venda) }}</div>
       {% endif %}
-      <button class="btn" onclick="carrinhoAdd({{ p.id }})">+ Adicionar ao carrinho</button>
+      <div class="acoes">
+        <button class="btn-mini-add" onclick="carrinhoAdd({{ p.id }})">+ Carrinho</button>
+        <button class="btn-mini-buy" onclick="comprarAgora({{ p.id }})">Comprar</button>
+      </div>
     </div>
   {% endfor %}
 </section>

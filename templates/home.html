@@ -111,7 +111,15 @@
         <div class="preco">{{ rs(p.preco_venda) }}</div>
       {% endif %}
       <div class="parc">ou 12x de R$ {{ '%.2f'|format((p.preco_promo or p.preco_venda|float)/12) }}</div>
-      <button class="btn" onclick="carrinhoAdd({{ p.id }})">+ Adicionar</button>
+      <div class="acoes">
+        <button class="btn-mini-add" onclick="carrinhoAdd({{ p.id }})">+ Carrinho</button>
+        <button class="btn-mini-buy" onclick="comprarAgora({{ p.id }})">Comprar</button>
+      </div>
+      {% if cliente %}
+      <button class="btn-mini-lista" onclick="addNaLista({{ p.id }}, this)">
+        🎁 Lista de aniversário
+      </button>
+      {% endif %}
     </div>
   {% else %}
     <div style="grid-column:1/-1;padding:60px;text-align:center;color:var(--mut)">
