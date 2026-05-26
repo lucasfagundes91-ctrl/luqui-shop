@@ -53,11 +53,10 @@
     padding:1px 6px; border-radius:10px; font-weight:700; }
 
   /* ─── Barra de navegacao ─── */
-  .menu{ background:var(--azul); position:relative; }
+  .menu{ background:var(--azul); position:relative; overflow:visible; }
   .menu .container{ max-width:1200px; margin:0 auto; padding:0 12px;
     display:flex; align-items:stretch; justify-content:center; gap:4px;
-    overflow-x:auto; scrollbar-width:none; flex-wrap:nowrap; }
-  .menu .container::-webkit-scrollbar{ display:none; }
+    flex-wrap:wrap; }
   .menu .idade-wrap{ position:relative; display:flex; align-items:center; }
   .menu .idade-wrap > a{ cursor:pointer; }
   .menu .idade-drop{ display:none; position:absolute; top:100%; left:0;
@@ -686,6 +685,17 @@ async function carrinhoAdd(produto_id, qtd=1){
     if(d.erro){ toast(d.erro,'err'); return; }
     toast('Adicionado ao carrinho 🛒');
     setTimeout(()=>location.reload(), 700);
+  }catch(e){ toast('Erro: '+e.message,'err'); }
+}
+async function comprarAgora(produto_id, qtd=1){
+  try{
+    const r=await fetch('/api/carrinho/add',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({produto_id, quantidade: qtd})
+    });
+    const d=await r.json();
+    if(d.erro){ toast(d.erro,'err'); return; }
+    location.href='/checkout';
   }catch(e){ toast('Erro: '+e.message,'err'); }
 }
 </script>

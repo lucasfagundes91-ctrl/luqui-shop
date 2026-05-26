@@ -1794,7 +1794,8 @@ def buscar():
     produtos, total = (listar_produtos(busca=q, limite=48, **extras)
                        if (q or extras) else ([], 0))
     return render_template('busca.html',
-                           produtos=produtos, total=total, termo=q,
+                           produtos=produtos, total=total,
+                           termo=q or 'Busca', termo_q=q,
                            categorias=listar_categorias(),
                            filtros=listar_filtros(),
                            filtros_ativos=extras,
@@ -1805,12 +1806,16 @@ def buscar():
 def _pagina_destaque(tag, titulo):
     """Renderiza a pagina /novidades, /mais-vendidos, /liquida-luqui usando
     o template de busca, filtrando produtos com a flag de destaque no PDV."""
-    produtos, total = listar_produtos(limite=48, destaque=tag)
+    extras = filtros_da_querystring(request)
+    # garante que o destaque sempre fica fixado mesmo que o usuario clique filtros
+    extras['destaque'] = [tag]
+    produtos, total = listar_produtos(limite=48, **extras)
     return render_template('busca.html',
-                           produtos=produtos, total=total, termo=titulo,
+                           produtos=produtos, total=total,
+                           termo=titulo, termo_q='',
                            categorias=listar_categorias(),
                            filtros=listar_filtros(),
-                           filtros_ativos={'destaque': [tag]},
+                           filtros_ativos={k: v for k, v in extras.items() if k != 'destaque'},
                            cliente=cliente_logado(),
                            carrinho=carrinho_ler())
 
@@ -1818,13 +1823,14 @@ def _pagina_destaque(tag, titulo):
 @app.route('/produtos')
 def pag_todos_produtos():
     """Lista todos os produtos da vitrine, sem filtro de categoria."""
-    produtos, total = listar_produtos(limite=48)
+    extras = filtros_da_querystring(request)
+    produtos, total = listar_produtos(limite=48, **extras)
     return render_template('busca.html',
                            produtos=produtos, total=total,
-                           termo='Todos os produtos',
+                           termo='Todos os produtos', termo_q='',
                            categorias=listar_categorias(),
                            filtros=listar_filtros(),
-                           filtros_ativos={},
+                           filtros_ativos=extras,
                            cliente=cliente_logado(),
                            carrinho=carrinho_ler())
 

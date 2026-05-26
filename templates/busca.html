@@ -1,34 +1,122 @@
 {% extends "base.html" %}
 {% block titulo %}Busca: {{ termo }} — Luqui Brinquedos{% endblock %}
 {% block conteudo %}
-<div style="max-width:1200px;margin:20px auto;padding:0 16px">
-  <a href="/" style="color:var(--mut);font-size:13px">← Voltar pra loja</a>
-  <h2 style="margin-top:8px">Busca por "<span style="color:var(--azul)">{{ termo }}</span>"</h2>
-  <p style="color:var(--mut);font-size:13px;margin-top:4px">{{ total }} {{ 'produto encontrado' if total == 1 else 'produtos encontrados' }}</p>
-</div>
-<section class="produtos">
-  {% for p in produtos %}
-    <div class="prod-card">
-      {% if p.preco_promo %}<span class="selo promo">PROMO</span>{% endif %}
-      <a href="/produto/{{ p.id }}">
-        <div class="foto">
-          {% if p.foto_url %}<img src="{{ p.foto_url }}" alt="">
-          {% else %}<span class="ph">📦</span>{% endif %}
+
+{% macro link_filtro(chave, slug, label, qtd) -%}
+  {%- set ativos = (filtros_ativos.get(chave) or []) -%}
+  {%- set ja_marcado = slug in ativos -%}
+  {%- set novos = ativos|reject('equalto', slug)|list if ja_marcado else (ativos + [slug]) -%}
+  {%- set ns = namespace(qs='') -%}
+  {%- for k, vs in filtros_ativos.items() if k != chave -%}
+    {%- for v in vs -%}{%- set ns.qs = ns.qs ~ k ~ '=' ~ (v|urlencode) ~ '&' -%}{%- endfor -%}
+  {%- endfor -%}
+  {%- for v in novos -%}{%- set ns.qs = ns.qs ~ chave ~ '=' ~ (v|urlencode) ~ '&' -%}{%- endfor -%}
+  {%- if termo_q -%}{%- set ns.qs = ns.qs ~ 'q=' ~ (termo_q|urlencode) ~ '&' -%}{%- endif -%}
+  <a href="?{{ ns.qs[:-1] if ns.qs else '' }}" class="filtro-link {% if ja_marcado %}on{% endif %}">
+    <span class="cb">{% if ja_marcado %}✓{% endif %}</span>
+    <span class="nm">{{ label }}</span>
+    <span class="qt">{{ qtd }}</span>
+  </a>
+{%- endmacro %}
+
+<style>
+  .layout-busca { display:grid; grid-template-columns: 240px 1fr; gap:24px;
+    max-width:1200px; margin:20px auto; padding:0 16px; align-items:start; }
+  @media (max-width:760px){ .layout-busca{ grid-template-columns: 1fr; } }
+  .side-filtros { background:#fff; border:1px solid var(--linha); border-radius:10px;
+    padding:14px; font-size:13.5px; position:sticky; top:16px; }
+  .side-filtros h4 { font-size:12px; text-transform:uppercase; letter-spacing:.5px;
+    color:#666; margin:12px 0 6px; border-top:1px solid #eee; padding-top:10px; }
+  .side-filtros h4:first-of-type { border-top:0; padding-top:0; }
+  .filtro-link { display:flex; align-items:center; gap:8px; padding:5px 4px;
+    text-decoration:none; color:var(--txt); border-radius:6px; }
+  .filtro-link:hover { background:#f5f8ff; }
+  .filtro-link.on { background:#eaf2ff; font-weight:600; }
+  .filtro-link .cb { width:16px; height:16px; border:1.5px solid #bbb; border-radius:3px;
+    display:inline-flex; align-items:center; justify-content:center; font-size:11px;
+    color:#1652C7; flex-shrink:0; }
+  .filtro-link.on .cb { border-color:#1652C7; background:#1652C7; color:#fff; }
+  .filtro-link .nm { flex:1; }
+  .filtro-link .qt { color:#888; font-size:11.5px; }
+  .filtros-ativos { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+  .filtros-ativos .chip { background:#1652C7; color:#fff; padding:4px 10px;
+    border-radius:14px; font-size:12px; text-decoration:none; }
+  .filtros-ativos .chip:hover { background:#0E3D9E; }
+  .filtros-ativos .limpar { color:#666; padding:4px 10px; text-decoration:underline;
+    font-size:12px; }
+  .prod-card .btn-row { display:grid; grid-template-columns:1fr 1fr; gap:6px;
+    margin-top:auto; }
+  .prod-card .btn-comprar { background:var(--verde); color:#fff; padding:10px 6px;
+    border-radius:8px; font-weight:700; text-align:center; font-size:12.5px;
+    cursor:pointer; border:0; }
+  .prod-card .btn-comprar:hover { background:#15803d; }
+  .prod-card .btn-add { background:#fff; color:var(--azul); padding:10px 6px;
+    border-radius:8px; font-weight:700; text-align:center; font-size:12.5px;
+    cursor:pointer; border:1.5px solid var(--azul); }
+  .prod-card .btn-add:hover { background:#EFF6FF; }
+</style>
+
+<div class="layout-busca">
+  <aside class="side-filtros">
+    {% set tem_ativos = filtros_ativos and filtros_ativos.values()|select|list %}
+    {% if tem_ativos %}
+      <div class="filtros-ativos">
+        {% for k, vs in filtros_ativos.items() %}{% for v in vs %}
+          <a href="?{% for k2, vs2 in filtros_ativos.items() if k2 != k %}{% for v2 in vs2 %}{{ k2 }}={{ v2|urlencode }}&{% endfor %}{% endfor %}{% for v2 in vs if v2 != v %}{{ k }}={{ v2|urlencode }}&{% endfor %}{% if termo_q %}q={{ termo_q|urlencode }}{% endif %}" class="chip">✕ {{ v }}</a>
+        {% endfor %}{% endfor %}
+        <a href="?{% if termo_q %}q={{ termo_q|urlencode }}{% endif %}" class="limpar">limpar tudo</a>
+      </div>
+    {% endif %}
+
+    {% if filtros.grupos %}
+      <h4>Grupo</h4>
+      {% for g in filtros.grupos %}{{ link_filtro('grupo', g.slug, g.nome, g.qtd) }}{% endfor %}
+    {% endif %}
+
+    {% if filtros.marcas %}
+      <h4>Marca</h4>
+      {% for m in filtros.marcas %}{{ link_filtro('marca', m.slug, m.nome, m.qtd) }}{% endfor %}
+    {% endif %}
+
+    {% if filtros.faixas_etarias %}
+      <h4>Faixa etária</h4>
+      {% for fe in filtros.faixas_etarias %}{{ link_filtro('faixa_etaria', fe.slug, fe.nome, fe.qtd) }}{% endfor %}
+    {% endif %}
+  </aside>
+
+  <div>
+    <a href="/" style="color:var(--mut);font-size:13px">← Voltar pra loja</a>
+    <h2 style="margin-top:8px">{{ termo }}</h2>
+    <p style="color:var(--mut);font-size:13px;margin-top:4px">{{ total }} {{ 'produto encontrado' if total == 1 else 'produtos encontrados' }}</p>
+
+    <section class="produtos" style="margin-top:16px">
+      {% for p in produtos %}
+        <div class="prod-card">
+          {% if p.preco_promo %}<span class="selo promo">PROMO</span>{% endif %}
+          <a href="/produto/{{ p.id }}">
+            <div class="foto">
+              {% if p.foto_url %}<img src="{{ p.foto_url }}" alt="">
+              {% else %}<span class="ph">📦</span>{% endif %}
+            </div>
+            <div class="desc">{{ p.descricao }}</div>
+          </a>
+          {% if p.preco_promo %}
+            <div class="preco-velho">{{ rs(p.preco_venda) }}</div>
+            <div class="preco">{{ rs(p.preco_promo) }}</div>
+          {% else %}
+            <div class="preco">{{ rs(p.preco_venda) }}</div>
+          {% endif %}
+          <div class="btn-row">
+            <button class="btn-comprar" onclick="comprarAgora({{ p.id }})">🛒 Comprar</button>
+            <button class="btn-add" onclick="carrinhoAdd({{ p.id }})">+ Carrinho</button>
+          </div>
         </div>
-        <div class="desc">{{ p.descricao }}</div>
-      </a>
-      {% if p.preco_promo %}
-        <div class="preco-velho">{{ rs(p.preco_venda) }}</div>
-        <div class="preco">{{ rs(p.preco_promo) }}</div>
       {% else %}
-        <div class="preco">{{ rs(p.preco_venda) }}</div>
-      {% endif %}
-      <button class="btn" onclick="carrinhoAdd({{ p.id }})">+ Adicionar</button>
-    </div>
-  {% else %}
-    <div style="grid-column:1/-1;padding:60px;text-align:center;color:var(--mut)">
-      Nenhum produto encontrado pra "{{ termo }}". Tenta com outras palavras!
-    </div>
-  {% endfor %}
-</section>
+        <div style="grid-column:1/-1;padding:60px;text-align:center;color:var(--mut)">
+          Nenhum produto encontrado com esses filtros.
+        </div>
+      {% endfor %}
+    </section>
+  </div>
+</div>
 {% endblock %}
