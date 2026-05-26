@@ -55,34 +55,41 @@
   /* ─── Mega-menu ─── */
   .menu{ background:var(--azul); position:relative; }
   .menu .container{ max-width:1200px; margin:0 auto; padding:0 16px;
-    display:flex; flex-wrap:wrap; justify-content:center; gap:0; }
-  .menu a{ color:#fff; font-weight:700; font-size:13px; padding:14px 14px;
-    letter-spacing:.3px; text-transform:uppercase; transition:background .12s; }
-  .menu a:hover, .menu a.atual{ background:var(--azul-d); }
+    display:flex; flex-wrap:wrap; justify-content:center; align-items:stretch; gap:0; }
+  .menu a, .menu .has-sub > a{ color:#fff; font-weight:700; font-size:12.5px;
+    padding:12px 14px; letter-spacing:.3px; text-transform:uppercase;
+    transition:background .12s; display:flex; align-items:center;
+    max-width:200px; line-height:1.25; }
+  .menu a:hover, .menu a.atual, .menu .has-sub:hover > a{ background:var(--azul-d); }
   /* item de departamento que tem grupos: vira dropdown */
   .menu .has-sub{ position:relative; }
-  .menu .has-sub > a::after{ content:" ▾"; font-size:9px; opacity:.7; }
+  .menu .has-sub > a::after{ content:" ▾"; font-size:9px; opacity:.7;
+    margin-left:5px; display:inline-block; }
   .menu .sub-panel{ display:none; position:absolute; top:100%; left:0;
-    background:#fff; min-width:240px; box-shadow:0 8px 24px rgba(0,0,0,.18);
+    background:#fff; min-width:260px; box-shadow:0 8px 24px rgba(0,0,0,.18);
     border-radius:0 0 12px 12px; padding:8px 0; z-index:50; }
   .menu .has-sub:hover > .sub-panel,
   .menu .has-sub:focus-within > .sub-panel{ display:block; }
-  .menu .sub-panel a{ display:block; color:var(--azul); padding:9px 16px;
-    font-size:13px; font-weight:600; text-transform:none; letter-spacing:0; }
+  .menu .sub-panel a{ display:flex; justify-content:space-between; align-items:center;
+    color:var(--azul); padding:10px 18px; font-size:13px; font-weight:600;
+    text-transform:none; letter-spacing:0; max-width:none; line-height:1.3; }
   .menu .sub-panel a:hover{ background:#eaf2ff; }
   /* grupo dentro do sub: dropdown lateral (subgrupos) */
   .menu .grp{ position:relative; }
-  .menu .grp > a::after{ content:" ▸"; font-size:10px; color:#888; float:right; }
-  .menu .grp-panel{ display:none; position:absolute; top:0; left:100%;
-    background:#fff; min-width:220px; box-shadow:0 8px 24px rgba(0,0,0,.18);
+  .menu .grp > a::after{ content:"▸"; font-size:11px; color:#aaa;
+    margin-left:8px; }
+  .menu .grp-panel{ display:none; position:absolute; top:-8px; left:100%;
+    background:#fff; min-width:240px; box-shadow:0 8px 24px rgba(0,0,0,.18);
     border-radius:0 12px 12px 12px; padding:8px 0; }
   .menu .grp:hover > .grp-panel{ display:block; }
-  .menu .grp-panel a{ color:#444; font-weight:500; font-size:12.5px; }
+  .menu .grp-panel a{ color:#444; font-weight:500; font-size:12.5px;
+    padding:9px 18px; justify-content:flex-start; }
   .menu .grp-panel a:hover{ background:#f5f8ff; color:var(--azul); }
   @media (max-width:760px){
     /* Em mobile: dropdowns viram clique, e cada nivel empilha */
     .menu .sub-panel, .menu .grp-panel{ position:static; box-shadow:none; min-width:0; }
     .menu .has-sub > a::after, .menu .grp > a::after{ display:none; }
+    .menu a, .menu .has-sub > a{ max-width:none; }
   }
 
   /* ─── Hero / Banners ─── */
