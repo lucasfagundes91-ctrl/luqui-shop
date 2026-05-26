@@ -266,6 +266,8 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_lista_itens_lista ON lista_aniversario_itens(lista_id)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS juros_valor NUMERIC(10,2) DEFAULT 0",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_agendada VARCHAR(40)",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pontos_resgatados NUMERIC(10,2) DEFAULT 0",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS desconto_pontos NUMERIC(10,2) DEFAULT 0",
         # Melhor Envio: além do etiqueta_id+rastreio que já existem,
         # precisamos guardar URL do PDF, nome do serviço, valor cotado.
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS melhorenvio_etiqueta_url TEXT",
@@ -1153,6 +1155,45 @@ def _dedupe_por_slug(items):
         else:
             acc[s]['qtd'] = (acc[s].get('qtd') or 0) + (it.get('qtd') or 0)
     return [acc[s] for s in ordem]
+
+
+def pdv_consultar_pontos(cpf):
+    """Consulta saldo de pontos no PDV pelo CPF. Sem cache pq muda
+    frequentemente. Retorna dict {saldo, valor_disponivel, ...} ou None."""
+    cpf = ''.join(c for c in (cpf or '') if c.isdigit())
+    if not cpf or not PDVPRO_API_KEY:
+        return None
+    try:
+        r = requests.get(PDVPRO_URL + '/api/integracao/cliente/saldo-pontos',
+                         params={'cpf': cpf},
+                         headers={'X-API-Key': PDVPRO_API_KEY}, timeout=8)
+        if r.status_code != 200:
+            return None
+        return r.json()
+    except Exception as e:
+        log.error("pdv_consultar_pontos %s", e)
+        return None
+
+
+def pdv_resgatar_pontos(cpf, pontos, pedido_id):
+    """Debita pontos no PDV. Retorna (ok, msg)."""
+    cpf = ''.join(c for c in (cpf or '') if c.isdigit())
+    if not cpf or pontos <= 0 or not PDVPRO_API_KEY:
+        return False, 'cpf/pontos invalidos'
+    try:
+        r = requests.post(PDVPRO_URL + '/api/integracao/cliente/resgatar-pontos',
+                          json={'cpf': cpf, 'pontos': float(pontos),
+                                'pedido_externo_ref': f'site-pedido-{pedido_id}'},
+                          headers={'X-API-Key': PDVPRO_API_KEY}, timeout=10)
+        if r.status_code == 200:
+            return True, 'ok'
+        try:
+            return False, (r.json().get('erro') or f'HTTP {r.status_code}')
+        except Exception:
+            return False, f'HTTP {r.status_code}'
+    except Exception as e:
+        log.error("pdv_resgatar_pontos %s", e)
+        return False, str(e)
 
 
 def listar_filtros():
@@ -2079,16 +2120,33 @@ def checkout_view():
     if not itens:
         return redirect(url_for('carrinho_view'))
     sub, _ = carrinho_total(itens)
+    # Consulta saldo de pontos no PDV (se cliente logado e tem CPF)
+    cli = cliente_logado()
+    pontos_info = None
+    if cli and cli.get('cpf'):
+        pontos_info = pdv_consultar_pontos(cli['cpf'])
     return render_template('checkout.html',
                            itens=itens, subtotal=sub,
                            categorias=listar_categorias(),
-                           cliente=cliente_logado(),
+                           cliente=cli,
                            carrinho=itens,
                            desconto_pix_pct=float(cfg('desconto_pix_pct', '10')),
                            desconto_boleto_pct=float(cfg('desconto_boleto_pct', '5')),
                            parcelamento_max=int(cfg('parcelamento_max', '12')),
                            parcela_minima=float(cfg('parcela_minima', '50')),
-                           juros_parcelamento_am=float(cfg('juros_parcelamento_am', '2.49')))
+                           juros_parcelamento_am=float(cfg('juros_parcelamento_am', '2.49')),
+                           pontos_info=pontos_info)
+
+
+@app.route('/api/checkout/consultar-pontos')
+def checkout_consultar_pontos():
+    """Consulta pontos pelo CPF informado no formulario (cliente sem login
+    ou pra revalidar). Retorna saldo e valor disponivel."""
+    cpf = (request.args.get('cpf') or '').strip()
+    info = pdv_consultar_pontos(cpf)
+    if not info:
+        return jsonify({'cliente_existe': False, 'saldo': 0, 'valor_disponivel': 0})
+    return jsonify(info)
 
 
 @app.route('/api/checkout/cep')
@@ -3496,7 +3554,31 @@ def checkout_finalizar():
             else:
                 cupom_desconto = min(float(c['valor']), subtotal)
             db_execute("UPDATE cupons SET usos=usos+1 WHERE id=%s", [c['id']])
-    base = max(0, round(subtotal + frete - desconto - cupom_desconto, 2))
+    # Pontos do Clube (max 50% do total apos descontos PIX/cupom)
+    pontos_resgatados = 0.0
+    desconto_pontos = 0.0
+    pontos_pedidos = 0.0
+    try:
+        pontos_pedidos = float(d.get('pontos_usar') or 0)
+    except (TypeError, ValueError):
+        pontos_pedidos = 0.0
+    if pontos_pedidos > 0:
+        info_pontos = pdv_consultar_pontos(d.get('cpf'))
+        if info_pontos and info_pontos.get('cliente_existe'):
+            saldo = float(info_pontos.get('saldo') or 0)
+            vpp = float(info_pontos.get('valor_por_ponto') or 0)
+            pontos_pedidos = min(pontos_pedidos, saldo)
+            valor_em_reais = round(pontos_pedidos * vpp, 2)
+            # Limite de 50% do total apos descontos
+            parcial = max(0, subtotal + frete - desconto - cupom_desconto)
+            limite_50 = round(parcial * 0.5, 2)
+            if valor_em_reais > limite_50:
+                valor_em_reais = limite_50
+                pontos_pedidos = round(limite_50 / vpp, 2) if vpp > 0 else 0
+            if valor_em_reais > 0:
+                pontos_resgatados = pontos_pedidos
+                desconto_pontos = valor_em_reais
+    base = max(0, round(subtotal + frete - desconto - cupom_desconto - desconto_pontos, 2))
     parcelas = max(1, min(int(cfg('parcelamento_max', '12')),
                           int(d.get('parcelas') or 1)))
     # Parcelamento: sem juros enquanto parcela >= parcela_minima.
@@ -3525,20 +3607,22 @@ def checkout_finalizar():
            complemento, bairro, cidade, uf, subtotal, frete, desconto, total,
            forma_pagto, parcelas, frete_servico, frete_prazo, observacao,
            cupom_codigo, cupom_desconto, embrulho_presente, embrulho_mensagem,
-           embrulho_tipo, juros_valor, entrega_agendada)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+           embrulho_tipo, juros_valor, entrega_agendada,
+           pontos_resgatados, desconto_pontos)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         RETURNING id""",
         [cli['id'] if cli else None,
          d['email'].strip().lower(), d['nome'].strip(), d['telefone'].strip(),
          d['cpf'].strip(), d['cep'].strip(), d['endereco'].strip(),
          d['numero'].strip(), d.get('complemento') or None,
          d['bairro'].strip(), d['cidade'].strip(), d['uf'].strip().upper(),
-         subtotal, frete, desconto + cupom_desconto, total,
+         subtotal, frete, desconto + cupom_desconto + desconto_pontos, total,
          d['forma_pagto'], parcelas,
          d.get('frete_servico') or 'A definir',
          d.get('frete_prazo') or '', d.get('observacao') or None,
          cupom_codigo or None, cupom_desconto,
-         embrulho, embrulho_msg, embrulho_tipo, juros_valor, entrega_agendada],
+         embrulho, embrulho_msg, embrulho_tipo, juros_valor, entrega_agendada,
+         pontos_resgatados, desconto_pontos],
         fetch='one')
     pid = ped['id']
     # Insere itens + reserva items da lista de aniversario (se houver)
@@ -3563,6 +3647,17 @@ def checkout_finalizar():
             except Exception as e:
                 log.error(f"reservar lista item {lista_item_id}: {e}")
     # Cria customer + cobrança no Asaas
+    # Debita pontos no PDV (se foi usado). Se falhar, desfaz o desconto
+    # pra nao dar credito de graca pro cliente.
+    if pontos_resgatados > 0:
+        ok_pts, msg_pts = pdv_resgatar_pontos(d['cpf'], pontos_resgatados, pid)
+        if not ok_pts:
+            log.error(f"Pedido {pid}: falha resgatar pontos ({msg_pts}) — desfazendo desconto")
+            db_execute("""UPDATE pedidos SET pontos_resgatados=0, desconto_pontos=0,
+                          desconto=desconto-%s, total=total+%s
+                          WHERE id=%s""",
+                       [desconto_pontos, desconto_pontos, pid])
+            total += desconto_pontos
     customer_id = asaas_criar_customer(d['nome'], d['email'],
                                        d['cpf'], d['telefone'])
     if not customer_id:
