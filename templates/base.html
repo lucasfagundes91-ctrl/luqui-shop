@@ -361,27 +361,33 @@ gtag('config', '{{ GOOGLE_TAG_ID }}');
   <div class="drawer-lista">
     {% if menu %}
       {% for d in menu %}
-        <div class="dep">
-          <div class="top" onclick="toggleDep(this)">
-            <a href="/categoria/{{ d.slug }}" class="nome" style="color:inherit">{{ d.nome|titulo }}</a>
-            {% if d.grupos %}<span class="chev">›</span>{% endif %}
+        {% if d.grupos %}
+          <div class="dep">
+            <div class="top" onclick="this.parentElement.classList.toggle('aberto')">
+              <span class="nome">{{ d.nome|titulo }}</span>
+              <span class="chev">›</span>
+            </div>
+            <div class="sub-list">
+              <a href="/categoria/{{ d.slug }}" style="font-weight:700;color:var(--azul)">Ver tudo de {{ d.nome|titulo }} →</a>
+              {% for g in d.grupos %}
+                {% if g.subgrupos %}
+                  <span class="gr">{{ g.nome|titulo }}</span>
+                  {% for s in g.subgrupos %}
+                    <a href="/categoria/{{ d.slug }}?grupo={{ g.slug }}&subgrupo={{ s.slug }}">{{ s.nome|titulo }}</a>
+                  {% endfor %}
+                {% else %}
+                  <a href="/categoria/{{ d.slug }}?grupo={{ g.slug }}">{{ g.nome|titulo }}</a>
+                {% endif %}
+              {% endfor %}
+            </div>
           </div>
-          {% if d.grupos %}
-          <div class="sub-list">
-            <a href="/categoria/{{ d.slug }}" style="font-weight:700;color:var(--azul)">Ver tudo de {{ d.nome|titulo }} →</a>
-            {% for g in d.grupos %}
-              {% if g.subgrupos %}
-                <span class="gr">{{ g.nome|titulo }}</span>
-                {% for s in g.subgrupos %}
-                  <a href="/categoria/{{ d.slug }}?grupo={{ g.slug }}&subgrupo={{ s.slug }}">{{ s.nome|titulo }}</a>
-                {% endfor %}
-              {% else %}
-                <a href="/categoria/{{ d.slug }}?grupo={{ g.slug }}">{{ g.nome|titulo }}</a>
-              {% endif %}
-            {% endfor %}
+        {% else %}
+          <div class="dep sem-grupos">
+            <a class="top" href="/categoria/{{ d.slug }}">
+              <span class="nome">{{ d.nome|titulo }}</span>
+            </a>
           </div>
-          {% endif %}
-        </div>
+        {% endif %}
       {% endfor %}
     {% else %}
       <div style="padding:20px;color:var(--mut);font-size:13px;text-align:center">
@@ -407,11 +413,6 @@ function fecharDeptos(){
   document.getElementById('drawer').classList.remove('aberto');
   document.getElementById('drawer').setAttribute('aria-hidden','true');
   document.body.style.overflow='';
-}
-function toggleDep(el){
-  // Se o clique foi no link "nome", deixa navegar normalmente
-  if(event.target.tagName==='A') return;
-  el.parentElement.classList.toggle('aberto');
 }
 document.addEventListener('keydown', e=>{
   if(e.key==='Escape') fecharDeptos();
