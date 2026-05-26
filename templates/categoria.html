@@ -107,9 +107,9 @@
       {% for m in filtros.marcas %}{{ link_filtro('marca', m.slug, m.nome, m.qtd) }}{% endfor %}
     {% endif %}
 
-    {% if filtros.fornecedores %}
-      <h4>Fornecedor</h4>
-      {% for f in filtros.fornecedores %}{{ link_filtro('fornecedor', f.slug, f.nome, f.qtd) }}{% endfor %}
+    {% if filtros.faixas_etarias %}
+      <h4>Faixa etária</h4>
+      {% for fe in filtros.faixas_etarias %}{{ link_filtro('faixa_etaria', fe.slug, fe.nome, fe.qtd) }}{% endfor %}
     {% endif %}
   </aside>
 

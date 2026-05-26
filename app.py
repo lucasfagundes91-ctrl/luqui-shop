@@ -949,12 +949,12 @@ def pdv_get(path, params=None, ttl=60):
         return None
 
 
-_FILTROS_VALIDOS = ('departamento', 'grupo', 'subgrupo', 'marca', 'fornecedor')
+_FILTROS_VALIDOS = ('departamento', 'grupo', 'subgrupo', 'marca', 'faixa_etaria')
 
 
 def listar_produtos(busca=None, categoria=None, limite=24, offset=0, **filtros):
     """`categoria` ainda é aceito como alias de `departamento` pra compat.
-    Filtros extras (departamento/grupo/subgrupo/marca/fornecedor) podem ser
+    Filtros extras (departamento/grupo/subgrupo/marca/faixa_etaria) podem ser
     string única ou lista — viram CSV pro PDV."""
     p = {'limite': limite, 'offset': offset}
     if busca:
@@ -984,19 +984,19 @@ def listar_categorias():
 
 
 def listar_filtros():
-    """Hierarquia departamento > grupo > subgrupo + marca + fornecedor."""
+    """Hierarquia departamento > grupo > subgrupo + marca + faixa etária."""
     r = pdv_get('/api/integracao/filtros') or {}
     return {
-        'departamentos': r.get('departamentos', []),
-        'grupos':        r.get('grupos', []),
-        'subgrupos':     r.get('subgrupos', []),
-        'marcas':        r.get('marcas', []),
-        'fornecedores':  r.get('fornecedores', []),
+        'departamentos':  r.get('departamentos', []),
+        'grupos':         r.get('grupos', []),
+        'subgrupos':      r.get('subgrupos', []),
+        'marcas':         r.get('marcas', []),
+        'faixas_etarias': r.get('faixas_etarias', []),
     }
 
 
 def filtros_da_querystring(req):
-    """Lê ?departamento=&grupo=&subgrupo=&marca=&fornecedor= (multi-valor)
+    """Lê ?departamento=&grupo=&subgrupo=&marca=&faixa_etaria= (multi-valor)
     do request e devolve dict pronto pra `listar_produtos(**dict)`."""
     out = {}
     for k in _FILTROS_VALIDOS:
