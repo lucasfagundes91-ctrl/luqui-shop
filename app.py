@@ -270,6 +270,32 @@ def init_db():
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_agendada VARCHAR(40)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pontos_resgatados NUMERIC(10,2) DEFAULT 0",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS desconto_pontos NUMERIC(10,2) DEFAULT 0",
+        # Luquizinha do site (chatbot IA)
+        """CREATE TABLE IF NOT EXISTS site_chat_conversas (
+            id SERIAL PRIMARY KEY,
+            sessao_id VARCHAR(40) UNIQUE NOT NULL,
+            ip VARCHAR(64),
+            user_agent VARCHAR(200),
+            cliente_id INT REFERENCES clientes_site(id) ON DELETE SET NULL,
+            nome VARCHAR(120),
+            idade_crianca INT,
+            sexo_crianca VARCHAR(10),
+            lead_marcado BOOLEAN DEFAULT FALSE,
+            lead_telefone VARCHAR(20),
+            criado_em TIMESTAMPTZ DEFAULT NOW(),
+            ultimo_msg_em TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_chat_sessao ON site_chat_conversas(sessao_id)",
+        "CREATE INDEX IF NOT EXISTS idx_chat_ip ON site_chat_conversas(ip, criado_em)",
+        """CREATE TABLE IF NOT EXISTS site_chat_mensagens (
+            id SERIAL PRIMARY KEY,
+            conversa_id INT REFERENCES site_chat_conversas(id) ON DELETE CASCADE,
+            role VARCHAR(15) NOT NULL,
+            content TEXT,
+            blocks JSONB,
+            criado_em TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_chat_msgs ON site_chat_mensagens(conversa_id, id)",
         # Melhor Envio: além do etiqueta_id+rastreio que já existem,
         # precisamos guardar URL do PDF, nome do serviço, valor cotado.
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS melhorenvio_etiqueta_url TEXT",
@@ -2903,6 +2929,347 @@ def lista_remover_item(lid, item_id):
     return jsonify({'ok': True})
 
 
+# ─── Luquizinha do site (chatbot IA) ─────────────────────────────────────────
+LUQUIZINHA_SITE_PROMPT = """Voce eh a Luquizinha 🧸, atendente IA da Luqui
+Brinquedos no site www.luquibrinquedos.com.br. Sua personalidade eh
+calorosa, doce, brincalhona — voce trabalha numa loja de brinquedos da
+familia em Cascavel/PR.
+
+SEU TRABALHO: ajudar a pessoa (geralmente uma mae/tia/avo) a encontrar
+o brinquedo perfeito pra criancinha dela. Use a tool buscar_produtos
+quando ela mencionar idade/interesse/tipo de brinquedo e MOSTRE
+sugestoes diretas no chat.
+
+TOM:
+- Frases CURTAS (1-3 linhas). 1-2 emojis por mensagem.
+- "Que delicia! 💛", "Vai amar de mais!", "Que ideia linda!"
+- Espelhe a energia. NAO seja formal. NAO use markdown.
+
+PRIMEIRA MENSAGEM (saudacao):
+"Oi! 💛 Sou a Luquizinha 🧸 Vou te ajudar a achar o brinquedo perfeito!
+Como vc se chama?"
+
+DEPOIS, conversando, vc tenta descobrir (sem corrida, 1 pergunta por vez):
+- Nome da pessoa (ja peguei? memorize)
+- Idade da crianca
+- Menino ou menina
+- Tipo de brinquedo / interesse (boneca, carrinho, jogo, etc) — opcional
+
+ASSIM QUE TIVER idade + sexo (ou tipo), use buscar_produtos pra trazer 3-6
+sugestoes. NAO espere ter tudo — uma sugestao parcial ja vale a pena.
+
+INFO QUE VOCE PODE DAR DIRETO (sempre que perguntarem):
+💳 PIX 10% off, cartao ate 12x sem juros (parcela minima R$ 50)
+🚚 Cascavel R$ 10 fixo, retire na loja gratis, outras cidades cota no checkout
+🎁 Clube de Pontos: 1pt por R$1, vale R$0,10/pt, max 50% da compra
+📍 Rua Engenheiro Reboucas, 2053 — Cascavel/PR
+⏰ Seg-sex 9-18h · Sab 9-13h · Dom fechado
+
+CUPOM DE PRIMEIRA COMPRA:
+Se a pessoa parecer indecisa ou for cliente novo (sem login), mencione o
+cupom PRIMEIRO10 (10% off em compras a partir de R$ 50).
+
+QUANDO MARCAR LEAD:
+Quando vc ja tiver pelo menos nome + idade + sexo da crianca, e a pessoa
+demonstrou interesse mas nao finalizou, chame a tool registrar_lead pra
+o vendedor humano dar acompanhamento. Faz isso 1 vez so por conversa.
+Se a pessoa pediu pra "falar com o vendedor", chame tool tambem.
+
+REGRAS:
+- NAO invente valores que voce nao recebeu da tool. Se buscar_produtos
+  nao trouxe nada, fala "deixa eu ver opcoes outras... que tal me contar
+  mais um pouco do que vc procura?"
+- Se a pessoa pedir produto que claramente nao existe (ex: "iphone"),
+  diga gentilmente que voces sao loja de brinquedos.
+- Se a pessoa quiser SO conversar / nao quer comprar nada, seja gentil
+  mas curta. Nao force.
+"""
+
+LUQUIZINHA_TOOLS = [
+    {
+        "name": "buscar_produtos",
+        "description": (
+            "Busca brinquedos no catalogo pra recomendar a cliente. "
+            "Use idade_anos, sexo, termo, preco_max. Devolve ate 8 "
+            "produtos com {id, nome, preco, foto, url}. Os produtos sao "
+            "automaticamente exibidos como cards no chat pra cliente."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "idade_anos": {"type": "integer", "description": "Idade da crianca em anos (ex: 5)."},
+                "sexo": {"type": "string", "enum": ["menino", "menina"], "description": "Sexo da crianca, se souber."},
+                "termo": {"type": "string", "description": "Tipo de brinquedo (ex: 'boneca', 'carrinho', 'jogo de tabuleiro')."},
+                "preco_max": {"type": "number", "description": "Limite de preco em reais (opcional)."},
+            },
+        },
+    },
+    {
+        "name": "registrar_lead",
+        "description": (
+            "Marca a conversa como lead pro vendedor humano dar followup "
+            "via WhatsApp. So chame quando tiver pelo menos nome + idade + "
+            "sexo da crianca, e a pessoa demonstrou interesse real. Apos "
+            "chamar, avise a cliente que o vendedor entra em contato."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "nome": {"type": "string"},
+                "telefone": {"type": "string", "description": "WhatsApp da cliente. Se nao tiver, deixe vazio."},
+                "idade_crianca": {"type": "integer"},
+                "sexo_crianca": {"type": "string", "enum": ["menino", "menina"]},
+                "observacao": {"type": "string", "description": "Resumo curto do que a cliente procura (ex: 'menino 5 anos, gosta de carrinho hot wheels')."},
+            },
+            "required": ["nome", "idade_crianca", "sexo_crianca"],
+        },
+    },
+]
+
+
+def _ip_request():
+    """IP do cliente (atras de proxy Railway/Cloudflare)."""
+    fwd = request.headers.get('X-Forwarded-For', '')
+    if fwd:
+        return fwd.split(',')[0].strip()[:64]
+    return (request.remote_addr or '')[:64]
+
+
+def _luq_get_or_create_conversa(sessao_id):
+    if not sessao_id:
+        return None
+    row = db_execute("SELECT * FROM site_chat_conversas WHERE sessao_id=%s",
+                     [sessao_id], fetch='one')
+    if row:
+        return dict(row)
+    ip = _ip_request()
+    ua = (request.headers.get('User-Agent') or '')[:200]
+    cli = cliente_logado()
+    nv = db_execute("""INSERT INTO site_chat_conversas
+                       (sessao_id, ip, user_agent, cliente_id, nome)
+                       VALUES (%s,%s,%s,%s,%s) RETURNING *""",
+                    [sessao_id, ip, ua,
+                     cli['id'] if cli else None,
+                     cli.get('nome') if cli else None],
+                    fetch='one')
+    return dict(nv)
+
+
+def _luq_carregar_historico(conversa_id, limit=50):
+    rows = db_execute("""SELECT role, content, blocks FROM site_chat_mensagens
+                          WHERE conversa_id=%s ORDER BY id ASC LIMIT %s""",
+                       [conversa_id, limit], fetch='all') or []
+    msgs = []
+    for r in rows:
+        if r.get('blocks'):
+            blocks = r['blocks'] if isinstance(r['blocks'], list) else []
+            msgs.append({'role': r['role'], 'content': blocks})
+        elif r.get('content'):
+            msgs.append({'role': r['role'], 'content': r['content']})
+    return msgs
+
+
+def _luq_save_msg(conversa_id, role, content=None, blocks=None):
+    db_execute("""INSERT INTO site_chat_mensagens
+                  (conversa_id, role, content, blocks)
+                  VALUES (%s,%s,%s,%s)""",
+               [conversa_id, role, content,
+                json.dumps(blocks, ensure_ascii=False) if blocks else None])
+    db_execute("UPDATE site_chat_conversas SET ultimo_msg_em=NOW() WHERE id=%s",
+               [conversa_id])
+
+
+def _luq_tool_buscar_produtos(args):
+    """Tool: busca produtos via PDV e devolve lista resumida."""
+    termo = (args.get('termo') or '').strip()
+    idade = args.get('idade_anos')
+    sexo = (args.get('sexo') or '').strip().lower()
+    preco_max = args.get('preco_max')
+    extras = {}
+    if termo:
+        pass  # busca textual via busca=
+    # Mapeia sexo pra termo + departamento heuristico
+    termos = []
+    if termo:
+        termos.append(termo)
+    # Tentar incluir faixa etaria — depende dos valores cadastrados
+    # Pra MVP, vamos so usar busca textual + filtro preco
+    busca = ' '.join(termos) or None
+    produtos, _ = listar_produtos(busca=busca, limite=8)
+    out = []
+    for p in produtos[:8]:
+        preco = float(p.get('preco_promo') or p.get('preco_venda') or 0)
+        if preco_max and preco > float(preco_max):
+            continue
+        out.append({
+            'id': p.get('id'),
+            'nome': p.get('descricao'),
+            'preco': preco,
+            'foto': p.get('foto_url') or '',
+            'url': f"/produto/{p.get('id')}",
+        })
+    return {'produtos': out}
+
+
+def _luq_tool_registrar_lead(conversa_id, args):
+    """Marca conversa como lead + notifica vendedor via PDV."""
+    nome = (args.get('nome') or '').strip()[:120]
+    telefone = ''.join(c for c in (args.get('telefone') or '') if c.isdigit())[:20]
+    idade = args.get('idade_crianca')
+    sexo = (args.get('sexo_crianca') or '').strip().lower()
+    obs = (args.get('observacao') or '').strip()[:500]
+    db_execute("""UPDATE site_chat_conversas
+                  SET lead_marcado=TRUE, nome=COALESCE(NULLIF(%s,''),nome),
+                      lead_telefone=COALESCE(NULLIF(%s,''),lead_telefone),
+                      idade_crianca=COALESCE(%s,idade_crianca),
+                      sexo_crianca=COALESCE(NULLIF(%s,''),sexo_crianca)
+                  WHERE id=%s""",
+               [nome, telefone, idade if idade else None, sexo, conversa_id])
+    # Notifica vendedor via PDV (que tem Z-API configurado)
+    if PDVPRO_API_KEY:
+        try:
+            msg = (f"🎯 Novo lead do SITE Luquizinha\n\n"
+                   f"👤 Cliente: {nome or '(sem nome)'}\n"
+                   f"📱 WhatsApp: {telefone or '(nao informado)'}\n"
+                   f"🧸 Crianca: {sexo or '?'} {idade or '?'} anos\n\n"
+                   f"💬 {obs or '(sem observacao)'}\n\n"
+                   f"Ver conversa: www.luquibrinquedos.com.br/admin/chats")
+            requests.post(PDVPRO_URL + '/api/integracao/notificar-vendedores',
+                          json={'mensagem': msg},
+                          headers={'X-API-Key': PDVPRO_API_KEY}, timeout=8)
+        except Exception as e:
+            log.error("notificar vendedor: %s", e)
+    return {'ok': True, 'msg': 'Lead registrado, vendedor avisado.'}
+
+
+@app.route('/api/luquizinha/historico')
+def luquizinha_historico():
+    """GET histórico da conversa atual (pra widget retomar onde parou)."""
+    sid = request.cookies.get('luqz_sid') or ''
+    if not sid:
+        return jsonify({'mensagens': []})
+    conv = db_execute("SELECT id FROM site_chat_conversas WHERE sessao_id=%s",
+                      [sid], fetch='one')
+    if not conv:
+        return jsonify({'mensagens': []})
+    rows = db_execute("""SELECT role, content, blocks FROM site_chat_mensagens
+                          WHERE conversa_id=%s ORDER BY id ASC LIMIT 100""",
+                       [conv['id']], fetch='all') or []
+    msgs = []
+    for r in rows:
+        if r['role'] not in ('user', 'assistant'):
+            continue
+        texto = r.get('content') or ''
+        produtos = []
+        if r.get('blocks'):
+            blocks = r['blocks'] if isinstance(r['blocks'], list) else []
+            for b in blocks:
+                if b.get('type') == 'text':
+                    texto = (texto + '\n' + b.get('text', '')).strip()
+                elif b.get('type') == 'tool_use' and b.get('name') == 'buscar_produtos':
+                    pass  # produtos vem no tool_result; ignora aqui
+                elif b.get('type') == 'tool_result':
+                    try:
+                        d = json.loads(b.get('content') or '{}')
+                        if isinstance(d, dict) and d.get('produtos'):
+                            produtos = d['produtos']
+                    except Exception:
+                        pass
+        if not texto and not produtos and r['role'] == 'user':
+            continue  # tool_results do user nao mostra
+        if texto or produtos:
+            msgs.append({'role': r['role'], 'texto': texto, 'produtos': produtos})
+    return jsonify({'mensagens': msgs})
+
+
+@app.route('/api/luquizinha/chat', methods=['POST'])
+def luquizinha_chat():
+    """Envia 1 mensagem do cliente e devolve a resposta da IA."""
+    if not ANTHROPIC_API_KEY:
+        return jsonify({'erro': 'Luquizinha indisponivel agora'}), 503
+    d = request.get_json() or {}
+    texto = (d.get('texto') or '').strip()[:2000]
+    if not texto:
+        return jsonify({'erro': 'texto vazio'}), 400
+    sid = request.cookies.get('luqz_sid') or ''
+    if not sid:
+        sid = secrets.token_urlsafe(16)[:32]
+    # Rate limit: 30 msgs por IP por dia
+    ip = _ip_request()
+    if ip:
+        cnt = db_execute("""SELECT COUNT(*) AS n FROM site_chat_mensagens m
+                            JOIN site_chat_conversas c ON c.id=m.conversa_id
+                            WHERE c.ip=%s AND m.role='user'
+                              AND m.criado_em > NOW() - INTERVAL '24 hours'""",
+                         [ip], fetch='one') or {}
+        if int((cnt or {}).get('n') or 0) >= 30:
+            resp = jsonify({'resposta': 'Vc ja conversou bastante hoje comigo, viu! 💛 Volta amanha que continuamos! Pra falar agora com vendedor: wa.me/5545991119800'})
+            resp.set_cookie('luqz_sid', sid, max_age=60*60*24*30, httponly=False, samesite='Lax')
+            return resp
+    conv = _luq_get_or_create_conversa(sid)
+    _luq_save_msg(conv['id'], 'user', content=texto)
+    messages = _luq_carregar_historico(conv['id'])
+    # Loop tool use (max 4 turnos)
+    resposta_texto = ''
+    produtos_exibir = []
+    for _ in range(4):
+        payload = {
+            'model': 'claude-haiku-4-5-20251001',  # mais barato pra chat
+            'max_tokens': 800,
+            'system': LUQUIZINHA_SITE_PROMPT,
+            'tools': LUQUIZINHA_TOOLS,
+            'messages': messages,
+        }
+        try:
+            r = requests.post('https://api.anthropic.com/v1/messages',
+                              headers={'Content-Type': 'application/json',
+                                       'x-api-key': ANTHROPIC_API_KEY,
+                                       'anthropic-version': '2023-06-01'},
+                              json=payload, timeout=30)
+            if r.status_code != 200:
+                log.error("Luquizinha %s: %s", r.status_code, r.text[:200])
+                break
+            body = r.json()
+        except Exception as e:
+            log.error("Luquizinha req: %s", e)
+            break
+        content_blocks = body.get('content') or []
+        _luq_save_msg(conv['id'], 'assistant', blocks=content_blocks)
+        messages.append({'role': 'assistant', 'content': content_blocks})
+        stop_reason = body.get('stop_reason')
+        tool_uses = [b for b in content_blocks if b.get('type') == 'tool_use']
+        if stop_reason == 'tool_use' and tool_uses:
+            tool_results = []
+            for tu in tool_uses:
+                nm = tu.get('name')
+                args = tu.get('input') or {}
+                if nm == 'buscar_produtos':
+                    result = _luq_tool_buscar_produtos(args)
+                    produtos_exibir = result.get('produtos') or []
+                elif nm == 'registrar_lead':
+                    result = _luq_tool_registrar_lead(conv['id'], args)
+                else:
+                    result = {'erro': 'tool desconhecida'}
+                tool_results.append({
+                    'type': 'tool_result',
+                    'tool_use_id': tu.get('id'),
+                    'content': json.dumps(result, ensure_ascii=False),
+                })
+            _luq_save_msg(conv['id'], 'user', blocks=tool_results)
+            messages.append({'role': 'user', 'content': tool_results})
+            continue
+        # Resposta final
+        textos = [b.get('text', '') for b in content_blocks if b.get('type') == 'text']
+        resposta_texto = '\n'.join(t for t in textos if t).strip()
+        break
+    if not resposta_texto:
+        resposta_texto = 'Hmm, deu um errinho aqui! Pode tentar de novo? 💛'
+    resp = jsonify({'resposta': resposta_texto, 'produtos': produtos_exibir})
+    resp.set_cookie('luqz_sid', sid, max_age=60*60*24*30, httponly=False, samesite='Lax')
+    return resp
+
+
+# ─── Listas de aniversario continuam ─────────────────────────────────────────
 @app.route('/api/listas/usuario')
 def listas_do_usuario():
     """Devolve as listas do cliente logado pra dropdown no card de produto."""
@@ -3170,6 +3537,54 @@ def admin_banners():
 def admin_banner_excluir(bid):
     db_execute("DELETE FROM banners WHERE id=%s", [bid])
     return redirect(url_for('admin_banners'))
+
+
+@app.route('/admin/chats')
+@requer_admin
+def admin_chats():
+    """Lista todas as conversas da Luquizinha do site."""
+    convs = db_execute("""SELECT c.*,
+                                 (SELECT COUNT(*) FROM site_chat_mensagens m
+                                  WHERE m.conversa_id=c.id AND m.role='user') AS msgs_user
+                          FROM site_chat_conversas c
+                          ORDER BY ultimo_msg_em DESC NULLS LAST LIMIT 200""",
+                       fetch='all') or []
+    return render_template('admin_chats.html', conversas=convs)
+
+
+@app.route('/admin/chats/<int:cid>')
+@requer_admin
+def admin_chat_view(cid):
+    conv = db_execute("SELECT * FROM site_chat_conversas WHERE id=%s",
+                      [cid], fetch='one')
+    if not conv:
+        return redirect(url_for('admin_chats'))
+    msgs_raw = db_execute("""SELECT role, content, blocks, criado_em
+                             FROM site_chat_mensagens
+                             WHERE conversa_id=%s ORDER BY id ASC""",
+                          [cid], fetch='all') or []
+    msgs = []
+    for r in msgs_raw:
+        texto = r.get('content') or ''
+        produtos = []
+        if r.get('blocks'):
+            blocks = r['blocks'] if isinstance(r['blocks'], list) else []
+            for b in blocks:
+                if b.get('type') == 'text':
+                    texto = (texto + '\n' + b.get('text', '')).strip()
+                elif b.get('type') == 'tool_use':
+                    texto = (texto + f"\n[tool] {b.get('name')}({json.dumps(b.get('input') or {}, ensure_ascii=False)})").strip()
+                elif b.get('type') == 'tool_result':
+                    try:
+                        d = json.loads(b.get('content') or '{}')
+                        if isinstance(d, dict) and d.get('produtos'):
+                            produtos = d['produtos']
+                    except Exception:
+                        pass
+        if texto or produtos:
+            msgs.append({'role': r['role'], 'texto': texto, 'produtos': produtos,
+                         'criado_em': r['criado_em']})
+    return render_template('admin_chat_view.html', conv=conv, mensagens=msgs)
 
 
 @app.route('/admin/banners/seed', methods=['POST'])

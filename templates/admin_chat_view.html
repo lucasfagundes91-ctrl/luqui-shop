@@ -1,0 +1,46 @@
+{% extends "admin_base.html" %}
+{% set pagina = 'chats' %}
+{% block titulo %}Chat #{{ conv.id }} — LuquiShop{% endblock %}
+{% block conteudo %}
+<a href="/admin/chats" style="color:#64748B;font-size:13px">← Voltar pra lista</a>
+<h2 style="margin-top:6px">🧸 Conversa #{{ conv.id }}</h2>
+
+<div class="card" style="margin-bottom:14px;padding:14px;font-size:13px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px">
+  <div><b>Cliente:</b> {{ conv.nome or '(sem nome)' }}</div>
+  <div><b>WhatsApp:</b> {{ conv.lead_telefone or '—' }}</div>
+  <div><b>Criança:</b> {{ conv.sexo_crianca or '?' }} · {{ conv.idade_crianca or '?' }} anos</div>
+  <div><b>Início:</b> {{ conv.criado_em.strftime('%d/%m %H:%M') if conv.criado_em else '—' }}</div>
+  <div><b>IP:</b> {{ conv.ip or '—' }}</div>
+  <div>
+    {% if conv.lead_marcado %}
+      <span style="background:#DCFCE7;color:#15803D;padding:3px 10px;border-radius:6px;font-size:12px;font-weight:700">✓ LEAD MARCADO</span>
+    {% endif %}
+  </div>
+</div>
+
+<div style="background:#F8FAFC;padding:18px;border-radius:14px;display:flex;flex-direction:column;gap:8px;max-width:720px">
+  {% for m in mensagens %}
+    {% if m.role == 'user' %}
+      <div style="max-width:75%;padding:9px 14px;border-radius:14px;background:#1652C7;color:#fff;align-self:flex-end;border-bottom-right-radius:4px;white-space:pre-wrap;font-size:14px;line-height:1.4">{{ m.texto }}</div>
+    {% else %}
+      <div style="max-width:75%;padding:9px 14px;border-radius:14px;background:#fff;color:#1e293b;align-self:flex-start;border-bottom-left-radius:4px;border:1px solid #E2E8F0;white-space:pre-wrap;font-size:14px;line-height:1.4">{{ m.texto }}</div>
+      {% if m.produtos %}
+        <div style="align-self:flex-start;display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;max-width:75%;margin-bottom:4px">
+          {% for p in m.produtos %}
+            <a href="/produto/{{ p.id }}" target="_blank" style="background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:6px;text-decoration:none;color:#1e293b;font-size:11px">
+              <div style="height:60px;background:#F1F5F9;border-radius:4px;display:flex;align-items:center;justify-content:center;margin-bottom:4px">
+                {% if p.foto %}<img src="{{ p.foto }}" style="max-width:100%;max-height:100%">{% else %}📦{% endif %}
+              </div>
+              <div style="line-height:1.2;height:28px;overflow:hidden">{{ p.nome }}</div>
+              <div style="color:#16A34A;font-weight:800;margin-top:2px">R$ {{ '%.2f'|format(p.preco) }}</div>
+            </a>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endif %}
+    <div style="font-size:10px;color:#94A3B8;align-self:{{ 'flex-end' if m.role=='user' else 'flex-start' }}">
+      {{ m.criado_em.strftime('%H:%M') if m.criado_em else '' }}
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

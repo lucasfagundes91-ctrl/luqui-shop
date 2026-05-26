@@ -475,6 +475,281 @@ document.addEventListener('keydown', e=>{
 
 {% block conteudo %}{% endblock %}
 
+<!-- ─── Luquizinha (chatbot site) ─── -->
+<div id="luqz-widget">
+  <div id="luqz-balao" style="display:none">
+    <button id="luqz-balao-x">×</button>
+    <p>Oi! 💛 Sou a Luquizinha 🧸<br>Quer ajuda pra escolher um brinquedo?</p>
+    <button id="luqz-balao-cta">Conversar agora</button>
+  </div>
+  <button id="luqz-avatar" aria-label="Abrir Luquizinha">
+    <span class="luqz-emoji">🧸</span>
+    <span id="luqz-badge" style="display:none">1</span>
+  </button>
+</div>
+
+<div id="luqz-chat" aria-hidden="true">
+  <div class="luqz-h">
+    <div class="luqz-h-info">
+      <div class="luqz-h-avatar">🧸</div>
+      <div>
+        <b>Luquizinha</b>
+        <div class="luqz-status">Atendente IA · online</div>
+      </div>
+    </div>
+    <button id="luqz-fechar" aria-label="Fechar">×</button>
+  </div>
+  <div id="luqz-msgs"></div>
+  <form id="luqz-form">
+    <input id="luqz-input" type="text" placeholder="Escreva pra Luquizinha..." maxlength="500" autocomplete="off">
+    <button type="submit" id="luqz-enviar">➤</button>
+  </form>
+</div>
+
+<style>
+  /* Avatar fixo */
+  #luqz-widget{ position:fixed; bottom:18px; right:18px; z-index:80;
+    display:flex; flex-direction:column; align-items:flex-end; gap:8px; }
+  #luqz-avatar{ width:64px; height:64px; border-radius:50%;
+    background:linear-gradient(135deg, #FFC700, #FFA800);
+    box-shadow:0 8px 24px rgba(255,184,0,.5); cursor:pointer;
+    border:3px solid #fff; display:flex; align-items:center;
+    justify-content:center; transition:transform .15s; position:relative;
+    animation:luqzBounce 2s ease-in-out infinite; }
+  #luqz-avatar:hover{ transform:scale(1.08); }
+  #luqz-avatar .luqz-emoji{ font-size:32px; line-height:1; }
+  #luqz-badge{ position:absolute; top:-2px; right:-2px;
+    background:#DC2626; color:#fff; font-size:11px; font-weight:800;
+    min-width:20px; height:20px; border-radius:10px; padding:0 6px;
+    display:flex; align-items:center; justify-content:center;
+    border:2px solid #fff; }
+  @keyframes luqzBounce{
+    0%,100%{ transform:translateY(0); }
+    50%{ transform:translateY(-6px); }
+  }
+  /* Balão de boas-vindas */
+  #luqz-balao{ background:#fff; padding:16px 16px 14px; border-radius:14px 14px 4px 14px;
+    box-shadow:0 8px 24px rgba(0,0,0,.18); max-width:240px;
+    position:relative; animation:luqzFadeIn .35s ease; }
+  #luqz-balao p{ font-size:13.5px; line-height:1.4; margin-bottom:10px; color:#1e293b; }
+  #luqz-balao-x{ position:absolute; top:4px; right:8px; background:none;
+    font-size:18px; color:#94A3B8; cursor:pointer; padding:0; line-height:1; }
+  #luqz-balao-cta{ background:#1652C7; color:#fff; border:0; padding:8px 14px;
+    border-radius:8px; font-weight:700; font-size:13px; cursor:pointer; width:100%; }
+  #luqz-balao-cta:hover{ background:#0E3D9E; }
+  @keyframes luqzFadeIn{ from{opacity:0;transform:translateY(8px);} to{opacity:1;transform:none;} }
+  /* Modal chat */
+  #luqz-chat{ position:fixed; bottom:18px; right:18px; width:380px;
+    height:580px; max-height:calc(100vh - 36px);
+    background:#fff; border-radius:18px; box-shadow:0 20px 60px rgba(0,0,0,.3);
+    z-index:90; display:none; flex-direction:column; overflow:hidden; }
+  #luqz-chat.aberto{ display:flex; }
+  @media (max-width:480px){
+    #luqz-chat{ bottom:0; right:0; left:0; width:100%;
+      height:100vh; max-height:100vh; border-radius:0; }
+  }
+  .luqz-h{ background:linear-gradient(135deg, #1652C7, #3B82F6);
+    color:#fff; padding:14px 16px; display:flex; justify-content:space-between;
+    align-items:center; flex:none; }
+  .luqz-h-info{ display:flex; align-items:center; gap:10px; }
+  .luqz-h-avatar{ width:40px; height:40px; background:#FFC700;
+    border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:22px; }
+  .luqz-h b{ font-size:15px; }
+  .luqz-status{ font-size:11px; opacity:.85; margin-top:1px;
+    display:flex; align-items:center; gap:5px; }
+  .luqz-status::before{ content:''; width:7px; height:7px; background:#10B981;
+    border-radius:50%; }
+  #luqz-fechar{ background:transparent; color:#fff; font-size:26px;
+    cursor:pointer; padding:0 4px; line-height:1; }
+  #luqz-msgs{ flex:1; overflow-y:auto; padding:14px 14px 8px;
+    background:#F8FAFC; display:flex; flex-direction:column; gap:8px; }
+  .luqz-msg{ max-width:80%; padding:9px 13px; border-radius:14px;
+    font-size:14px; line-height:1.4; white-space:pre-wrap; word-break:break-word; }
+  .luqz-msg.user{ background:#1652C7; color:#fff; align-self:flex-end;
+    border-bottom-right-radius:4px; }
+  .luqz-msg.bot{ background:#fff; color:#1e293b; align-self:flex-start;
+    border-bottom-left-radius:4px; border:1px solid #E2E8F0; }
+  .luqz-prods{ align-self:stretch; display:grid;
+    grid-template-columns:repeat(2,1fr); gap:8px; margin:4px 0 4px; }
+  .luqz-prod{ background:#fff; border:1px solid #E2E8F0; border-radius:10px;
+    overflow:hidden; text-decoration:none; color:#1e293b;
+    display:flex; flex-direction:column; transition:transform .12s; }
+  .luqz-prod:hover{ transform:translateY(-2px); }
+  .luqz-prod .img{ aspect-ratio:1; background:#F1F5F9; display:flex;
+    align-items:center; justify-content:center; }
+  .luqz-prod img{ max-width:100%; max-height:100%; }
+  .luqz-prod .ph{ font-size:32px; }
+  .luqz-prod .nm{ font-size:11.5px; padding:6px 8px 0; line-height:1.25;
+    height:44px; overflow:hidden; }
+  .luqz-prod .pr{ font-weight:800; color:#16A34A; font-size:13px;
+    padding:2px 8px 8px; }
+  .luqz-typing{ display:inline-block; padding:9px 14px; background:#fff;
+    border-radius:14px; border:1px solid #E2E8F0; align-self:flex-start; }
+  .luqz-typing span{ display:inline-block; width:6px; height:6px;
+    background:#94A3B8; border-radius:50%; margin:0 1px;
+    animation:luqzDot 1.4s infinite ease-in-out; }
+  .luqz-typing span:nth-child(2){ animation-delay:.2s; }
+  .luqz-typing span:nth-child(3){ animation-delay:.4s; }
+  @keyframes luqzDot{ 0%,80%,100%{transform:scale(.6);opacity:.4;}
+                       40%{transform:scale(1);opacity:1;} }
+  #luqz-form{ display:flex; gap:8px; padding:10px 12px; border-top:1px solid #E2E8F0;
+    background:#fff; flex:none; }
+  #luqz-input{ flex:1; padding:10px 14px; border:1px solid #E2E8F0;
+    border-radius:24px; font-size:14px; outline:none;
+    transition:border-color .15s; }
+  #luqz-input:focus{ border-color:#1652C7; }
+  #luqz-enviar{ background:#1652C7; color:#fff; border:0; width:40px;
+    height:40px; border-radius:50%; font-size:16px; cursor:pointer; }
+  #luqz-enviar:hover{ background:#0E3D9E; }
+  #luqz-enviar:disabled{ opacity:.5; cursor:not-allowed; }
+</style>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const widget = $('luqz-widget');
+  const balao = $('luqz-balao');
+  const avatar = $('luqz-avatar');
+  const chat = $('luqz-chat');
+  const msgs = $('luqz-msgs');
+  const form = $('luqz-form');
+  const input = $('luqz-input');
+  const enviar = $('luqz-enviar');
+  const badge = $('luqz-badge');
+
+  const LS_KEY = 'luqz_visit';
+  const visit = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+
+  function esc(s){ return (s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function rs(v){ return 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+  function appendUser(t){
+    const el = document.createElement('div');
+    el.className = 'luqz-msg user';
+    el.textContent = t;
+    msgs.appendChild(el); msgs.scrollTop = msgs.scrollHeight;
+  }
+  function appendBot(t, produtos){
+    if(t){
+      const el = document.createElement('div');
+      el.className = 'luqz-msg bot';
+      el.textContent = t;
+      msgs.appendChild(el);
+    }
+    if(produtos && produtos.length){
+      const grid = document.createElement('div');
+      grid.className = 'luqz-prods';
+      produtos.forEach(p=>{
+        const a = document.createElement('a');
+        a.className = 'luqz-prod';
+        a.href = p.url || ('/produto/'+p.id);
+        a.innerHTML = `<div class="img">${p.foto?`<img src="${esc(p.foto)}">`:'<span class="ph">📦</span>'}</div>
+          <div class="nm">${esc(p.nome||'')}</div>
+          <div class="pr">${rs(p.preco)}</div>`;
+        grid.appendChild(a);
+      });
+      msgs.appendChild(grid);
+    }
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+  function showTyping(){
+    const el = document.createElement('div');
+    el.className = 'luqz-typing';
+    el.id = 'luqz-typing-now';
+    el.innerHTML = '<span></span><span></span><span></span>';
+    msgs.appendChild(el); msgs.scrollTop = msgs.scrollHeight;
+  }
+  function hideTyping(){
+    const el = $('luqz-typing-now');
+    if(el) el.remove();
+  }
+
+  async function carregarHistorico(){
+    try{
+      const r = await fetch('/api/luquizinha/historico');
+      const d = await r.json();
+      const lista = d.mensagens || [];
+      if(!lista.length) return false;
+      lista.forEach(m=>{
+        if(m.role === 'user' && m.texto) appendUser(m.texto);
+        else if(m.role === 'assistant') appendBot(m.texto, m.produtos);
+      });
+      return true;
+    }catch(e){ return false; }
+  }
+
+  async function enviarMensagem(t){
+    appendUser(t);
+    input.value=''; enviar.disabled=true; showTyping();
+    try{
+      const r = await fetch('/api/luquizinha/chat', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({texto:t})
+      });
+      const d = await r.json();
+      hideTyping();
+      appendBot(d.resposta || d.erro || '...', d.produtos);
+    }catch(e){
+      hideTyping();
+      appendBot('Hmm, deu um errinho na conexao 💛 Tenta de novo!');
+    }finally{
+      enviar.disabled=false; input.focus();
+    }
+  }
+
+  async function abrir(){
+    balao.style.display='none';
+    widget.style.display='none';
+    chat.classList.add('aberto');
+    chat.setAttribute('aria-hidden','false');
+    badge.style.display='none';
+    visit.ultimaAbertura = Date.now();
+    localStorage.setItem(LS_KEY, JSON.stringify(visit));
+    if(!msgs.children.length){
+      const teveHist = await carregarHistorico();
+      if(!teveHist){
+        // 1a mensagem sem chamar API — texto fixo
+        appendBot("Oi! 💛 Sou a Luquizinha 🧸 Vou te ajudar a achar o brinquedo perfeito! Como vc se chama?");
+      }
+    }
+    setTimeout(()=>input.focus(), 200);
+  }
+  function fechar(){
+    chat.classList.remove('aberto');
+    chat.setAttribute('aria-hidden','true');
+    widget.style.display='flex';
+  }
+
+  avatar.onclick = abrir;
+  $('luqz-balao-cta').onclick = abrir;
+  $('luqz-balao-x').onclick = ()=>{ balao.style.display='none'; visit.balaoFechado = Date.now(); localStorage.setItem(LS_KEY, JSON.stringify(visit)); };
+  $('luqz-fechar').onclick = fechar;
+  form.onsubmit = (e)=>{
+    e.preventDefault();
+    const t = (input.value || '').trim();
+    if(!t) return;
+    enviarMensagem(t);
+  };
+
+  // Balão de boas-vindas: primeira visita → 4s; depois → a cada 2 minutos
+  const agora = Date.now();
+  const primeiraVisita = !visit.primeiraVista;
+  if(primeiraVisita){
+    visit.primeiraVista = agora;
+    localStorage.setItem(LS_KEY, JSON.stringify(visit));
+    setTimeout(()=>{ if(!chat.classList.contains('aberto')) balao.style.display='block'; }, 4000);
+  } else {
+    // Aparece a cada 2 min, se balão não estiver visível e chat fechado
+    setInterval(()=>{
+      if(chat.classList.contains('aberto')) return;
+      if(balao.style.display !== 'none' && balao.style.display) return;
+      balao.style.display='block';
+    }, 120000);
+  }
+})();
+</script>
+
 <!-- FOOTER -->
 <footer class="footer">
   <div class="container">

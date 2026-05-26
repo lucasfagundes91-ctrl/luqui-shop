@@ -1,0 +1,53 @@
+{% extends "admin_base.html" %}
+{% set pagina = 'chats' %}
+{% block titulo %}Chats Luquizinha — LuquiShop{% endblock %}
+{% block conteudo %}
+<h2>🧸 Conversas da Luquizinha (site)</h2>
+<p style="color:#64748B;font-size:13px;margin-bottom:14px">
+  Toda conversa do chatbot do site fica aqui. Use pra ver o que clientes estão pedindo + acompanhar leads marcados.
+</p>
+
+<div class="card" style="padding:0">
+  <table style="width:100%;border-collapse:collapse">
+    <thead>
+      <tr style="background:#F8FAFC;font-size:12px;color:#64748B;text-transform:uppercase">
+        <th style="padding:12px;text-align:left">Cliente</th>
+        <th style="padding:12px;text-align:left">Criança</th>
+        <th style="padding:12px;text-align:left">WhatsApp</th>
+        <th style="padding:12px;text-align:center">Msgs</th>
+        <th style="padding:12px;text-align:center">Lead</th>
+        <th style="padding:12px;text-align:left">Última msg</th>
+        <th style="padding:12px"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in conversas %}
+      <tr style="border-top:1px solid #E2E8F0">
+        <td style="padding:12px">{{ c.nome or '(sem nome)' }}</td>
+        <td style="padding:12px;font-size:13px">
+          {% if c.sexo_crianca %}{{ c.sexo_crianca }}{% endif %}
+          {% if c.idade_crianca %} · {{ c.idade_crianca }}a{% endif %}
+        </td>
+        <td style="padding:12px;font-size:13px">{{ c.lead_telefone or '—' }}</td>
+        <td style="padding:12px;text-align:center"><b>{{ c.msgs_user or 0 }}</b></td>
+        <td style="padding:12px;text-align:center">
+          {% if c.lead_marcado %}
+            <span style="background:#DCFCE7;color:#15803D;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700">✓ LEAD</span>
+          {% else %}
+            <span style="color:#94A3B8">—</span>
+          {% endif %}
+        </td>
+        <td style="padding:12px;font-size:12px;color:#64748B">
+          {{ c.ultimo_msg_em.strftime('%d/%m %H:%M') if c.ultimo_msg_em else '—' }}
+        </td>
+        <td style="padding:12px;text-align:right">
+          <a href="/admin/chats/{{ c.id }}" style="background:#1652C7;color:#fff;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;text-decoration:none">Ver conversa</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" style="padding:40px;text-align:center;color:#94A3B8">Nenhuma conversa ainda.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
