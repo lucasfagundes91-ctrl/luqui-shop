@@ -974,6 +974,36 @@ function luquiAlert(msg, titulo='Aviso'){
   return luquiConfirm({titulo, msg, ok:'Ok', cancel:''}).then(()=>{});
 }
 
+function mostrarCarrinhoPopup(){
+  // Remove existente se houver
+  const old = document.getElementById('luq-cart-popup');
+  if(old) old.remove();
+  const el = document.createElement('div');
+  el.id = 'luq-cart-popup';
+  el.style.cssText = 'position:fixed;top:80px;right:20px;background:#fff;border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.18);padding:16px 18px;z-index:200;max-width:320px;animation:lqcPopIn .35s ease;border:1px solid #DCFCE7';
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <div style="width:36px;height:36px;background:#DCFCE7;color:#15803D;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900">✓</div>
+      <div style="flex:1">
+        <div style="font-weight:800;color:#1e293b;font-size:14px">Adicionado ao carrinho!</div>
+        <div style="font-size:11px;color:#64748B">O brinquedo já está no seu carrinho 🛒</div>
+      </div>
+      <button onclick="document.getElementById('luq-cart-popup').remove()" style="background:transparent;border:0;color:#94A3B8;font-size:20px;cursor:pointer;line-height:1;padding:0 4px">×</button>
+    </div>
+    <div style="display:flex;gap:6px">
+      <a href="/carrinho" style="flex:1.2;background:#1652C7;color:#fff;padding:9px 12px;border-radius:8px;font-weight:700;font-size:13px;text-align:center;text-decoration:none">Ver carrinho →</a>
+      <button onclick="document.getElementById('luq-cart-popup').remove()" style="flex:1;background:#fff;color:#1652C7;border:1.5px solid #1652C7;padding:9px 12px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">Continuar</button>
+    </div>`;
+  if(!document.getElementById('lqc-pop-css')){
+    const st = document.createElement('style');
+    st.id='lqc-pop-css';
+    st.textContent='@keyframes lqcPopIn{from{transform:translateX(20px);opacity:0;}to{transform:none;opacity:1;}}';
+    document.head.appendChild(st);
+  }
+  document.body.appendChild(el);
+  // Auto-fechar em 8s se ainda estiver visível
+  setTimeout(()=>{ const e = document.getElementById('luq-cart-popup'); if(e) e.remove(); }, 8000);
+}
 async function carrinhoAdd(produto_id, qtd=1){
   try{
     const r=await fetch('/api/carrinho/add',{
@@ -982,8 +1012,12 @@ async function carrinhoAdd(produto_id, qtd=1){
     });
     const d=await r.json();
     if(d.erro){ toast(d.erro,'err'); return; }
-    toast('Adicionado ao carrinho 🛒');
-    setTimeout(()=>location.reload(), 700);
+    mostrarCarrinhoPopup();
+    // Atualiza badge do carrinho no header sem recarregar
+    const cartLabel = document.querySelector('.topo-ico a[href="/carrinho"] div div');
+    if(cartLabel && d.qtd_total != null){
+      cartLabel.innerHTML = d.qtd_total + '<br><small>R$ ' + Number(d.subtotal||0).toFixed(2).replace('.',',') + '</small>';
+    }
   }catch(e){ toast('Erro: '+e.message,'err'); }
 }
 async function comprarAgora(produto_id, qtd=1){

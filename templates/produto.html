@@ -89,17 +89,25 @@
                style="width:70px;padding:8px;border:1px solid var(--linha);border-radius:8px;text-align:center">
       </div>
 
-      <div style="display:flex;gap:10px;align-items:stretch">
-        <button class="btn btn-amarelo" style="flex:1;padding:18px;font-size:16px"
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:stretch">
+        <button class="btn btn-amarelo" style="padding:16px;font-size:15px"
                 onclick="carrinhoAdd({{ p.id }}, parseInt(document.getElementById('qtd').value)||1)">
-          🛒 Adicionar ao carrinho
+          + Adicionar ao carrinho
+        </button>
+        <button class="btn btn-primario" style="padding:16px;font-size:15px"
+                onclick="comprarAgora({{ p.id }}, parseInt(document.getElementById('qtd').value)||1)">
+          🛒 Comprar agora
         </button>
         <button id="btn-fav" onclick="toggleFavorito({{ p.id }})" title="Favoritar"
-                style="background:#fff;border:2px solid var(--linha);padding:0 18px;border-radius:10px;font-size:28px;cursor:pointer">
+                style="background:#fff;border:2px solid var(--linha);padding:0 16px;border-radius:10px;font-size:24px;cursor:pointer">
           {% set favs = wishlist_ids() %}
           <span id="fav-icon">{{ '❤️' if p.id in favs else '🤍' }}</span>
         </button>
       </div>
+      <button class="btn-mini-lista" style="margin-top:8px;width:100%;padding:10px;background:transparent;color:var(--azul);border:1px dashed var(--azul);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer"
+              onclick="addNaLista({{ p.id }}, this)">
+        🎁 Adicionar à lista de aniversário
+      </button>
 
       <script>
       async function calcFrete(){
