@@ -2747,6 +2747,18 @@ def minha_conta():
                            carrinho=carrinho_ler())
 
 
+@app.route('/lista-aniversario')
+def pag_lista_aniversario_info():
+    """Landing page explicando o que e e CTA pra criar/ver listas."""
+    c = cliente_logado()
+    if c:
+        return redirect(url_for('minhas_listas'))
+    return render_template('lista_aniversario_landing.html',
+                           cliente=None,
+                           categorias=listar_categorias(),
+                           carrinho=carrinho_ler())
+
+
 # ─── Lista de aniversario (wishlist publica) ─────────────────────────────────
 def _lista_carregar_itens(lista_id):
     """Carrega itens da lista enriquecidos com dados de produto do PDV."""
@@ -3216,7 +3228,7 @@ def listas_do_usuario():
     """Devolve as listas do cliente logado pra dropdown no card de produto."""
     c = cliente_logado()
     if not c:
-        return jsonify({'listas': []})
+        return jsonify({'precisa_login': True, 'listas': []})
     listas = db_execute("""SELECT id, nome_crianca, slug FROM listas_aniversario
                             WHERE cliente_id=%s AND ativo
                             ORDER BY criado_em DESC""",

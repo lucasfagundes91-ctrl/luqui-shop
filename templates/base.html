@@ -82,6 +82,9 @@
   .menu .mlink.promo:hover{ background:#D97706; }
   .menu .mlink.clube{ background:var(--amarelo); color:var(--azul); }
   .menu .mlink.clube:hover{ background:var(--amarelo-d); }
+  .menu .mlink.lista{ background:#0E3D9E; color:#FFC700;
+    border:1.5px solid #FFC700; }
+  .menu .mlink.lista:hover{ background:#1652C7; }
 
   /* ─── Drawer lateral (todos os departamentos) ─── */
   .drawer-bg{ position:fixed; inset:0; background:rgba(15,23,42,.55);
@@ -396,6 +399,7 @@ gtag('config', '{{ GOOGLE_TAG_ID }}');
     <span class="sep"></span>
     <a class="mlink promo" href="/liquida-luqui">💥 LIQUIDA LUQUI</a>
     <a class="mlink clube" href="/clube">🎁 Clube Luqui</a>
+    <a class="mlink lista" href="/lista-aniversario">🎂 Lista Aniversário</a>
   </div>
 </nav>
 
@@ -997,6 +1001,14 @@ async function addNaLista(produto_id, btn){
   try{
     const r = await fetch('/api/listas/usuario');
     const d = await r.json();
+    if(d.precisa_login){
+      const ok = await luquiConfirm({
+        titulo:'🎂 Lista de aniversário',
+        msg:'Pra criar uma lista de aniversário, você precisa ter uma conta. Quer criar agora?',
+        ok:'Criar conta', cancel:'Agora não'});
+      if(ok) location.href = '/cadastrar';
+      return;
+    }
     const listas = d.listas || [];
     if(!listas.length){
       const criar = await luquiConfirm({
