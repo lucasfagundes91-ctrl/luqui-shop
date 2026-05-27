@@ -2715,7 +2715,9 @@ def cadastrar():
                 fetch='one')
             session.permanent = True
             session['cliente_id'] = nv['id']
-            return redirect(url_for('home'))
+            # Respeita ?next= (ex: vindo do checkout, volta pra la com
+            # os dados ja preenchidos pelo cadastro recem-criado)
+            return redirect(request.args.get('next') or url_for('home'))
     return render_template('cadastrar.html', erro=erro,
                            categorias=listar_categorias(),
                            carrinho=carrinho_ler())
