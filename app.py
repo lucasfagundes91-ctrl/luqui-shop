@@ -270,6 +270,9 @@ def init_db():
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_agendada VARCHAR(40)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pontos_resgatados NUMERIC(10,2) DEFAULT 0",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS desconto_pontos NUMERIC(10,2) DEFAULT 0",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nfe_ref VARCHAR(80)",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nfe_numero VARCHAR(20)",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nfe_modelo VARCHAR(5)",
         # Luquizinha do site (chatbot IA)
         """CREATE TABLE IF NOT EXISTS site_chat_conversas (
             id SERIAL PRIMARY KEY,
@@ -4090,6 +4093,35 @@ def pedido_pagamento(pid):
                            carrinho=carrinho_ler())
 
 
+@app.route('/api/pedido/<int:pid>/nfe')
+def pedido_nfe(pid):
+    """Devolve URLs da NF-e (DANFE PDF + XML) consultando o PDV Pro."""
+    c = cliente_logado()
+    p = db_execute("""SELECT id, cliente_id, email, nfe_ref FROM pedidos
+                       WHERE id=%s""", [pid], fetch='one')
+    if not p:
+        return jsonify({'erro': 'pedido nao encontrado'}), 404
+    # Confere posse: cliente logado bate, ou email bate
+    if c:
+        if p.get('cliente_id') and p['cliente_id'] != c['id']:
+            return jsonify({'erro': 'acesso negado'}), 403
+    else:
+        return jsonify({'erro': 'faca login'}), 401
+    if not p.get('nfe_ref'):
+        return jsonify({'erro': 'nf ainda nao emitida'}), 404
+    if not PDVPRO_API_KEY:
+        return jsonify({'erro': 'integracao nao configurada'}), 503
+    try:
+        r = requests.get(PDVPRO_URL + f'/api/integracao/nfe/{p["nfe_ref"]}',
+                         headers={'X-API-Key': PDVPRO_API_KEY}, timeout=10)
+        if r.status_code == 200:
+            return jsonify(r.json())
+        return jsonify({'erro': 'NF indisponivel'}), 502
+    except Exception as e:
+        log.error("consultar NF: %s", e)
+        return jsonify({'erro': str(e)}), 500
+
+
 @app.route('/api/pedido/<int:pid>/status')
 def pedido_status(pid):
     p = db_execute("SELECT id, status, pago_em FROM pedidos WHERE id=%s",
@@ -4235,10 +4267,10 @@ Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp
                              pid, pdv_vid, nfe_ref or 'n/a')
                 if nfe_ref:
                     db_execute(
-                        "UPDATE pedidos SET observacao = COALESCE(observacao,'') "
-                        "|| %s WHERE id=%s",
-                        [f' [NF {resp_pdv.get("nfe_modelo")}/{resp_pdv.get("nfe_numero")}]',
-                         pid])
+                        """UPDATE pedidos SET nfe_ref=%s, nfe_numero=%s,
+                           nfe_modelo=%s WHERE id=%s""",
+                        [nfe_ref, str(resp_pdv.get('nfe_numero') or ''),
+                         str(resp_pdv.get('nfe_modelo') or ''), pid])
                 if resp_pdv.get('nfe_erro'):
                     log.error("NF auto: %s", resp_pdv['nfe_erro'])
             else:

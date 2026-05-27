@@ -146,6 +146,24 @@
     <span style="color:var(--azul);font-size:18px">→</span>
   </a>
 
+  <script>
+  async function baixarNFe(pid, btn){
+    btn.disabled = true; const orig = btn.textContent; btn.textContent = '...';
+    try {
+      const r = await fetch('/api/pedido/'+pid+'/nfe');
+      const d = await r.json();
+      if(d.erro){ toast(d.erro,'err'); return; }
+      if(d.danfe_url){
+        window.open(d.danfe_url, '_blank');
+      } else if(d.status === 'autorizado') {
+        toast('NF emitida mas DANFE ainda processando — tente em 1 min','info');
+      } else {
+        toast('Status NF: '+(d.status||'pendente')+' — aguarde','info');
+      }
+    } catch(e){ toast('Erro: '+e.message,'err'); }
+    finally{ btn.disabled = false; btn.textContent = orig; }
+  }
+  </script>
   <h3 style="margin-bottom:14px">Meus pedidos</h3>
   {% if pedidos %}
     <div style="background:#fff;border-radius:14px;overflow:hidden">
@@ -165,6 +183,12 @@
             <td style="padding:12px">
               <span style="background:#EFF6FF;color:var(--azul);padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700">{{ p.status }}</span>
               <a href="/pedido/{{ p.id }}/tracking" style="font-size:11px;color:var(--mut);margin-left:6px">acompanhar →</a>
+              {% if p.nfe_ref %}
+                <button onclick="baixarNFe({{ p.id }}, this)"
+                        style="background:transparent;color:#15803D;border:1px solid #15803D;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;margin-left:6px">
+                  📄 NF-e
+                </button>
+              {% endif %}
             </td>
           </tr>
         {% endfor %}
