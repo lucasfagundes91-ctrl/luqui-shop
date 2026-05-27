@@ -54,9 +54,9 @@
 
   /* ─── Barra de navegacao ─── */
   .menu{ background:var(--azul); position:relative; overflow:visible; }
-  .menu .container{ max-width:1200px; margin:0 auto; padding:0 12px;
-    display:flex; align-items:stretch; justify-content:center; gap:4px;
-    flex-wrap:wrap; }
+  .menu .container{ max-width:1280px; margin:0 auto; padding:0 8px;
+    display:flex; align-items:stretch; justify-content:center; gap:2px;
+    flex-wrap:nowrap; }
   .menu .idade-wrap{ position:relative; display:flex; align-items:center; }
   .menu .idade-wrap > a{ cursor:pointer; }
   .menu .idade-drop{ display:none; position:absolute; top:100%; left:0;
@@ -67,15 +67,15 @@
   .menu .idade-drop a{ display:block; color:var(--txt); padding:10px 18px;
     font-size:13px; font-weight:600; white-space:nowrap; }
   .menu .idade-drop a:hover{ background:#eaf2ff; color:var(--azul); }
-  .menu a, .menu button.mlink{ color:#fff; font-weight:700; font-size:13px;
-    padding:13px 11px; letter-spacing:.15px;
+  .menu a, .menu button.mlink{ color:#fff; font-weight:700; font-size:12.5px;
+    padding:13px 9px; letter-spacing:.1px;
     transition:background .12s; display:inline-flex; align-items:center;
-    gap:5px; line-height:1.2; white-space:nowrap; border-radius:6px;
+    gap:4px; line-height:1.2; white-space:nowrap; border-radius:6px;
     background:transparent; cursor:pointer; }
   .menu a:hover, .menu a.atual, .menu button.mlink:hover{ background:var(--azul-d); }
   .menu .deptos-btn{ background:var(--amarelo); color:var(--azul);
-    font-weight:900; padding:11px 14px; border-radius:8px; margin:6px 6px 6px 0;
-    font-size:13.5px; box-shadow:0 2px 0 var(--amarelo-d); }
+    font-weight:900; padding:11px 12px; border-radius:8px; margin:6px 4px 6px 0;
+    font-size:13px; box-shadow:0 2px 0 var(--amarelo-d); }
   .menu .deptos-btn:hover{ background:var(--amarelo-d); }
   .menu .sep{ width:1px; background:rgba(255,255,255,.18); margin:8px 4px; }
   .menu .mlink.promo{ background:#F59E0B; }
@@ -258,8 +258,8 @@
     border:1.5px solid var(--azul); }
   .btn-block{ display:block; width:100%; }
 
-  /* ─── Mobile ─── */
-  @media (max-width: 900px){
+  /* ─── Tablet/Desktop estreito + Mobile ─── */
+  @media (max-width: 1080px){
     .topo .container{ flex-wrap:wrap; }
     .busca{ order:3; flex-basis:100%; }
     .menu .container{ padding:8px; gap:6px; }
@@ -382,10 +382,10 @@ gtag('config', '{{ GOOGLE_TAG_ID }}');
       ☰ Todos os departamentos
     </button>
     <a href="/novidades">✨ Novidades</a>
-    <a href="/mais-vendidos">⭐ Mais vendidos</a>
+    <a href="/mais-vendidos">⭐ + Vendidos</a>
     {% if faixas_etarias_topbar %}
     <div class="idade-wrap" tabindex="0">
-      <a href="#" onclick="event.preventDefault()">🎂 Presente por idade ▾</a>
+      <a href="#" onclick="event.preventDefault()">🎂 Por idade ▾</a>
       <div class="idade-drop">
         {% for fx in faixas_etarias_topbar %}
           <a href="/buscar?faixa_etaria={{ (fx.slug or fx.nome)|urlencode }}">
@@ -395,10 +395,10 @@ gtag('config', '{{ GOOGLE_TAG_ID }}');
       </div>
     </div>
     {% endif %}
-    <a href="/retirar-na-loja">🏪 Retire na loja</a>
+    <a href="/retirar-na-loja">🏪 Retirar</a>
     <span class="sep"></span>
     <a class="mlink promo" href="/liquida-luqui">💥 LIQUIDA</a>
-    <a class="mlink lista" href="/lista-aniversario">🎂 Lista Aniversário</a>
+    <a class="mlink lista" href="/lista-aniversario">🎂 Lista Aniv</a>
     <a class="mlink clube" href="/clube">🎁 Clube Luqui</a>
   </div>
 </nav>
