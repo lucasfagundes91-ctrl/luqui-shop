@@ -262,14 +262,15 @@
   @media (max-width: 1080px){
     .topo .container{ flex-wrap:wrap; }
     .busca{ order:3; flex-basis:100%; }
-    .menu .container{ padding:8px; gap:6px; }
+    .menu .container{ padding:8px; gap:6px; flex-wrap:wrap; }
     .menu .deptos-btn{ flex:1 1 100%; margin:0 0 4px; padding:11px;
       font-size:13.5px; justify-content:center; text-align:center; }
     .menu a, .menu button.mlink{ flex:1 1 calc(33.33% - 6px); padding:9px 6px;
       font-size:11.5px; justify-content:center; text-align:center;
-      white-space:normal; line-height:1.2; min-height:38px; }
+      white-space:normal; line-height:1.2; min-height:38px;
+      min-width:0; max-width:100%; }
     .menu .sep{ display:none; }
-    .menu .idade-wrap{ flex:1 1 calc(33.33% - 6px); }
+    .menu .idade-wrap{ flex:1 1 calc(33.33% - 6px); min-width:0; }
     .menu .idade-wrap > a{ width:100%; padding:9px 6px; font-size:11.5px;
       justify-content:center; text-align:center; white-space:normal;
       min-height:38px; }

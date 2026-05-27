@@ -25,6 +25,19 @@
     max-width:1200px; margin:0 auto; padding:0 16px; align-items:start; }
   @media (max-width:760px){ .layout-filtros{ grid-template-columns: 1fr; } }
   .side-filtros { background:#fff; border:1px solid var(--linha); border-radius:10px; padding:14px; font-size:13.5px; }
+  .btn-toggle-filtros{ display:none; }
+  @media (max-width:760px){
+    .btn-toggle-filtros{
+      display:flex; align-items:center; justify-content:space-between;
+      width:100%; padding:12px 14px; background:#fff;
+      border:1px solid var(--linha); border-radius:10px;
+      font-weight:700; font-size:14px; color:var(--azul);
+      cursor:pointer; margin-bottom:10px; }
+    .btn-toggle-filtros .seta{ transition:transform .2s; font-size:12px; }
+    .btn-toggle-filtros.aberto .seta{ transform:rotate(180deg); }
+    .side-filtros{ display:none; max-height:60vh; overflow-y:auto; }
+    .side-filtros.aberto{ display:block; }
+  }
   .side-filtros h4 { font-size:12px; text-transform:uppercase; letter-spacing:.5px;
     color:#666; margin:12px 0 6px; border-top:1px solid #eee; padding-top:10px; }
   .side-filtros h4:first-of-type { border-top:0; padding-top:0; }
@@ -72,7 +85,12 @@
 <div class="layout-filtros">
 
   <!-- Sidebar de filtros -->
-  <aside class="side-filtros">
+  <div>
+  <button type="button" class="btn-toggle-filtros"
+          onclick="this.classList.toggle('aberto');document.getElementById('side-filtros').classList.toggle('aberto')">
+    <span>🔧 Filtrar resultados</span><span class="seta">▾</span>
+  </button>
+  <aside class="side-filtros" id="side-filtros">
     {% set tem_ativos = filtros_ativos and filtros_ativos.values()|select|list %}
     {% if tem_ativos %}
       <div class="filtros-ativos">
@@ -112,6 +130,7 @@
       {% for fe in filtros.faixas_etarias %}{{ link_filtro('faixa_etaria', fe.slug, fe.nome, fe.qtd) }}{% endfor %}
     {% endif %}
   </aside>
+  </div>
 
   <!-- Lista de produtos -->
   <div>
