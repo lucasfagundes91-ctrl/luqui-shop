@@ -254,13 +254,23 @@ if(_embDef){
 async function buscarCep(cep){
   cep = cep.replace(/\D/g,'');
   if(cep.length !== 8) return;
-  const r=await fetch('/api/checkout/cep?cep='+cep);
-  const d=await r.json();
-  if(d.erro){ toast(d.erro,'err'); return; }
-  document.getElementById('endereco').value = d.endereco;
-  document.getElementById('bairro').value = d.bairro;
-  document.getElementById('cidade').value = d.cidade;
-  document.getElementById('uf').value = d.uf;
+  // Chama viacep direto do browser — antes era proxy /api/checkout/cep
+  // que dependia do Railway conseguir egress (estava falhando com
+  // "Network is unreachable"). Browser → viacep é CORS-friendly e direto.
+  let d;
+  try {
+    const r = await fetch('https://viacep.com.br/ws/'+cep+'/json/');
+    d = await r.json();
+  } catch(e){
+    // Fallback pro backend se o browser nao alcancar viacep
+    try { d = await (await fetch('/api/checkout/cep?cep='+cep)).json(); }
+    catch(e2){ toast('Não consegui buscar o CEP — preencha os campos manualmente','err'); return; }
+  }
+  if(d.erro){ toast('CEP não encontrado — preencha manualmente','err'); return; }
+  document.getElementById('endereco').value = d.logradouro || d.endereco || '';
+  document.getElementById('bairro').value   = d.bairro || '';
+  document.getElementById('cidade').value   = d.localidade || d.cidade || '';
+  document.getElementById('uf').value       = d.uf || '';
   buscarFrete();
 }
 let SLOTS_LOCAL = [];
