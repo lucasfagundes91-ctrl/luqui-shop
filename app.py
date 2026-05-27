@@ -989,10 +989,20 @@ def admin_pedido_cotar(pid):
     return jsonify({'opcoes': opcoes})
 
 
+def _admin_ou_api_key():
+    """Permite admin logado OU X-API-Key do PDV Pro."""
+    from flask import session
+    if session.get('admin'):
+        return True
+    return _verifica_api_key_pdv()
+
+
 @app.route('/api/admin/pedidos/<int:pid>/etiqueta', methods=['POST'])
-@requer_admin
 def admin_pedido_gerar_etiqueta(pid):
-    """Fluxo completo Melhor Envio: cart → checkout → generate → print."""
+    """Fluxo completo Melhor Envio: cart → checkout → generate → print.
+    Aceita admin logado OU X-API-Key do PDV Pro (integracao reversa)."""
+    if not _admin_ou_api_key():
+        return jsonify({'erro': 'unauthorized'}), 401
     d = request.get_json() or {}
     service_id = d.get('service_id')
     if not service_id:
@@ -1186,6 +1196,99 @@ def _dedupe_por_slug(items):
         else:
             acc[s]['qtd'] = (acc[s].get('qtd') or 0) + (it.get('qtd') or 0)
     return [acc[s] for s in ordem]
+
+
+def _verifica_api_key_pdv():
+    """Valida X-API-Key vindo do PDV Pro pra rotas de integracao reversa."""
+    recv = (request.headers.get('X-API-Key') or '').strip()
+    return recv and PDVPRO_API_KEY and recv == PDVPRO_API_KEY
+
+
+@app.route('/api/integracao/pedidos-site')
+def integracao_pedidos_site():
+    """Lista pedidos do site pro PDV Pro consumir (tela centralizada).
+    Filtros: status (pago,aguardando_pagto,enviado,entregue,cancelado),
+    limit (default 50). Autenticado por X-API-Key = PDVPRO_API_KEY."""
+    if not _verifica_api_key_pdv():
+        return jsonify({'erro': 'unauthorized'}), 401
+    status = (request.args.get('status') or '').strip()
+    try:
+        limit = max(1, min(200, int(request.args.get('limit') or 50)))
+    except ValueError:
+        limit = 50
+    where = []
+    params = []
+    if status:
+        where.append('status=%s')
+        params.append(status)
+    sql_where = ('WHERE ' + ' AND '.join(where)) if where else ''
+    rows = db_execute(f"""
+        SELECT id, nome, email, telefone, cpf, cidade, uf, total, frete,
+               forma_pagto, status, criado_em, pago_em, pdv_venda_id,
+               nfe_ref, nfe_numero,
+               melhorenvio_etiqueta_url, melhorenvio_servico_nome,
+               melhorenvio_servico_id, melhorenvio_valor,
+               cep, endereco, numero, bairro, complemento,
+               entrega_agendada, embrulho_presente, embrulho_tipo,
+               embrulho_mensagem
+        FROM pedidos {sql_where}
+        ORDER BY criado_em DESC LIMIT %s""",
+        params + [limit], fetch='all') or []
+    out = []
+    for r in rows:
+        d = dict(r)
+        for k, v in list(d.items()):
+            if hasattr(v, 'isoformat'):
+                d[k] = v.isoformat()
+            elif hasattr(v, '__float__') and not isinstance(v, (bool, int)):
+                d[k] = float(v)
+        out.append(d)
+    return jsonify({'pedidos': out, 'total': len(out)})
+
+
+@app.route('/api/integracao/pedidos-site/<int:pid>/itens')
+def integracao_pedido_itens(pid):
+    """Itens do pedido pra PDV listar/cotar ME."""
+    if not _verifica_api_key_pdv():
+        return jsonify({'erro': 'unauthorized'}), 401
+    itens = db_execute("""SELECT * FROM pedido_itens WHERE pedido_id=%s
+                          ORDER BY id""", [pid], fetch='all') or []
+    out = []
+    for r in itens:
+        d = dict(r)
+        for k, v in list(d.items()):
+            if hasattr(v, 'isoformat'):
+                d[k] = v.isoformat()
+            elif hasattr(v, '__float__') and not isinstance(v, (bool, int)):
+                d[k] = float(v)
+        out.append(d)
+    return jsonify({'itens': out})
+
+
+@app.route('/api/integracao/pedidos-site/<int:pid>/cotar-me')
+def integracao_cotar_me(pid):
+    """Devolve opcoes de frete ME pra esse pedido. Usado pelo PDV Pro."""
+    if not _verifica_api_key_pdv():
+        return jsonify({'erro': 'unauthorized'}), 401
+    p = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one')
+    if not p:
+        return jsonify({'erro': 'pedido nao encontrado'}), 404
+    itens_db = db_execute("SELECT * FROM pedido_itens WHERE pedido_id=%s",
+                          [pid], fetch='all') or []
+    itens_full = []
+    for it in itens_db:
+        try:
+            prod = buscar_produto(it.get('produto_pdv_id')) or {}
+        except Exception:
+            prod = {}
+        itens_full.append({
+            'produto': prod, 'qtd': float(it.get('quantidade') or 1),
+            'preco': float(it.get('preco_unitario') or 0)})
+    try:
+        ops = me_cotar(p.get('cep') or '', itens_full)
+        return jsonify({'opcoes': ops})
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 502
 
 
 def pdv_consultar_pontos(cpf):
