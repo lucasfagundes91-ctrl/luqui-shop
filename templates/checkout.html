@@ -4,6 +4,41 @@
 
 <div style="max-width:1100px;margin:30px auto;padding:0 16px">
   <h1 style="margin-bottom:20px">Finalizar compra</h1>
+
+  {% if not cliente %}
+  <!-- Atalho pra clientes que ja tem conta: login Google ou email/senha
+       preenche os campos do checkout automaticamente -->
+  <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:14px;padding:16px 20px;margin-bottom:18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+    <div style="flex:1;min-width:200px">
+      <b style="color:var(--azul);font-size:15px">Já é cliente da Luqui?</b>
+      <div style="font-size:13px;color:var(--mut);margin-top:2px">
+        Entre que a gente preenche seus dados automaticamente.
+      </div>
+    </div>
+    {% if GOOGLE_OAUTH_HABILITADO %}
+    <a href="/auth/google/start?next=/checkout"
+       style="display:flex;align-items:center;gap:8px;background:#fff;border:1.5px solid #dadce0;color:#3c4043;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px"
+       onmouseover="this.style.background='#f8f9fa'" onmouseout="this.style.background='#fff'">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/></svg>
+      Continuar com Google
+    </a>
+    {% endif %}
+    <a href="/login?next=/checkout" class="btn btn-ghost" style="padding:10px 16px;font-size:13px;font-weight:600;text-decoration:none">
+      Entrar com e-mail
+    </a>
+  </div>
+  {% else %}
+  <!-- Cliente logado: mostra quem é + opcao de sair -->
+  <div style="background:#ECFDF5;border:1px solid #6EE7B7;border-radius:14px;padding:12px 20px;margin-bottom:18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <span style="font-size:18px">👋</span>
+    <div style="flex:1">
+      <b style="color:#065F46">Olá, {{ cliente.nome.split()[0] }}!</b>
+      <span style="color:var(--mut);font-size:13px"> · Seus dados foram preenchidos.</span>
+    </div>
+    <a href="/logout" style="color:var(--mut);font-size:12px;text-decoration:underline">Sair</a>
+  </div>
+  {% endif %}
+
   <div id="banner-primeira" style="display:none;background:linear-gradient(90deg,#FFC700,#FFA800);color:#1652C7;padding:14px 20px;border-radius:14px;margin-bottom:20px;font-weight:700;text-align:center">
     🎉 É sua primeira compra! Use o cupom <code style="background:#fff;padding:3px 10px;border-radius:4px;letter-spacing:1px">PRIMEIRO10</code>
     pra ganhar <b>10% OFF</b> em compras a partir de R$ 50.
