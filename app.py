@@ -440,7 +440,7 @@ def init_db():
     try:
         seeds = [
             ('PAGUE NO PIX',
-             'Ganhe <b style="color:#FFC700">10% de desconto</b> em qualquer compra!',
+             'Ganhe <b style="color:#FFC700">3% de desconto</b> em qualquer compra!',
              '/produtos', 'Ver produtos',
              'linear-gradient(135deg,#1652C7,#3B82F6)', 1),
             ('PARCELE EM 12X',
@@ -487,7 +487,7 @@ def init_db():
             # Deprecated (mantido por compat com configs antigas no banco)
             'frete_gratis_cidades': '',
             'frete_gratis_uf': '',
-            'desconto_pix_pct': '10',
+            'desconto_pix_pct': '3',
             'desconto_boleto_pct': '5',
             'parcelamento_max': '12',
             'parcela_minima': '50',  # parcela minima sem juros
@@ -524,6 +524,15 @@ def init_db():
         # se ainda estiver no valor antigo padrao)
         db_execute("UPDATE site_config SET valor='10' "
                    "WHERE chave='desconto_pix_pct' AND valor='5'")
+        # Migração one-time 2026-05-28: PIX baixou de 10% pra 3%
+        db_execute("UPDATE site_config SET valor='3' "
+                   "WHERE chave='desconto_pix_pct' AND valor='10'")
+        # Atualiza o subtitulo do banner "PAGUE NO PIX" se ainda estiver
+        # no texto antigo de 10%
+        db_execute(
+            "UPDATE banners SET subtitulo = REPLACE(subtitulo, '10% de desconto', '3% de desconto') "
+            "WHERE titulo='PAGUE NO PIX' AND subtitulo LIKE %s",
+            ['%10% de desconto%'])
     except Exception as e:
         log.error("seed config: %s", e)
 
@@ -2008,6 +2017,7 @@ def home():
                            produtos=produtos,
                            categorias=categorias,
                            banners=banners,
+                           desconto_pix_pct=float(cfg('desconto_pix_pct', '3')),
                            cliente=cliente_logado(),
                            carrinho=carrinho_ler())
 
@@ -3064,7 +3074,7 @@ ASSIM QUE TIVER idade + sexo (ou tipo), use buscar_produtos pra trazer 3-6
 sugestoes. NAO espere ter tudo — uma sugestao parcial ja vale a pena.
 
 INFO QUE VOCE PODE DAR DIRETO (sempre que perguntarem):
-💳 PIX 10% off, cartao ate 12x sem juros (parcela minima R$ 50)
+💳 PIX 3% off, cartao ate 12x sem juros (parcela minima R$ 50)
 🚚 Cascavel R$ 10 fixo, retire na loja gratis, outras cidades cota no checkout
 🎁 Clube de Pontos: 1pt por R$1, vale R$0,10/pt, max 50% da compra
 📍 Rua Engenheiro Reboucas, 2053 — Cascavel/PR
@@ -3763,7 +3773,7 @@ def admin_banner_seed():
     """Insere os 5 banners default (so os que ainda nao existem pelo titulo)."""
     seeds = [
         ('PAGUE NO PIX',
-         'Ganhe <b style="color:#FFC700">10% de desconto</b> em qualquer compra!',
+         'Ganhe <b style="color:#FFC700">3% de desconto</b> em qualquer compra!',
          '/produtos', 'Ver produtos',
          'linear-gradient(135deg,#1652C7,#3B82F6)', 1),
         ('PARCELE EM 12X',
