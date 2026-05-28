@@ -14,7 +14,10 @@
   <div class="prod-card">
     <span class="selo promo">PROMO</span>
     <a href="/produto/{{ p.produto_id }}">
-      <div class="foto"><span class="ph">📦</span></div>
+      <div class="foto">
+        {% if p.foto %}<img src="{{ p.foto }}" alt="" loading="lazy">
+        {% else %}<span class="ph">📦</span>{% endif %}
+      </div>
       <div class="desc">{{ p.descricao }}</div>
     </a>
     <div class="preco-velho">{{ rs(p.preco_venda) }}</div>
