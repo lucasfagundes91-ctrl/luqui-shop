@@ -1,0 +1,49 @@
+{% extends "admin_base.html" %}
+{% block titulo %}Páginas do site — Admin{% endblock %}
+{% block conteudo %}
+<h2 style="margin-bottom:6px">📝 Páginas do site</h2>
+<p style="color:var(--mut);font-size:14px;margin-bottom:18px">
+  Edite o conteúdo das páginas estáticas. Se nunca editou, o site usa o texto padrão do sistema.
+</p>
+
+<div style="background:#fff;border-radius:12px;overflow:hidden;border:1px solid #E5E7EB">
+  <table style="width:100%;border-collapse:collapse">
+    <thead style="background:#F8FAFC">
+      <tr style="text-align:left;font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:.4px">
+        <th style="padding:12px 16px">Página</th>
+        <th style="padding:12px 16px">URL pública</th>
+        <th style="padding:12px 16px">Status</th>
+        <th style="padding:12px 16px;text-align:right">Ação</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in paginas %}
+      <tr style="border-top:1px solid #F1F5F9">
+        <td style="padding:14px 16px;font-weight:600">{{ p.titulo }}</td>
+        <td style="padding:14px 16px;font-family:monospace;font-size:13px;color:#1652C7">
+          {% if p.url_publica %}
+            <a href="{{ p.url_publica }}" target="_blank">{{ p.url_publica }}</a>
+          {% else %}
+            <span style="color:#94A3B8">(texto auxiliar, sem URL própria)</span>
+          {% endif %}
+        </td>
+        <td style="padding:14px 16px;font-size:13px">
+          {% if p.atualizado_em %}
+            <span style="background:#D1FAE5;color:#065F46;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600">✓ Personalizado</span>
+            <div style="color:#94A3B8;font-size:11px;margin-top:2px">{{ p.atualizado_em.strftime('%d/%m/%Y %H:%M') }}</div>
+          {% else %}
+            <span style="background:#FEF3C7;color:#92400E;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600">Texto padrão</span>
+          {% endif %}
+        </td>
+        <td style="padding:14px 16px;text-align:right">
+          <a href="/admin/paginas/{{ p.slug }}"
+             style="background:#1652C7;color:#fff;padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px">
+            ✏️ Editar
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

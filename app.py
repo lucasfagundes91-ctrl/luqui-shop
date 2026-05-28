@@ -200,6 +200,13 @@ def init_db():
             email VARCHAR(160) UNIQUE NOT NULL,
             senha_hash TEXT NOT NULL
         )""",
+        # CMS: paginas estaticas editaveis pelo admin
+        """CREATE TABLE IF NOT EXISTS paginas_cms (
+            slug VARCHAR(60) PRIMARY KEY,
+            titulo VARCHAR(160) NOT NULL,
+            conteudo TEXT NOT NULL,
+            atualizado_em TIMESTAMP DEFAULT NOW()
+        )""",
         # Configurações gerais (key/value)
         """CREATE TABLE IF NOT EXISTS site_config (
             chave VARCHAR(60) PRIMARY KEY,
@@ -1591,12 +1598,70 @@ Marcas de produtos pertencem aos respectivos fabricantes.</p>
 }
 
 
+# ─── CMS de páginas estáticas ────────────────────────────────────────────────
+# Slug → (titulo padrão, HTML padrão). Usado como fallback quando o admin
+# ainda não editou; o conteúdo do banco SOBREESCREVE quando existe.
+PAGINAS_DEFAULTS = dict(PAGINAS_LEGAIS)
+PAGINAS_DEFAULTS['retirar-na-loja'] = {
+    'titulo': '🏪 Retire na loja',
+    'conteudo': (
+        '<p>Compre no site e <b>retire grátis</b> na nossa loja em Cascavel/PR.</p>'
+        '<h3>Como funciona</h3>'
+        '<ol>'
+        '<li>Faça o pedido no site e escolha <b>Retirar na loja</b> no frete.</li>'
+        '<li>Aguarde a confirmação por WhatsApp — em geral em até 1 dia útil o pedido fica pronto.</li>'
+        '<li>Vá até a loja com um documento com foto pra retirar.</li>'
+        '</ol>'
+        '<h3>Endereço</h3>'
+        '<p>R. Engenheiro Rebouças, 2053 — Centro — Cascavel/PR<br>'
+        'Estacionamento gratuito em frente</p>'
+        '<h3>Horário</h3>'
+        '<p>Seg a sex: 09:00 às 18:00<br>'
+        'Sábado: 09:00 às 13:00<br>'
+        'Domingo: fechado</p>'
+        '<p>Dúvidas? <a href="https://wa.me/5545991119800">Fale com a gente no WhatsApp 💚</a></p>'
+    ),
+}
+PAGINAS_DEFAULTS['sobre'] = {
+    'titulo': 'Sobre a Luqui',
+    'conteudo': (
+        '<p>A <b>Luqui Brinquedos</b> é uma loja de brinquedos em Cascavel/PR. '
+        'Trabalhamos com as melhores marcas — Hot Wheels, Barbie, Mattel, Estrela — '
+        'com preços justos e atendimento próximo.</p>'
+        '<p><b>Endereço:</b> R. Engenheiro Rebouças, 2053 — Centro — Cascavel/PR<br>'
+        '<b>Telefone:</b> (45) 99111-9800</p>'
+    ),
+}
+PAGINAS_DEFAULTS['clube-sobre'] = {
+    'titulo': '🎁 Clube Luqui',
+    'conteudo': (
+        '<p>Junta pontos comprando na loja física da Luqui e usa pra abater nas '
+        'compras do site.</p>'
+        '<p>A cada R$ 1,00 gasto na loja você ganha pontos. No site, na hora de '
+        'fechar a compra, escolha quantos pontos usar — até 50% do valor do pedido.</p>'
+    ),
+}
+
+def _pagina_get(slug):
+    """Retorna (titulo, conteudo) lendo do banco; cai pra default se não tem."""
+    try:
+        row = db_execute("SELECT titulo, conteudo FROM paginas_cms WHERE slug=%s",
+                         [slug], fetch='one')
+    except Exception:
+        row = None
+    if row:
+        return row['titulo'], row['conteudo']
+    d = PAGINAS_DEFAULTS.get(slug)
+    if not d:
+        return None, None
+    return d['titulo'], d['conteudo']
+
 def _render_pagina_legal(slug):
-    p = PAGINAS_LEGAIS.get(slug)
-    if not p:
+    titulo, conteudo = _pagina_get(slug)
+    if not titulo:
         abort(404)
     return render_template('pagina.html',
-                           titulo=p['titulo'], conteudo=p['conteudo'],
+                           titulo=titulo, conteudo=conteudo,
                            categorias=listar_categorias(),
                            cliente=cliente_logado(),
                            carrinho=carrinho_ler())
@@ -1612,28 +1677,7 @@ def pag_sobre():
 
 @app.route('/retirar-na-loja')
 def pag_retirar_na_loja():
-    return render_template('pagina.html',
-                           titulo='🏪 Retire na loja',
-                           conteudo=(
-                               '<p>Compre no site e <b>retire grátis</b> na nossa loja em Cascavel/PR.</p>'
-                               '<h3>Como funciona</h3>'
-                               '<ol>'
-                               '<li>Faça o pedido no site e escolha <b>Retirar na loja</b> no frete.</li>'
-                               '<li>Aguarde a confirmação por WhatsApp — em geral em até 1 dia útil o pedido fica pronto.</li>'
-                               '<li>Vá até a loja com um documento com foto pra retirar.</li>'
-                               '</ol>'
-                               '<h3>Endereço</h3>'
-                               '<p>R. Engenheiro Rebouças, 2053 — Centro — Cascavel/PR<br>'
-                               'Estacionamento gratuito em frente</p>'
-                               '<h3>Horário</h3>'
-                               '<p>Seg a sex: 09:00 às 18:00<br>'
-                               'Sábado: 09:00 às 13:00<br>'
-                               'Domingo: fechado</p>'
-                               '<p>Dúvidas? <a href="https://wa.me/5545991119800">Fale com a gente no WhatsApp 💚</a></p>'
-                           ),
-                           categorias=listar_categorias(),
-                           cliente=cliente_logado(),
-                           carrinho=carrinho_ler())
+    return _render_pagina_legal('retirar-na-loja')
 
 
 @app.route('/api/produto/<int:pid>/avaliacao', methods=['POST'])
@@ -3422,6 +3466,71 @@ def admin_sair():
     session.pop('admin_id', None)
     return redirect(url_for('admin_login'))
 
+
+# ─── Admin: CMS de páginas ────────────────────────────────────────────────
+_PAGINAS_PUBLICAS = [
+    ('retirar-na-loja',   '🏪 Retire na loja',         '/retirar-na-loja'),
+    ('clube-sobre',       '🎁 Clube Luqui (texto)',    None),
+    ('trocas-devolucoes', '↩️ Trocas e devoluções',    '/trocas-devolucoes'),
+    ('entregas',          '🚚 Entregas / prazos',      '/entregas'),
+    ('formas-pagamento',  '💳 Formas de pagamento',    '/formas-pagamento'),
+    ('privacidade',       '🔒 Política de privacidade','/privacidade'),
+    ('termos',            '📜 Termos de uso',          '/termos'),
+]
+
+@app.route('/admin/paginas')
+@requer_admin
+def admin_paginas():
+    salvas = db_execute("SELECT slug, atualizado_em FROM paginas_cms",
+                        fetch='all') or []
+    mapa_salvo = {r['slug']: r['atualizado_em'] for r in salvas}
+    paginas = []
+    for slug, titulo, url_publica in _PAGINAS_PUBLICAS:
+        paginas.append({
+            'slug': slug, 'titulo': titulo, 'url_publica': url_publica,
+            'atualizado_em': mapa_salvo.get(slug),
+        })
+    return render_template('admin_paginas.html', pagina='paginas',
+                           paginas=paginas)
+
+@app.route('/admin/paginas/<slug>', methods=['GET', 'POST'])
+@requer_admin
+def admin_pagina_edit(slug):
+    cfg = next((p for p in _PAGINAS_PUBLICAS if p[0] == slug), None)
+    if not cfg:
+        abort(404)
+    _, titulo_default, url_publica = cfg
+    msg = None
+    if request.method == 'POST':
+        novo_titulo = (request.form.get('titulo') or '').strip()
+        novo_conteudo = (request.form.get('conteudo') or '').strip()
+        if not novo_titulo or not novo_conteudo:
+            msg = ('erro', 'Preencha título e conteúdo')
+        else:
+            db_execute("""
+                INSERT INTO paginas_cms (slug, titulo, conteudo, atualizado_em)
+                VALUES (%s, %s, %s, NOW())
+                ON CONFLICT (slug) DO UPDATE
+                SET titulo = EXCLUDED.titulo,
+                    conteudo = EXCLUDED.conteudo,
+                    atualizado_em = NOW()
+            """, [slug, novo_titulo, novo_conteudo])
+            msg = ('ok', 'Página salva! ' + (
+                f'Confira em <a href="{url_publica}" target="_blank">{url_publica}</a>'
+                if url_publica else 'Conteúdo atualizado.'
+            ))
+    titulo_atual, conteudo_atual = _pagina_get(slug)
+    return render_template('admin_pagina_edit.html', pagina='paginas',
+                           slug=slug, titulo_default=titulo_default,
+                           url_publica=url_publica, msg=msg,
+                           titulo=titulo_atual or titulo_default,
+                           conteudo=conteudo_atual or '')
+
+@app.route('/admin/paginas/<slug>/restaurar', methods=['POST'])
+@requer_admin
+def admin_pagina_restaurar(slug):
+    db_execute("DELETE FROM paginas_cms WHERE slug=%s", [slug])
+    return redirect(url_for('admin_pagina_edit', slug=slug))
 
 @app.route('/admin')
 @requer_admin
