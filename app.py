@@ -444,7 +444,7 @@ def init_db():
              '/produtos', 'Ver produtos',
              'linear-gradient(135deg,#1652C7,#3B82F6)', 1),
             ('PARCELE EM 12X',
-             'Sem juros (parcela mínima <b style="color:#FFC700">R$ 50</b>)',
+             '<b style="color:#FFC700">À vista no cartão</b> ou parcelado com juros',
              '/produtos', 'Comprar agora',
              'linear-gradient(135deg,#0E3D9E,#1652C7)', 2),
             ('RETIRE NA LOJA',
@@ -490,7 +490,8 @@ def init_db():
             'desconto_pix_pct': '3',
             'desconto_boleto_pct': '5',
             'parcelamento_max': '12',
-            'parcela_minima': '50',  # parcela minima sem juros
+            'parcelas_sem_juros_max': '1',  # so 1x sem juros; 2x+ ja tem juros
+            'parcela_minima': '50',  # legado (nao usado mais no calculo)
             'juros_parcelamento_am': '2.49',  # % ao mes, acima do limite sem juros
             'whatsapp_loja': WHATSAPP_LOJA,
             # Melhor Envio — preencher em /admin/melhorenvio
@@ -533,6 +534,14 @@ def init_db():
             "UPDATE banners SET subtitulo = REPLACE(subtitulo, '10% de desconto', '3% de desconto') "
             "WHERE titulo='PAGUE NO PIX' AND subtitulo LIKE %s",
             ['%10% de desconto%'])
+        # Migração 2026-05-28: cartão agora só 1x sem juros; troca o
+        # subtitulo do banner "PARCELE EM 12X" se ainda estiver com o
+        # texto antigo "Sem juros (parcela mínima R$ 50)"
+        db_execute(
+            "UPDATE banners SET subtitulo=%s "
+            "WHERE titulo='PARCELE EM 12X' AND subtitulo LIKE %s",
+            ['<b style="color:#FFC700">À vista no cartão</b> ou parcelado com juros',
+             '%Sem juros%parcela m%nima%'])
     except Exception as e:
         log.error("seed config: %s", e)
 
@@ -1478,13 +1487,14 @@ Horário: segunda a sexta 9h-18h · sábado 9h-13h.</p>
 <h3>💳 Cartão de crédito</h3>
 <p>Aceitamos as principais bandeiras: Visa, Mastercard, Elo, Hipercard, Amex.</p>
 <ul>
-  <li>Parcelamento em até <b>12x sem juros</b></li>
+  <li>À vista (1x) <b>sem juros</b></li>
+  <li>Parcelado em <b>até 12x</b> com juros (Tabela Price)</li>
   <li>Pagamento processado com segurança via <b>Asaas</b></li>
   <li>Aprovação imediata na maioria dos casos</li>
 </ul>
 
 <h3>📱 PIX</h3>
-<p>Forma mais rápida e com <b>5% de desconto</b>!</p>
+<p>Forma mais rápida e com <b>3% de desconto</b>!</p>
 <ul>
   <li>Desconto aplicado automaticamente no checkout</li>
   <li>Confirmação em segundos</li>
@@ -2259,9 +2269,10 @@ def checkout_view():
                            categorias=listar_categorias(),
                            cliente=cli,
                            carrinho=itens,
-                           desconto_pix_pct=float(cfg('desconto_pix_pct', '10')),
+                           desconto_pix_pct=float(cfg('desconto_pix_pct', '3')),
                            desconto_boleto_pct=float(cfg('desconto_boleto_pct', '5')),
                            parcelamento_max=int(cfg('parcelamento_max', '12')),
+                           parcelas_sem_juros_max=int(cfg('parcelas_sem_juros_max', '1')),
                            parcela_minima=float(cfg('parcela_minima', '50')),
                            juros_parcelamento_am=float(cfg('juros_parcelamento_am', '2.49')),
                            pontos_info=pontos_info)
@@ -3074,7 +3085,7 @@ ASSIM QUE TIVER idade + sexo (ou tipo), use buscar_produtos pra trazer 3-6
 sugestoes. NAO espere ter tudo — uma sugestao parcial ja vale a pena.
 
 INFO QUE VOCE PODE DAR DIRETO (sempre que perguntarem):
-💳 PIX 3% off, cartao ate 12x sem juros (parcela minima R$ 50)
+💳 PIX 3% off, cartao 1x sem juros (2x+ tem juros, ate 12x)
 🚚 Cascavel R$ 10 fixo, retire na loja gratis, outras cidades cota no checkout
 🎁 Clube de Pontos: 1pt por R$1, vale R$0,10/pt, max 50% da compra
 📍 Rua Engenheiro Reboucas, 2053 — Cascavel/PR
@@ -4189,19 +4200,17 @@ def checkout_finalizar():
     base = max(0, round(subtotal + frete - desconto - cupom_desconto - desconto_pontos, 2))
     parcelas = max(1, min(int(cfg('parcelamento_max', '12')),
                           int(d.get('parcelas') or 1)))
-    # Parcelamento: sem juros enquanto parcela >= parcela_minima.
+    # Parcelamento: sem juros so ate parcelas_sem_juros_max (default 1x).
     # Acima disso, aplica juros compostos (Tabela Price).
-    parc_min = float(cfg('parcela_minima', '50'))
+    max_sem_juros = int(cfg('parcelas_sem_juros_max', '1'))
     juros_am = float(cfg('juros_parcelamento_am', '2.49')) / 100.0
     juros_valor = 0.0
     total = base
-    if d['forma_pagto'] == 'cartao' and parcelas > 1 and base > 0:
-        max_sem_juros = max(1, int(base // parc_min)) if parc_min > 0 else parcelas
-        if parcelas > max_sem_juros and juros_am > 0:
-            fator = (juros_am * (1 + juros_am) ** parcelas) / ((1 + juros_am) ** parcelas - 1)
-            parcela_valor = round(base * fator, 2)
-            total = round(parcela_valor * parcelas, 2)
-            juros_valor = round(total - base, 2)
+    if d['forma_pagto'] == 'cartao' and parcelas > max_sem_juros and base > 0 and juros_am > 0:
+        fator = (juros_am * (1 + juros_am) ** parcelas) / ((1 + juros_am) ** parcelas - 1)
+        parcela_valor = round(base * fator, 2)
+        total = round(parcela_valor * parcelas, 2)
+        juros_valor = round(total - base, 2)
     # Cria pedido no banco (status aguardando_pagto)
     cli = cliente_logado()
     embrulho = bool(d.get('embrulho_presente'))

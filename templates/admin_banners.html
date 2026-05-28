@@ -10,7 +10,7 @@
             style="background:#FFC700;color:#1652C7;border:0;padding:10px 18px;border-radius:8px;font-weight:700;cursor:pointer">
       ✨ Inserir banners default ({{ 5 - banners|length }} faltando)
     </button>
-    <span style="font-size:12px;color:#64748B;margin-left:8px">PIX 3%, 12x sem juros, Retire na loja, Clube Luqui, Novidades.</span>
+    <span style="font-size:12px;color:#64748B;margin-left:8px">PIX 3%, parcele em 12x, Retire na loja, Clube Luqui, Novidades.</span>
   </form>
 {% endif %}
 
@@ -27,7 +27,7 @@
     <div style="grid-column:1/-1">
       <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Subtítulo (aceita HTML)</label>
       <input name="subtitulo" value="{{ ed.subtitulo if ed else '' }}"
-             placeholder="em até <b>12x sem juros</b><br>com 5% retirando na loja"
+             placeholder="parcele em até <b>12x</b><br>ou 3% off no PIX"
              style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
     </div>
     <div>
