@@ -511,6 +511,11 @@ def init_db():
             'me_caixa_padrao_altura': '15',
             'me_caixa_padrao_comprimento': '25',
             'me_caixa_padrao_peso_kg': '0.5',
+            # Retirada na loja
+            'retirada_loja_ativa': '1',
+            'loja_endereco_completo': 'R. Eng. Rebouças, 2053 - Cascavel/PR',
+            'loja_horario_funcionamento': 'Seg a Sex: 8h às 18h · Sáb: 9h às 13h',
+            'loja_tempo_separacao_min': '30',
         }
         for k, v in defaults.items():
             db_execute("""INSERT INTO site_config (chave, valor) VALUES (%s,%s)
@@ -2414,6 +2419,17 @@ def checkout_frete():
     uf = (request.args.get('uf') or '').upper()
     cep = (request.args.get('cep') or '').strip()
     opcoes = []
+    # Retirar na loja — sempre primeira opção quando ativa
+    if cfg('retirada_loja_ativa', '1') == '1':
+        opcoes.append({
+            'id': 'RETIRA',
+            'servico': 'Retirar na loja',
+            'valor': 0,
+            'prazo': 'Pronto em ~'+cfg('loja_tempo_separacao_min', '30')+' min',
+            'endereco': cfg('loja_endereco_completo', ''),
+            'horario': cfg('loja_horario_funcionamento', ''),
+            'tempo_min': cfg('loja_tempo_separacao_min', '30'),
+        })
     # Cidades com frete fixo (entrega local). Default: só Cascavel.
     # Toledo SAIU — agora cota pelo ME normalmente.
     try:

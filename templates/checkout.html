@@ -320,15 +320,20 @@ async function buscarFrete(){
   const r = await fetch(`/api/checkout/frete?cidade=${encodeURIComponent(cidade)}&uf=${uf}&cep=${cep}`);
   const d = await r.json();
   const box = document.getElementById('opcoes-frete');
+  // Guarda dados da opção RETIRA pra renderizar painel quando selecionada
+  let dadosRetira = null;
   box.innerHTML = d.opcoes.map((o,i)=>{
     const isLocal = o.id === 'LOCAL';
+    const isRetira = o.id === 'RETIRA';
     if(isLocal) SLOTS_LOCAL = o.agendamento || [];
+    if(isRetira) dadosRetira = o;
     const prazoTexto = isLocal && SLOTS_LOCAL.length ? '📅 Agendar entrega' : o.prazo;
+    const icone = isRetira ? '🏪 ' : '';
     return `
     <label style="display:flex;justify-content:space-between;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-bottom:8px;cursor:pointer">
       <span>
         <input type="radio" name="frete_servico" value="${o.servico}" data-valor="${o.valor}" data-id="${o.id||''}" ${i===0?'checked':''} onchange="aoTrocarFrete()" style="margin-right:8px">
-        <b>${o.servico}</b><br><span style="font-size:12px;color:var(--mut);margin-left:24px">${prazoTexto}</span>
+        <b>${icone}${o.servico}</b><br><span style="font-size:12px;color:var(--mut);margin-left:24px">${prazoTexto}</span>
       </span>
       <b style="color:${o.valor===0?'var(--verde)':'var(--txt)'}">${o.valor===0?'GRÁTIS':'R$ '+o.valor.toFixed(2).replace('.',',')}</b>
     </label>`;
@@ -342,6 +347,25 @@ async function buscarFrete(){
     </select>
     <p style="font-size:11px;color:var(--mut);margin-top:6px">A entrega chega dentro da janela escolhida. Pedidos feitos até meio-dia podem ser entregues no mesmo dia.</p>
   </div>`;
+  // Bloco da retirada na loja (endereço + horário + tempo)
+  if(dadosRetira){
+    const enderecoEnc = encodeURIComponent(dadosRetira.endereco || '');
+    box.innerHTML += `<div id="bloco-retirada" style="display:none;margin:-4px 0 12px 24px;padding:14px;background:#ecfdf5;border-radius:8px;border-left:3px solid #16a34a">
+      <div style="font-weight:700;color:#15803d;margin-bottom:6px">✅ Em ${dadosRetira.tempo_min || 30} minutos seu pedido está pronto pra retirar!</div>
+      <div style="font-size:13px;line-height:1.6;color:#1e293b">
+        <div>📍 <b>Endereço:</b> ${dadosRetira.endereco || ''}</div>
+        <div>🕐 <b>Horário:</b> ${dadosRetira.horario || ''}</div>
+        <div style="margin-top:6px;font-size:12px;color:#475569">
+          Você recebe um WhatsApp avisando quando o pedido estiver pronto.
+          Leve um documento com foto na hora de retirar.
+        </div>
+        <a href="https://www.google.com/maps/search/?api=1&query=${enderecoEnc}" target="_blank" rel="noopener"
+           style="display:inline-block;margin-top:8px;padding:6px 12px;background:#16a34a;color:#fff;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600">
+          🗺️ Ver no Google Maps
+        </a>
+      </div>
+    </div>`;
+  }
   document.getElementById('bloco-frete').style.display='block';
   frete = d.opcoes[0].valor;
   freteCalculado = true;
@@ -353,10 +377,13 @@ function aoTrocarFrete(){
   if(r){
     frete = parseFloat(r.dataset.valor);
     const isLocal = r.dataset.id === 'LOCAL';
+    const isRetira = r.dataset.id === 'RETIRA';
     const bloco = document.getElementById('bloco-agendamento');
     if(bloco) bloco.style.display = isLocal ? 'block' : 'none';
     const sel = document.getElementById('entrega-agendada');
     if(sel) sel.required = isLocal;
+    const blocoRet = document.getElementById('bloco-retirada');
+    if(blocoRet) blocoRet.style.display = isRetira ? 'block' : 'none';
     recalcular();
   }
 }
