@@ -58,6 +58,21 @@
   .filtros-ativos .chip:hover { background:#0E3D9E; }
   .filtros-ativos .limpar { color:#666; padding:4px 10px; text-decoration:underline;
     font-size:12px; }
+  /* Departamento minimizado por padrão pra não dominar — usuário expande */
+  .filtro-grupo { margin: 0; }
+  .filtro-grupo > summary {
+    list-style: none; cursor: pointer; display:flex; align-items:center;
+    justify-content:space-between; padding: 0; margin: 0;
+    border-top:1px solid #eee; padding-top:10px; margin-top:12px;
+  }
+  .filtro-grupo:first-of-type > summary { border-top:0; padding-top:0; margin-top:0; }
+  .filtro-grupo > summary::-webkit-details-marker { display:none; }
+  .filtro-grupo > summary > h4 { margin: 0 !important; border: 0 !important;
+    padding: 0 !important; }
+  .filtro-grupo > summary::after { content: '▾'; font-size: 11px; color:#666;
+    transition: transform .2s; }
+  .filtro-grupo[open] > summary::after { transform: rotate(180deg); }
+  .filtro-grupo[open] { padding-bottom: 4px; }
 </style>
 
 <div class="layout-busca">
@@ -75,6 +90,15 @@
         {% endfor %}{% endfor %}
         <a href="?{% if termo_q %}q={{ termo_q|urlencode }}{% endif %}" class="limpar">limpar tudo</a>
       </div>
+    {% endif %}
+
+    {# Departamentos minimizado por padrão — abre se ja tem algum ativo #}
+    {% if filtros.departamentos %}
+      {% set dep_ativo = filtros_ativos.get('departamento') %}
+      <details class="filtro-grupo" {% if dep_ativo %}open{% endif %}>
+        <summary><h4 style="display:inline">Departamento</h4></summary>
+        {% for d in filtros.departamentos %}{{ link_filtro('departamento', d.slug, d.nome, d.qtd) }}{% endfor %}
+      </details>
     {% endif %}
 
     {% if filtros.grupos %}
