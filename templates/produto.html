@@ -61,8 +61,13 @@
 
       {% set preco_final = p.preco_promo or p.preco_venda %}
       <div style="margin:18px 0;padding:14px;background:#F1F5F9;border-radius:12px">
-        💳 Em até <b>12x de R$ {{ '%.2f'|format(preco_final|float / 12) }}</b> sem juros<br>
-        💰 Ou <b>{{ rs(preco_final|float * 0.95) }}</b> à vista no PIX/Boleto (5% off)
+        {% if parcelas_sem_juros_max and parcelas_sem_juros_max|int >= parcelamento_max|int %}
+          💳 Em até <b>{{ parcelamento_max }}x de {{ rs(preco_final|float / parcelamento_max|int) }}</b> sem juros<br>
+        {% else %}
+          💳 <b>{{ parcelas_sem_juros_max }}x sem juros</b> de {{ rs(parcela_sj_valor) }}<br>
+          <span style="font-size:13px;color:var(--mut)">ou até <b>{{ parcelamento_max }}x de {{ rs(parcela_max_valor) }}</b> com juros</span><br>
+        {% endif %}
+        💰 Ou <b>{{ rs(preco_final|float * (1 - desconto_pix_pct/100)) }}</b> à vista no PIX/Boleto ({{ desconto_pix_pct|int }}% off)
       </div>
 
       {% if p.estoque_atual and p.estoque_atual|float > 0 %}

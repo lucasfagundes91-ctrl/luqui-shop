@@ -2194,12 +2194,36 @@ def produto(pid):
                 relacionados.append(rp)
             if len(relacionados) >= 4:
                 break
+    # Config de pagamento — vem das settings (mesmas usadas no checkout)
+    pix_pct = float(cfg('desconto_pix_pct', '3'))
+    parc_max = int(cfg('parcelamento_max', '12'))
+    parc_sj = int(cfg('parcelas_sem_juros_max', '1'))
+    juros_am = float(cfg('juros_parcelamento_am', '2.49'))
+    preco_final = float(p.get('preco_promo') or p.get('preco_venda') or 0)
+    # Calcula valor da parcela com juros pra n=parcelamento_max (price)
+    # PMT = PV * (i * (1+i)^n) / ((1+i)^n - 1)
+    def _parc_com_juros(pv, n, juros_pct_am):
+        if n <= 0 or pv <= 0:
+            return 0
+        i = juros_pct_am / 100.0
+        if i <= 0:
+            return pv / n
+        fator = (1 + i) ** n
+        return pv * (i * fator) / (fator - 1)
+    parcela_max_valor = _parc_com_juros(preco_final, parc_max, juros_am)
+    parcela_sj_valor = preco_final / parc_sj if parc_sj > 0 else preco_final
     return render_template('produto.html',
                            p=p, avaliacoes=avals, media_estrelas=media,
                            relacionados=relacionados[:4],
                            categorias=listar_categorias(),
                            cliente=cliente_logado(),
-                           carrinho=carrinho_ler())
+                           carrinho=carrinho_ler(),
+                           desconto_pix_pct=pix_pct,
+                           parcelamento_max=parc_max,
+                           parcelas_sem_juros_max=parc_sj,
+                           parcela_sj_valor=parcela_sj_valor,
+                           parcela_max_valor=parcela_max_valor,
+                           juros_parcelamento_am=juros_am)
 
 
 @app.route('/api/carrinho/add', methods=['POST'])
