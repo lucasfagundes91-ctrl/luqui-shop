@@ -1323,6 +1323,26 @@ def integracao_cotar_me(pid):
         return jsonify({'erro': str(e)}), 502
 
 
+def pdv_buscar_cliente_cpf(cpf):
+    """Busca cliente completo no PDV pelo CPF — endereço, contato, pontos.
+    Usado no checkout pra oferecer pré-preenchimento quando cliente já
+    é da loja física. Retorna None se não achou."""
+    cpf = ''.join(c for c in (cpf or '') if c.isdigit())
+    if not cpf or len(cpf) != 11 or not PDVPRO_API_KEY:
+        return None
+    try:
+        r = requests.get(PDVPRO_URL + '/api/integracao/cliente/buscar-por-cpf',
+                         params={'cpf': cpf},
+                         headers={'X-API-Key': PDVPRO_API_KEY}, timeout=8)
+        if r.status_code != 200:
+            return None
+        d = r.json()
+        return d if d.get('cliente_existe') else None
+    except Exception as e:
+        log.error("pdv_buscar_cliente_cpf %s", e)
+        return None
+
+
 def pdv_consultar_pontos(cpf):
     """Consulta saldo de pontos no PDV pelo CPF. Sem cache pq muda
     frequentemente. Retorna dict {saldo, valor_disponivel, ...} ou None."""
@@ -2335,6 +2355,19 @@ def checkout_consultar_pontos():
     if not info:
         return jsonify({'cliente_existe': False, 'saldo': 0, 'valor_disponivel': 0})
     return jsonify(info)
+
+
+@app.route('/api/checkout/buscar-cliente-cpf')
+def checkout_buscar_cliente_cpf():
+    """Busca cliente da loja física pelo CPF — usado pra oferecer
+    pré-preenchimento de dados no checkout quando o CPF digitado é de
+    alguém que já comprou na loja física. Retorna nome/contato/endereço
+    + saldo do Clube. Frontend mostra um aviso 'Encontramos seu cadastro'."""
+    cpf = (request.args.get('cpf') or '').strip()
+    dados = pdv_buscar_cliente_cpf(cpf)
+    if not dados:
+        return jsonify({'cliente_existe': False})
+    return jsonify(dados)
 
 
 @app.route('/api/checkout/cep')

@@ -62,8 +62,9 @@
           <input name="telefone" placeholder="WhatsApp *" required
                  value="{{ (cliente.telefone if cliente else '') or '' }}"
                  style="padding:12px;border:1px solid var(--linha);border-radius:8px">
-          <input name="cpf" placeholder="CPF *" required
+          <input name="cpf" id="cpf" placeholder="CPF *" required
                  value="{{ (cliente.cpf if cliente else '') or '' }}"
+                 onblur="aoTabularCpf(this.value)"
                  style="padding:12px;border:1px solid var(--linha);border-radius:8px">
           <input name="cep" id="cep" placeholder="CEP *" required
                  value="{{ (cliente.cep if cliente else '') or '' }}"
@@ -97,15 +98,20 @@
       </div>
 
       <!-- PONTOS DO CLUBE -->
-      <div id="bloco-pontos" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px;display:{% if pontos_info and pontos_info.saldo > 0 %}block{% else %}none{% endif %}">
-        <h3 style="margin-bottom:8px">⭐ Pontos do Clube Luqui</h3>
-        <div id="pontos-info" style="background:#FFF8E1;border:1px solid #FBBF24;border-radius:10px;padding:14px;font-size:14px">
+      <div id="bloco-pontos" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px;display:{% if pontos_info and pontos_info.cliente_existe %}block{% else %}none{% endif %}">
+        <h3 style="margin-bottom:8px">⭐ Clube Luqui</h3>
+        <div id="pontos-info" style="background:#FFF8E1;border:1px solid #FBBF24;border-radius:10px;padding:14px;font-size:14px;line-height:1.6">
           {% if pontos_info and pontos_info.saldo > 0 %}
             Você tem <b>{{ '%.0f'|format(pontos_info.saldo) }} pontos</b> · vale até
             <b style="color:var(--verde)">R$ {{ '%.2f'|format(pontos_info.valor_disponivel) }}</b>
-            de desconto.
+            de desconto nessa compra! 🎉
+          {% elif pontos_info and pontos_info.cliente_existe %}
+            <b>Você é cliente Luqui! 💛</b> Você ainda não tem pontos no Clube Luqui, mas
+            <b>essa compra já começa a contar</b> — a cada R$ 1,00 gasto você acumula pontos
+            que viram desconto nas próximas compras.
           {% else %}
-            Quando você acumula pontos comprando na loja física da Luqui, eles aparecem aqui!
+            <b>🎁 Clube Luqui</b> — a cada compra você acumula pontos que viram desconto.
+            Use o mesmo CPF aqui no site e na loja física pra somar tudo num lugar só.
           {% endif %}
         </div>
         <div style="margin-top:14px;display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
@@ -563,7 +569,93 @@ document.getElementById('form-checkout').addEventListener('submit', async (e)=>{
   if(cep && cid && uf){
     setTimeout(() => buscarFrete(), 200);
   }
+  // Se já tem CPF preenchido (cliente logado), consulta direto pra mostrar
+  // pontos/dados da loja física na hora.
+  const cpf = document.getElementById('cpf')?.value || '';
+  if(cpf && cpf.replace(/\D/g,'').length === 11){
+    setTimeout(() => aoTabularCpf(cpf, /*silent*/ true), 300);
+  }
 })();
+
+let _ULTIMO_CPF_CHECADO = '';
+async function aoTabularCpf(cpfRaw, silent){
+  const cpf = (cpfRaw || '').replace(/\D/g,'');
+  if(cpf.length !== 11) return;
+  if(cpf === _ULTIMO_CPF_CHECADO) return;
+  _ULTIMO_CPF_CHECADO = cpf;
+  let d;
+  try {
+    const r = await fetch('/api/checkout/buscar-cliente-cpf?cpf=' + cpf);
+    d = await r.json();
+  } catch(e){ return; }
+  if(!d || !d.cliente_existe){
+    // Esconde aviso antigo se mudou de CPF
+    const av = document.getElementById('aviso-cliente-pdv');
+    if(av) av.remove();
+    return;
+  }
+  // Atualiza bloco do Clube Luqui — mostra SEMPRE quando cliente existe no
+  // PDV (mesmo com 0 pontos), pra divulgar o programa.
+  const clube = d.clube || {};
+  PONTOS_SALDO = clube.saldo || 0;
+  PONTOS_VPP = clube.valor_por_ponto || 0;
+  const blocoP = document.getElementById('bloco-pontos');
+  if(blocoP){
+    blocoP.style.display = 'block';
+    const info = document.getElementById('pontos-info');
+    if(info){
+      if(PONTOS_SALDO > 0){
+        info.innerHTML = 'Você tem <b>' + Math.floor(PONTOS_SALDO) + ' pontos</b> · vale até '
+          + '<b style="color:var(--verde)">R$ ' + (clube.valor_disponivel||0).toFixed(2).replace('.',',') + '</b>'
+          + ' de desconto nessa compra! 🎉';
+      } else {
+        info.innerHTML = '<b>Você é cliente Luqui! 💛</b> Você ainda não tem pontos no Clube Luqui, mas '
+          + '<b>essa compra já começa a contar</b> — a cada R$ 1,00 gasto você acumula pontos '
+          + 'que viram desconto nas próximas compras.';
+      }
+    }
+  }
+  // Mostra aviso "achamos seu cadastro" com botão pré-preencher
+  let av = document.getElementById('aviso-cliente-pdv');
+  if(!av){
+    av = document.createElement('div');
+    av.id = 'aviso-cliente-pdv';
+    av.style.cssText = 'background:#FEF3C7;border:1px solid #FCD34D;border-radius:10px;padding:14px;margin:10px 0;font-size:14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap';
+    const formEnd = document.querySelector('input[name="nome"]')?.closest('div');
+    if(formEnd && formEnd.parentNode) formEnd.parentNode.insertBefore(av, formEnd);
+  }
+  const ult = d.ultima_compra;
+  const ultTxt = ult && ult.data ? ' · última compra ' + new Date(ult.data).toLocaleDateString('pt-BR') : '';
+  av.innerHTML = '<div>👋 Achamos seu cadastro na loja física, <b>' + (d.nome||'').split(' ')[0] + '</b>!'
+    + ultTxt
+    + '<br><span style="font-size:12.5px;color:#92400E">Quer preencher os dados automaticamente?</span></div>'
+    + '<button type="button" class="btn" style="background:#16a34a;color:#fff;border:none;padding:8px 14px;border-radius:6px;font-weight:600;cursor:pointer" '
+    + 'onclick="prePreencherDadosPdv(' + JSON.stringify(JSON.stringify(d)).replace(/"/g,'&quot;') + ')">✓ Preencher</button>';
+}
+
+function prePreencherDadosPdv(dStr){
+  let d;
+  try { d = JSON.parse(dStr); } catch(e){ return; }
+  const set = (sel, val) => { const el = document.querySelector(sel); if(el && val && !el.value) el.value = val; };
+  // Só preenche campos vazios — não sobrescreve o que cliente já digitou
+  set('input[name="nome"]', d.nome);
+  set('input[name="email"]', d.email);
+  set('input[name="telefone"]', d.telefone);
+  const e = d.endereco || {};
+  set('input[name="cep"]', e.cep);
+  set('input[name="endereco"]', e.logradouro);
+  set('input[name="numero"]', e.numero);
+  set('input[name="complemento"]', e.complemento);
+  set('input[name="bairro"]', e.bairro);
+  set('input[name="cidade"]', e.cidade);
+  set('input[name="uf"]', e.uf);
+  // Dispara busca de frete se endereço veio completo
+  if(e.cep && e.cidade && e.uf){
+    setTimeout(() => buscarFrete(), 100);
+  }
+  const av = document.getElementById('aviso-cliente-pdv');
+  if(av) av.innerHTML = '<div style="color:#16a34a;font-weight:600">✓ Dados preenchidos! Confira antes de finalizar.</div>';
+}
 </script>
 
 {% endblock %}
