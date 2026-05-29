@@ -1,0 +1,8 @@
+[tools]
+python = "3.11.9"
+
+# Railpack 2026.5.16 introduziu verificação de GitHub artifact attestations
+# pra Python que está falhando (No GitHub artifact attestations found).
+# Desligamos a verificação — o checksum SHA-256 continua sendo validado.
+[settings]
+python.github_attestations = false

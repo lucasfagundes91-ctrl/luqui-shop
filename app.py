@@ -280,6 +280,15 @@ def init_db():
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nfe_ref VARCHAR(80)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nfe_numero VARCHAR(20)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nfe_modelo VARCHAR(5)",
+        # Fluxo de atendimento da caixa fisica (PDV Pro): quando pago, fica
+        # na fila pra alguem aceitar; depois marca pronto pra retirar/enviar
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS aceito_em TIMESTAMPTZ",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS aceito_por VARCHAR(80)",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pronto_em TIMESTAMPTZ",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pdv_cliente_id INT",  # vinculo permanente
+        # Cliente site → cliente loja física (mesmo CPF = mesma pessoa)
+        "ALTER TABLE clientes_site ADD COLUMN IF NOT EXISTS pdv_cliente_id INT",
+        "CREATE INDEX IF NOT EXISTS idx_pedidos_fila_caixa ON pedidos(status, aceito_em) WHERE status='pago' AND aceito_em IS NULL",
         # Luquizinha do site (chatbot IA)
         """CREATE TABLE IF NOT EXISTS site_chat_conversas (
             id SERIAL PRIMARY KEY,
@@ -1236,6 +1245,88 @@ def _verifica_api_key_pdv():
     return recv and PDVPRO_API_KEY and recv == PDVPRO_API_KEY
 
 
+@app.route('/api/integracao/pedidos-site/fila')
+def integracao_pedidos_fila():
+    """Contador da fila pra alerta ativo do PDV Pro.
+    Retorna: pendentes (pago e ainda nao aceito), em_separacao (aceito e
+    nao pronto), prontos_retira (pronto e frete_servico=Retirar). Polling
+    cada 15-20s desde o PDV Pro pra mostrar badge pulsante."""
+    if not _verifica_api_key_pdv():
+        return jsonify({'erro': 'unauthorized'}), 401
+    r = db_execute("""
+        SELECT
+          COUNT(*) FILTER (WHERE status='pago' AND aceito_em IS NULL) AS pendentes,
+          COUNT(*) FILTER (WHERE status='pago' AND aceito_em IS NOT NULL AND pronto_em IS NULL) AS em_separacao,
+          COUNT(*) FILTER (WHERE status='pago' AND pronto_em IS NOT NULL AND frete_servico ILIKE 'Retirar%%') AS prontos_retira,
+          MAX(criado_em) FILTER (WHERE status='pago' AND aceito_em IS NULL) AS ultimo_pago_em
+        FROM pedidos
+    """, fetch='one') or {}
+    ultimo = r.get('ultimo_pago_em')
+    return jsonify({
+        'pendentes': int(r.get('pendentes') or 0),
+        'em_separacao': int(r.get('em_separacao') or 0),
+        'prontos_retira': int(r.get('prontos_retira') or 0),
+        'ultimo_pago_em': ultimo.isoformat() if ultimo else None,
+    })
+
+
+@app.route('/api/integracao/pedidos-site/<int:pid>/aceitar', methods=['POST'])
+def integracao_pedido_aceitar(pid):
+    """Marca pedido como aceito por um operador da caixa. Tira da fila de
+    alerta dos outros caixas. Idempotente — se já aceito, retorna o que
+    está no banco."""
+    if not _verifica_api_key_pdv():
+        return jsonify({'erro': 'unauthorized'}), 401
+    d = request.get_json() or {}
+    quem = (d.get('operador') or 'caixa').strip()[:80]
+    r = db_execute("""
+        UPDATE pedidos
+        SET aceito_em = COALESCE(aceito_em, NOW()),
+            aceito_por = COALESCE(aceito_por, %s)
+        WHERE id=%s AND status='pago'
+        RETURNING id, aceito_em, aceito_por
+    """, [quem, pid], fetch='one')
+    if not r:
+        return jsonify({'erro': 'pedido não encontrado ou não está pago'}), 404
+    return jsonify({'ok': True, 'aceito_em': r['aceito_em'].isoformat() if r['aceito_em'] else None,
+                    'aceito_por': r['aceito_por']})
+
+
+@app.route('/api/integracao/pedidos-site/<int:pid>/marcar-pronto', methods=['POST'])
+def integracao_pedido_marcar_pronto(pid):
+    """Marca pedido como pronto pra retirar/postar. Dispara WhatsApp pro
+    cliente avisando."""
+    if not _verifica_api_key_pdv():
+        return jsonify({'erro': 'unauthorized'}), 401
+    r = db_execute("""
+        UPDATE pedidos
+        SET pronto_em = COALESCE(pronto_em, NOW()),
+            aceito_em = COALESCE(aceito_em, NOW())
+        WHERE id=%s AND status='pago'
+        RETURNING id, telefone, nome, frete_servico
+    """, [pid], fetch='one')
+    if not r:
+        return jsonify({'erro': 'pedido não encontrado ou não está pago'}), 404
+    # WhatsApp pro cliente avisando
+    try:
+        is_retira = (r.get('frete_servico') or '').lower().startswith('retirar')
+        if is_retira:
+            msg = (f"Oi {(r['nome'] or '').split()[0]}! 💛 Seu pedido #{pid} "
+                   f"ja esta pronto pra retirar na Luqui Brinquedos!\n\n"
+                   f"📍 R. Eng. Reboucas, 2053 - Cascavel/PR\n"
+                   f"🕐 Seg a Sex: 8h-18h · Sab: 9h-13h\n\n"
+                   f"Leva um documento com foto. Te esperamos! 🧸")
+        else:
+            msg = (f"Oi {(r['nome'] or '').split()[0]}! 💛 Seu pedido #{pid} "
+                   f"esta separado e indo pro Correios. Em breve te mando o "
+                   f"codigo de rastreio! 📦")
+        if r.get('telefone'):
+            enviar_whatsapp(r['telefone'], msg)
+    except Exception as e:
+        log.warning(f"whatsapp pronto pedido {pid}: {e}")
+    return jsonify({'ok': True})
+
+
 @app.route('/api/integracao/pedidos-site')
 def integracao_pedidos_site():
     """Lista pedidos do site pro PDV Pro consumir (tela centralizada).
@@ -1262,7 +1353,8 @@ def integracao_pedidos_site():
                melhorenvio_servico_id, melhorenvio_valor,
                cep, endereco, numero, bairro, complemento,
                entrega_agendada, embrulho_presente, embrulho_tipo,
-               embrulho_mensagem
+               embrulho_mensagem,
+               aceito_em, aceito_por, pronto_em, frete_servico
         FROM pedidos {sql_where}
         ORDER BY criado_em DESC LIMIT %s""",
         params + [limit], fetch='all') or []
