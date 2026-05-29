@@ -1371,14 +1371,20 @@ def listar_filtros():
 
 
 def _ordenar_faixas_etarias(faixas):
-    """Ordena faixas pelo PRIMEIRO numero que aparecer no nome.
-    Ex: '2+ anos' (2) vem antes de '10+ anos' (10) — natural, nao alfabetica.
-    Bebes vs criancas continua na mesma lista (separacao e no template)."""
+    """Ordena faixas pelo PRIMEIRO numero do nome E marca cada uma como
+    bebe ('em_meses=True') ou crianca, pro template separar em 2 sub-grupos.
+    Ex: '2+ anos' (2) vem antes de '10+ anos' (10)."""
     import re
+    out = []
+    for f in faixas:
+        nome_low = (f.get('nome') or '').lower()
+        f2 = dict(f)
+        f2['em_meses'] = ('mes' in nome_low or 'mês' in nome_low)
+        out.append(f2)
     def _chave(f):
         m = re.search(r'\d+', f.get('nome') or '')
         return int(m.group()) if m else 9999
-    return sorted(faixas, key=_chave)
+    return sorted(out, key=_chave)
 
 
 def listar_filtros_planos():

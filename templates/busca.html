@@ -116,11 +116,10 @@
     {% endif %}
 
     {% if filtros.faixas_etarias %}
-      {# Separa em 2 grupos: bebes (em meses) vs criancas (em anos).
-         Critério: se o nome contém 'mes' (mês, meses) → bebês; senão → crianças.
-         Ordenação dentro de cada grupo: pelo primeiro número que aparecer. #}
-      {%- set bebes = filtros.faixas_etarias|selectattr('nome', 'search', '(?i)m[eê]s')|list -%}
-      {%- set criancas = filtros.faixas_etarias|rejectattr('nome', 'search', '(?i)m[eê]s')|list -%}
+      {# Backend ja marcou cada faixa com 'em_meses' (bool) e ordenou
+         numericamente. Aqui só separa em 2 listas. #}
+      {%- set bebes = filtros.faixas_etarias|selectattr('em_meses')|list -%}
+      {%- set criancas = filtros.faixas_etarias|rejectattr('em_meses')|list -%}
       <h4>Faixa etária</h4>
       {% if bebes %}
         <details class="filtro-grupo filtro-sub" open>
