@@ -92,9 +92,9 @@
       </div>
 
       <!-- FRETE -->
-      <div id="bloco-frete" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px;display:none">
-        <h3 style="margin-bottom:16px">🚚 Frete</h3>
-        <div id="opcoes-frete"></div>
+      <div id="bloco-frete" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px">
+        <h3 style="margin-bottom:16px">🚚 Entrega ou retirada</h3>
+        <div id="opcoes-frete"><div class="sub" style="font-size:13px;padding:8px 0">Carregando opções...</div></div>
       </div>
 
       <!-- PONTOS DO CLUBE -->
@@ -329,7 +329,7 @@ async function buscarFrete(){
   const cidade = document.getElementById('cidade').value;
   const uf = document.getElementById('uf').value;
   const cep = (document.getElementById('cep').value || '').replace(/\D/g,'');
-  if(!cidade || !uf) return;
+  // Mesmo sem CEP/cidade roda — backend devolve pelo menos a opção "Retirar na loja"
   const r = await fetch(`/api/checkout/frete?cidade=${encodeURIComponent(cidade)}&uf=${uf}&cep=${cep}`);
   const d = await r.json();
   const box = document.getElementById('opcoes-frete');
@@ -397,6 +397,12 @@ function aoTrocarFrete(){
     if(sel) sel.required = isLocal;
     const blocoRet = document.getElementById('bloco-retirada');
     if(blocoRet) blocoRet.style.display = isRetira ? 'block' : 'none';
+    // Se retirar na loja, endereço vira opcional (cliente não precisa
+    // informar pra retirar pessoalmente)
+    ['cep','endereco','numero','bairro','cidade','uf'].forEach(name => {
+      const el = document.querySelector('input[name="'+name+'"]');
+      if(el) el.required = !isRetira;
+    });
     recalcular();
   }
 }
@@ -560,15 +566,11 @@ document.getElementById('form-checkout').addEventListener('submit', async (e)=>{
   }
 });
 
-// Cliente logado com endereço já cadastrado — dispara o cálculo de frete
-// na hora pra não precisar re-clicar no CEP.
+// Sempre busca frete ao carregar — mesmo sem endereço preenchido, o backend
+// devolve pelo menos a opção "Retirar na loja". Assim a pessoa decide se
+// vai retirar ANTES de digitar endereço.
 (function(){
-  const cep = document.getElementById('cep')?.value || '';
-  const cid = document.getElementById('cidade')?.value || '';
-  const uf  = document.getElementById('uf')?.value || '';
-  if(cep && cid && uf){
-    setTimeout(() => buscarFrete(), 200);
-  }
+  setTimeout(() => buscarFrete(), 200);
   // Se já tem CPF preenchido (cliente logado), consulta direto pra mostrar
   // pontos/dados da loja física na hora.
   const cpf = document.getElementById('cpf')?.value || '';

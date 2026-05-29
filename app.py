@@ -4327,9 +4327,11 @@ def checkout_finalizar():
     itens = carrinho_ler()
     if not itens:
         return jsonify({'erro': 'Carrinho vazio'}), 400
-    # Validação básica
-    obrig = ['nome', 'email', 'telefone', 'cpf', 'cep', 'endereco',
-             'numero', 'bairro', 'cidade', 'uf', 'forma_pagto']
+    # Validação básica — quando vai retirar na loja, endereço é opcional
+    is_retira = (d.get('frete_servico') or '').lower().startswith('retirar')
+    obrig = ['nome', 'email', 'telefone', 'cpf', 'forma_pagto']
+    if not is_retira:
+        obrig += ['cep', 'endereco', 'numero', 'bairro', 'cidade', 'uf']
     for c in obrig:
         if not (d.get(c) or '').strip():
             return jsonify({'erro': f'Campo {c} obrigatório'}), 400
@@ -4414,9 +4416,14 @@ def checkout_finalizar():
         RETURNING id""",
         [cli['id'] if cli else None,
          d['email'].strip().lower(), d['nome'].strip(), d['telefone'].strip(),
-         d['cpf'].strip(), d['cep'].strip(), d['endereco'].strip(),
-         d['numero'].strip(), d.get('complemento') or None,
-         d['bairro'].strip(), d['cidade'].strip(), d['uf'].strip().upper(),
+         d['cpf'].strip(),
+         (d.get('cep') or '').strip() or None,
+         (d.get('endereco') or '').strip() or None,
+         (d.get('numero') or '').strip() or None,
+         d.get('complemento') or None,
+         (d.get('bairro') or '').strip() or None,
+         (d.get('cidade') or '').strip() or None,
+         (d.get('uf') or '').strip().upper() or None,
          subtotal, frete, desconto + cupom_desconto + desconto_pontos, total,
          d['forma_pagto'], parcelas,
          d.get('frete_servico') or 'A definir',
@@ -4426,23 +4433,32 @@ def checkout_finalizar():
          pontos_resgatados, desconto_pontos],
         fetch='one')
     pid = ped['id']
-    # Atualiza dados do cliente_site logado pra auto-preencher no proximo checkout.
-    # Salva endereço completo + telefone + CPF — campos que mudam pouco e o
-    # cliente nao quer redigitar toda compra.
+    # Atualiza dados do cliente_site logado pra auto-preencher no proximo
+    # checkout. Usa COALESCE pra NÃO sobrescrever endereço com NULL caso
+    # cliente tenha escolhido "Retirar na loja" (não digitou endereço).
     if cli:
         try:
             db_execute("""
                 UPDATE clientes_site SET
                     nome = %s, telefone = %s, cpf = %s,
-                    cep = %s, endereco = %s, numero = %s, complemento = %s,
-                    bairro = %s, cidade = %s, uf = %s
+                    cep = COALESCE(NULLIF(%s,''), cep),
+                    endereco = COALESCE(NULLIF(%s,''), endereco),
+                    numero = COALESCE(NULLIF(%s,''), numero),
+                    complemento = COALESCE(NULLIF(%s,''), complemento),
+                    bairro = COALESCE(NULLIF(%s,''), bairro),
+                    cidade = COALESCE(NULLIF(%s,''), cidade),
+                    uf = COALESCE(NULLIF(%s,''), uf)
                 WHERE id = %s
             """, [
                 d['nome'].strip(), d['telefone'].strip(), d['cpf'].strip(),
-                d['cep'].strip(), d['endereco'].strip(), d['numero'].strip(),
-                (d.get('complemento') or '').strip() or None,
-                d['bairro'].strip(), d['cidade'].strip(),
-                d['uf'].strip().upper(), cli['id']
+                (d.get('cep') or '').strip(),
+                (d.get('endereco') or '').strip(),
+                (d.get('numero') or '').strip(),
+                (d.get('complemento') or '').strip(),
+                (d.get('bairro') or '').strip(),
+                (d.get('cidade') or '').strip(),
+                (d.get('uf') or '').strip().upper(),
+                cli['id']
             ])
         except Exception as e:
             log.warning(f"falha ao atualizar dados do cliente {cli['id']}: {e}")
