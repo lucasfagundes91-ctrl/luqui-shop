@@ -1370,6 +1370,17 @@ def listar_filtros():
     }
 
 
+def _ordenar_faixas_etarias(faixas):
+    """Ordena faixas pelo PRIMEIRO numero que aparecer no nome.
+    Ex: '2+ anos' (2) vem antes de '10+ anos' (10) — natural, nao alfabetica.
+    Bebes vs criancas continua na mesma lista (separacao e no template)."""
+    import re
+    def _chave(f):
+        m = re.search(r'\d+', f.get('nome') or '')
+        return int(m.group()) if m else 9999
+    return sorted(faixas, key=_chave)
+
+
 def listar_filtros_planos():
     """Versao dedupada pra paginas sem hierarquia (busca, /produtos,
     /novidades, /mais-vendidos, /liquida-luqui). Junta grupos com mesmo
@@ -1380,7 +1391,7 @@ def listar_filtros_planos():
         'grupos':         _dedupe_por_slug(f['grupos']),
         'subgrupos':      _dedupe_por_slug(f['subgrupos']),
         'marcas':         f['marcas'],
-        'faixas_etarias': f['faixas_etarias'],
+        'faixas_etarias': _ordenar_faixas_etarias(f['faixas_etarias']),
     }
 
 

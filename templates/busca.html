@@ -73,6 +73,10 @@
     transition: transform .2s; }
   .filtro-grupo[open] > summary::after { transform: rotate(180deg); }
   .filtro-grupo[open] { padding-bottom: 4px; }
+  /* Sub-grupos dentro de "Faixa etária" — sem border, indentados */
+  .filtro-sub > summary { border-top: 0 !important; padding-top: 4px !important;
+    margin-top: 4px !important; opacity: .8; }
+  .filtro-sub { margin-left: 2px; }
 </style>
 
 <div class="layout-busca">
@@ -112,8 +116,24 @@
     {% endif %}
 
     {% if filtros.faixas_etarias %}
+      {# Separa em 2 grupos: bebes (em meses) vs criancas (em anos).
+         Critério: se o nome contém 'mes' (mês, meses) → bebês; senão → crianças.
+         Ordenação dentro de cada grupo: pelo primeiro número que aparecer. #}
+      {%- set bebes = filtros.faixas_etarias|selectattr('nome', 'search', '(?i)m[eê]s')|list -%}
+      {%- set criancas = filtros.faixas_etarias|rejectattr('nome', 'search', '(?i)m[eê]s')|list -%}
       <h4>Faixa etária</h4>
-      {% for fe in filtros.faixas_etarias %}{{ link_filtro('faixa_etaria', fe.slug, fe.nome, fe.qtd) }}{% endfor %}
+      {% if bebes %}
+        <details class="filtro-grupo filtro-sub" open>
+          <summary><b style="font-size:12px">👶 Bebês (em meses)</b></summary>
+          {% for fe in bebes %}{{ link_filtro('faixa_etaria', fe.slug, fe.nome, fe.qtd) }}{% endfor %}
+        </details>
+      {% endif %}
+      {% if criancas %}
+        <details class="filtro-grupo filtro-sub" open>
+          <summary><b style="font-size:12px">🧒 Crianças (em anos)</b></summary>
+          {% for fe in criancas %}{{ link_filtro('faixa_etaria', fe.slug, fe.nome, fe.qtd) }}{% endfor %}
+        </details>
+      {% endif %}
     {% endif %}
   </aside>
   </div>
