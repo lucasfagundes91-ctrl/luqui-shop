@@ -66,19 +66,26 @@
                  value="{{ (cliente.cpf if cliente else '') or '' }}"
                  style="padding:12px;border:1px solid var(--linha);border-radius:8px">
           <input name="cep" id="cep" placeholder="CEP *" required
+                 value="{{ (cliente.cep if cliente else '') or '' }}"
                  onblur="buscarCep(this.value)"
                  style="padding:12px;border:1px solid var(--linha);border-radius:8px">
           <input name="cidade" id="cidade" placeholder="Cidade *" required readonly
+                 value="{{ (cliente.cidade if cliente else '') or '' }}"
                  style="padding:12px;border:1px solid var(--linha);border-radius:8px;background:#F8FAFC">
           <input name="endereco" id="endereco" placeholder="Endereço *" required
+                 value="{{ (cliente.endereco if cliente else '') or '' }}"
                  style="grid-column:1/-1;padding:12px;border:1px solid var(--linha);border-radius:8px">
           <input name="numero" placeholder="Nº *" required
+                 value="{{ (cliente.numero if cliente else '') or '' }}"
                  style="padding:12px;border:1px solid var(--linha);border-radius:8px">
           <input name="bairro" id="bairro" placeholder="Bairro *" required
+                 value="{{ (cliente.bairro if cliente else '') or '' }}"
                  style="padding:12px;border:1px solid var(--linha);border-radius:8px">
           <input name="complemento" placeholder="Complemento"
+                 value="{{ (cliente.complemento if cliente else '') or '' }}"
                  style="grid-column:1/-1;padding:12px;border:1px solid var(--linha);border-radius:8px">
           <input name="uf" id="uf" placeholder="UF" required readonly maxlength="2"
+                 value="{{ (cliente.uf if cliente else '') or '' }}"
                  style="padding:12px;border:1px solid var(--linha);border-radius:8px;background:#F8FAFC">
         </div>
       </div>
@@ -546,6 +553,17 @@ document.getElementById('form-checkout').addEventListener('submit', async (e)=>{
     btn.disabled = false; btn.textContent = 'Pagar e finalizar →';
   }
 });
+
+// Cliente logado com endereço já cadastrado — dispara o cálculo de frete
+// na hora pra não precisar re-clicar no CEP.
+(function(){
+  const cep = document.getElementById('cep')?.value || '';
+  const cid = document.getElementById('cidade')?.value || '';
+  const uf  = document.getElementById('uf')?.value || '';
+  if(cep && cid && uf){
+    setTimeout(() => buscarFrete(), 200);
+  }
+})();
 </script>
 
 {% endblock %}

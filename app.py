@@ -4301,6 +4301,26 @@ def checkout_finalizar():
          pontos_resgatados, desconto_pontos],
         fetch='one')
     pid = ped['id']
+    # Atualiza dados do cliente_site logado pra auto-preencher no proximo checkout.
+    # Salva endereço completo + telefone + CPF — campos que mudam pouco e o
+    # cliente nao quer redigitar toda compra.
+    if cli:
+        try:
+            db_execute("""
+                UPDATE clientes_site SET
+                    nome = %s, telefone = %s, cpf = %s,
+                    cep = %s, endereco = %s, numero = %s, complemento = %s,
+                    bairro = %s, cidade = %s, uf = %s
+                WHERE id = %s
+            """, [
+                d['nome'].strip(), d['telefone'].strip(), d['cpf'].strip(),
+                d['cep'].strip(), d['endereco'].strip(), d['numero'].strip(),
+                (d.get('complemento') or '').strip() or None,
+                d['bairro'].strip(), d['cidade'].strip(),
+                d['uf'].strip().upper(), cli['id']
+            ])
+        except Exception as e:
+            log.warning(f"falha ao atualizar dados do cliente {cli['id']}: {e}")
     # Insere itens + reserva items da lista de aniversario (se houver)
     for it in itens:
         db_execute("""INSERT INTO pedido_itens
