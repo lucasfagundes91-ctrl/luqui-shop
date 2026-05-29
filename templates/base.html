@@ -64,9 +64,13 @@
     border-radius:0 0 12px 12px; padding:6px 0; z-index:60; }
   .menu .idade-wrap:hover .idade-drop,
   .menu .idade-wrap:focus-within .idade-drop{ display:block; }
-  .menu .idade-drop a{ display:block; color:var(--txt); padding:10px 18px;
+  .menu .idade-drop a{ display:block; color:var(--txt); padding:8px 18px;
     font-size:13px; font-weight:600; white-space:nowrap; }
   .menu .idade-drop a:hover{ background:#eaf2ff; color:var(--azul); }
+  .menu .idade-drop .idade-grp{ font-size:11px; font-weight:800;
+    text-transform:uppercase; letter-spacing:.4px; color:#94a3b8;
+    padding:10px 18px 4px; border-top:1px solid #f1f5f9; }
+  .menu .idade-drop .idade-grp:first-child{ border-top:0; }
   .menu a, .menu button.mlink{ color:#fff; font-weight:700; font-size:12.5px;
     padding:13px 9px; letter-spacing:.1px;
     transition:background .12s; display:inline-flex; align-items:center;
@@ -385,14 +389,27 @@ gtag('config', '{{ GOOGLE_TAG_ID }}');
     <a href="/novidades">✨ Novidades</a>
     <a href="/mais-vendidos">⭐ + Vendidos</a>
     {% if faixas_etarias_topbar %}
+    {%- set _bebes = faixas_etarias_topbar|selectattr('em_meses')|list -%}
+    {%- set _criancas = faixas_etarias_topbar|rejectattr('em_meses')|list -%}
     <div class="idade-wrap" tabindex="0">
       <a href="#" onclick="event.preventDefault()">🎂 Por idade ▾</a>
       <div class="idade-drop">
-        {% for fx in faixas_etarias_topbar %}
-          <a href="/buscar?faixa_etaria={{ (fx.slug or fx.nome)|urlencode }}">
-            {{ fx.nome }}{% if fx.qtd %} <span style="color:var(--mut);font-size:11px">({{ fx.qtd }})</span>{% endif %}
-          </a>
-        {% endfor %}
+        {% if _bebes %}
+          <div class="idade-grp">👶 Bebês (em meses)</div>
+          {% for fx in _bebes %}
+            <a href="/buscar?faixa_etaria={{ (fx.slug or fx.nome)|urlencode }}">
+              {{ fx.nome }}{% if fx.qtd %} <span style="color:var(--mut);font-size:11px">({{ fx.qtd }})</span>{% endif %}
+            </a>
+          {% endfor %}
+        {% endif %}
+        {% if _criancas %}
+          <div class="idade-grp">🧒 Crianças (em anos)</div>
+          {% for fx in _criancas %}
+            <a href="/buscar?faixa_etaria={{ (fx.slug or fx.nome)|urlencode }}">
+              {{ fx.nome }}{% if fx.qtd %} <span style="color:var(--mut);font-size:11px">({{ fx.qtd }})</span>{% endif %}
+            </a>
+          {% endfor %}
+        {% endif %}
       </div>
     </div>
     {% endif %}

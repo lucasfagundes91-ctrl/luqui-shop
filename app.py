@@ -829,9 +829,11 @@ def _menu_hierarquico():
 
 
 def _faixas_etarias_topbar():
-    """Lista de faixas etarias disponiveis no PDV, pro dropdown do header."""
+    """Lista de faixas etarias disponiveis no PDV, pro dropdown do header.
+    Ja vem ordenada numericamente e com flag em_meses (separa bebes x criancas)."""
     try:
-        return listar_filtros().get('faixas_etarias', []) or []
+        return _ordenar_faixas_etarias(
+            listar_filtros().get('faixas_etarias', []) or [])
     except Exception:
         return []
 
