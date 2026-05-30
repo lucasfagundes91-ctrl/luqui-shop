@@ -24,12 +24,37 @@
 {% endblock %}
 {% block conteudo %}
 
+<style>
+  /* Responsividade da página de produto */
+  .pdp-grid { display:grid; grid-template-columns:1fr 1fr; gap:40px; margin-top:20px;
+              background:#fff; padding:30px; border-radius:18px; }
+  .pdp-acoes { display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:stretch; }
+  @media (max-width: 900px) {
+    /* Tablet/celular: foto em cima, info embaixo. Foto ocupa largura toda */
+    .pdp-grid { grid-template-columns:1fr; gap:20px; padding:18px; }
+    .pdp-grid h1 { font-size:20px !important; }
+    .pdp-grid .preco-big { font-size:36px !important; }
+  }
+  @media (max-width: 560px) {
+    /* Celular pequeno: botões empilham; favoritar vai pra linha de cima junto da qtd */
+    .pdp-acoes { grid-template-columns:1fr 1fr; }
+    .pdp-acoes .btn-fav { grid-column: span 2; padding:12px !important; font-size:18px !important; }
+    .pdp-grid { padding:14px; }
+    .pdp-grid h1 { font-size:19px !important; }
+  }
+  /* Carrossel "Quem comprou" — 2 colunas em mobile, 1 em telas muito pequenas */
+  .relacionados-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+  @media (max-width: 900px) { .relacionados-grid { grid-template-columns:repeat(3,1fr); } }
+  @media (max-width: 640px) { .relacionados-grid { grid-template-columns:repeat(2,1fr); } }
+  @media (max-width: 380px) { .relacionados-grid { grid-template-columns:1fr; } }
+</style>
+
 <div style="max-width:1200px;margin:20px auto 40px;padding:0 16px">
   <a href="/" style="color:var(--mut);font-size:13px">← Voltar pra loja</a>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:20px;background:#fff;padding:30px;border-radius:18px">
+  <div class="pdp-grid">
     <div>
-      <div id="pfoto-principal" style="aspect-ratio:1;background:#F1F5F9;border-radius:14px;display:flex;align-items:center;justify-content:center;overflow:hidden">
+      <div id="pfoto-principal" style="aspect-ratio:1;background:#F1F5F9;border-radius:14px;display:flex;align-items:center;justify-content:center;overflow:hidden;max-width:520px;margin:0 auto">
         {% if p.foto_url %}<img id="pfoto-img" src="{{ p.foto_url }}" style="max-height:100%;max-width:100%">
         {% else %}<span style="font-size:120px">📦</span>{% endif %}
       </div>
@@ -51,12 +76,12 @@
 
       {% if p.preco_promo %}
         <div style="font-size:14px;color:var(--mut);text-decoration:line-through">{{ rs(p.preco_venda) }}</div>
-        <div style="color:var(--verde);font-weight:900;font-size:42px;line-height:1">{{ rs(p.preco_promo) }}</div>
+        <div class="preco-big" style="color:var(--verde);font-weight:900;font-size:42px;line-height:1">{{ rs(p.preco_promo) }}</div>
         <div style="background:var(--amarelo);color:var(--azul);padding:6px 14px;border-radius:20px;display:inline-block;font-weight:800;font-size:13px;margin-top:10px">
           🔥 EM PROMOÇÃO
         </div>
       {% else %}
-        <div style="color:var(--verde);font-weight:900;font-size:42px;line-height:1">{{ rs(p.preco_venda) }}</div>
+        <div class="preco-big" style="color:var(--verde);font-weight:900;font-size:42px;line-height:1">{{ rs(p.preco_venda) }}</div>
       {% endif %}
 
       {% set preco_final = p.preco_promo or p.preco_venda %}
@@ -94,7 +119,7 @@
                style="width:70px;padding:8px;border:1px solid var(--linha);border-radius:8px;text-align:center">
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:stretch">
+      <div class="pdp-acoes">
         <button class="btn btn-amarelo" style="padding:16px;font-size:15px"
                 onclick="carrinhoAdd({{ p.id }}, parseInt(document.getElementById('qtd').value)||1)">
           + Adicionar ao carrinho
@@ -103,7 +128,7 @@
                 onclick="comprarAgora({{ p.id }}, parseInt(document.getElementById('qtd').value)||1)">
           🛒 Comprar agora
         </button>
-        <button id="btn-fav" onclick="toggleFavorito({{ p.id }})" title="Favoritar"
+        <button id="btn-fav" class="btn-fav" onclick="toggleFavorito({{ p.id }})" title="Favoritar"
                 style="background:#fff;border:2px solid var(--linha);padding:0 16px;border-radius:10px;font-size:24px;cursor:pointer">
           {% set favs = wishlist_ids() %}
           <span id="fav-icon">{{ '❤️' if p.id in favs else '🤍' }}</span>
@@ -226,20 +251,19 @@
     {% if relacionados %}
     <div style="margin-top:30px">
       <h3 style="margin-bottom:14px">🎯 Quem comprou esse, levou também</h3>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
+      <div class="relacionados-grid">
         {% for r in relacionados %}
         <a href="/produto/{{ r.id }}" style="background:#F8FAFC;border-radius:10px;padding:12px;text-decoration:none;transition:transform .15s">
           <div style="aspect-ratio:1;background:#fff;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:8px">
             {% if r.foto_url %}<img src="{{ r.foto_url }}" style="max-height:100%">
             {% else %}<span style="font-size:40px">📦</span>{% endif %}
           </div>
-          <div style="font-size:12px;line-height:1.3;height:32px;overflow:hidden;color:var(--txt)">{{ r.descricao[:60] }}</div>
-          <div style="color:var(--verde);font-weight:900;margin-top:4px">{{ rs(r.preco_promo or r.preco_venda) }}</div>
+          <div style="font-size:12px;line-height:1.3;min-height:32px;color:var(--txt);word-break:break-word">{{ r.descricao[:60] }}</div>
+          <div style="color:var(--verde);font-weight:900;margin-top:4px;font-size:14px">{{ rs(r.preco_promo or r.preco_venda) }}</div>
         </a>
         {% endfor %}
       </div>
     </div>
-    <style>@media(max-width:700px){.relacionados-grid{grid-template-columns:repeat(2,1fr) !important}}</style>
     {% endif %}
 
     <details style="margin-top:20px;padding:14px;background:#F8FAFC;border-radius:10px">
