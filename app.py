@@ -2157,6 +2157,18 @@ def healthz():
         return 'down', 500
 
 
+@app.route('/__version')
+def __version():
+    """SHA do commit em produção. Usado por scripts/deploy.sh pra confirmar
+    se o auto-deploy do GitHub passou (às vezes falha silenciosamente)."""
+    sha = (os.getenv('RAILWAY_GIT_COMMIT_SHA')
+           or os.getenv('SOURCE_COMMIT')
+           or 'dev')
+    return jsonify({'sha': sha[:12] if sha else 'dev',
+                    'full': sha,
+                    'branch': os.getenv('RAILWAY_GIT_BRANCH') or 'main'})
+
+
 @app.route('/')
 def home():
     produtos, _ = listar_produtos(limite=12)
