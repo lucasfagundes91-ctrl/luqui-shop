@@ -277,6 +277,8 @@ def init_db():
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS entrega_agendada VARCHAR(40)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pontos_resgatados NUMERIC(10,2) DEFAULT 0",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS desconto_pontos NUMERIC(10,2) DEFAULT 0",
+        # PNG base64 do QR Pix (pra mostrar na própria página, sem redirect)
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS asaas_pix_qr_image TEXT",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nfe_ref VARCHAR(80)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nfe_numero VARCHAR(20)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nfe_modelo VARCHAR(5)",
@@ -4262,6 +4264,40 @@ def asaas_cancelar_assinatura(subscription_id):
         return False
 
 
+def asaas_criar_cobranca_cartao(customer_id, valor, descricao, parcelas,
+                                externa_ref, credit_card, holder_info, remote_ip):
+    """Cobrança CREDIT_CARD com dados do cartão inline (checkout transparente).
+    Retorna (status_code, dict-resp). resp.errors[].description traz o motivo
+    da recusa quando code in (400, 401, 402)."""
+    if not ASAAS_API_KEY or not customer_id:
+        return 0, {'errors': [{'description': 'Gateway não configurado'}]}
+    body = {
+        'customer': customer_id,
+        'billingType': 'CREDIT_CARD',
+        'value': round(float(valor), 2),
+        'dueDate': (datetime.now(SP_TZ).date() + timedelta(days=3)).isoformat(),
+        'description': descricao[:500],
+        'externalReference': externa_ref or '',
+        'creditCard': credit_card,
+        'creditCardHolderInfo': holder_info,
+        'remoteIp': remote_ip,
+    }
+    if parcelas and int(parcelas) > 1:
+        body['installmentCount'] = int(parcelas)
+        body['totalValue'] = round(float(valor), 2)
+        body['value'] = round(float(valor) / int(parcelas), 2)
+    try:
+        r = requests.post(f'{ASAAS_BASE}/payments',
+                          json=body, headers=_asaas_headers(), timeout=25)
+        try:
+            return r.status_code, r.json()
+        except Exception:
+            return r.status_code, {'errors': [{'description': r.text[:300]}]}
+    except Exception as e:
+        log.error("asaas cobranca cartao exc: %s", e)
+        return 0, {'errors': [{'description': str(e)}]}
+
+
 def asaas_buscar_pix_qr(payment_id):
     """Pega payload + QR code base64 do PIX."""
     try:
@@ -4501,34 +4537,137 @@ def checkout_finalizar():
         db_execute("UPDATE pedidos SET status='erro_asaas' WHERE id=%s", [pid])
         return jsonify({'erro': 'Falha ao criar cliente Asaas. '
                                  'Tente novamente ou pedido pelo WhatsApp.'}), 502
-    billing = {'pix': 'PIX', 'cartao': 'CREDIT_CARD'}[d['forma_pagto']]
+    # CARTÃO: a cobrança só nasce quando o cliente preencher os dados na
+    # próxima página (checkout transparente em /pedido/<id>/pagamento). Aqui
+    # só guarda o customer_id no campo asaas_link pra reusar lá.
+    if d['forma_pagto'] == 'cartao':
+        db_execute("UPDATE pedidos SET asaas_link=%s WHERE id=%s",
+                   [f'customer:{customer_id}', pid])
+        session['carrinho'] = []
+        session.modified = True
+        return jsonify({'ok': True, 'pedido_id': pid,
+                        'pagamento_url': f'/pedido/{pid}/pagamento'})
+    # PIX: cria cobrança agora pra mostrar QR code visual e código copia-cola
     cobranca = asaas_criar_cobranca(
-        customer_id, total, billing,
+        customer_id, total, 'PIX',
         descricao=f'Luqui Brinquedos — Pedido #{pid}',
-        parcelas=parcelas if d['forma_pagto'] == 'cartao' else 1,
-        externa_ref=f'pedido-{pid}',
-    )
+        parcelas=1, externa_ref=f'pedido-{pid}')
     if not cobranca:
         db_execute("UPDATE pedidos SET status='erro_asaas' WHERE id=%s", [pid])
         return jsonify({'erro': 'Falha ao gerar cobrança. '
                                  'Tente novamente ou pedido pelo WhatsApp.'}), 502
     cob_id = cobranca.get('id')
-    link = cobranca.get('invoiceUrl') or cobranca.get('bankSlipUrl')
-    pix_qr = ''
-    if d['forma_pagto'] == 'pix':
-        pix = asaas_buscar_pix_qr(cob_id)
-        pix_qr = pix.get('payload', '')
+    link = cobranca.get('invoiceUrl')
+    pix = asaas_buscar_pix_qr(cob_id) or {}
     db_execute("""UPDATE pedidos SET asaas_cobranca_id=%s, asaas_link=%s,
-                  asaas_pix_qrcode=%s, asaas_boleto_url=%s
+                  asaas_pix_qrcode=%s, asaas_pix_qr_image=%s
                   WHERE id=%s""",
-               [cob_id, link, pix_qr,
-                cobranca.get('bankSlipUrl') if d['forma_pagto'] == 'boleto' else None,
-                pid])
+               [cob_id, link, pix.get('payload', ''),
+                pix.get('encodedImage', ''), pid])
     # Limpa carrinho e devolve URL de pagamento
     session['carrinho'] = []
     session.modified = True
     return jsonify({'ok': True, 'pedido_id': pid,
                     'pagamento_url': f'/pedido/{pid}/pagamento'})
+
+
+@app.route('/api/pedido/<int:pid>/pagar-cartao', methods=['POST'])
+def pedido_pagar_cartao(pid):
+    """Checkout transparente — cliente preenche cartão na própria página da
+    loja; servidor encaminha pro Asaas via POST /payments com creditCard
+    inline. Cartão NÃO é persistido em lugar nenhum."""
+    p = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one')
+    if not p:
+        return jsonify({'erro': 'Pedido não encontrado'}), 404
+    if p['forma_pagto'] != 'cartao':
+        return jsonify({'erro': 'Este pedido não é cartão'}), 400
+    if p['status'] != 'aguardando_pagto':
+        return jsonify({'erro': f'Pedido com status "{p["status"]}" — '
+                                 'não dá pra reprocessar'}), 400
+
+    d = request.get_json(silent=True) or {}
+    num = ''.join(c for c in (d.get('numero') or '') if c.isdigit())
+    mes = (d.get('validade_mes') or '').strip().zfill(2)
+    ano = (d.get('validade_ano') or '').strip()
+    if len(ano) == 2:
+        ano = '20' + ano
+    ccv = ''.join(c for c in (d.get('ccv') or '') if c.isdigit())
+    holder_nome = (d.get('titular_nome') or '').strip().upper()[:80]
+    holder_cpf = ''.join(c for c in (d.get('titular_cpf') or '') if c.isdigit())
+    if not (12 <= len(num) <= 19):
+        return jsonify({'erro': 'Número do cartão inválido'}), 400
+    if not (3 <= len(ccv) <= 4):
+        return jsonify({'erro': 'CVV inválido'}), 400
+    try:
+        if not (1 <= int(mes) <= 12) or int(ano) < datetime.now().year:
+            raise ValueError
+    except ValueError:
+        return jsonify({'erro': 'Validade do cartão inválida'}), 400
+    if len(holder_nome) < 3:
+        return jsonify({'erro': 'Nome do titular obrigatório'}), 400
+    if len(holder_cpf) not in (11, 14):
+        return jsonify({'erro': 'CPF/CNPJ do titular obrigatório'}), 400
+
+    # Reusa customer criado no /finalizar (guardado como "customer:<id>" no link)
+    customer_id = None
+    link_atual = (p.get('asaas_link') or '')
+    if link_atual.startswith('customer:'):
+        customer_id = link_atual.split(':', 1)[1]
+    if not customer_id:
+        customer_id = asaas_criar_customer(p['nome'], p['email'],
+                                           p['cpf'], p['telefone'])
+    if not customer_id:
+        return jsonify({'erro': 'Falha ao registrar comprador no gateway'}), 502
+
+    cc = {
+        'holderName': holder_nome,
+        'number': num,
+        'expiryMonth': mes,
+        'expiryYear': ano,
+        'ccv': ccv,
+    }
+    holder = {
+        'name': holder_nome,
+        'email': p['email'],
+        'cpfCnpj': holder_cpf,
+        'postalCode': ''.join(c for c in (p.get('cep') or '') if c.isdigit()) or '00000000',
+        'addressNumber': (p.get('numero') or 'S/N')[:10],
+        'phone': ''.join(c for c in (p.get('telefone') or '') if c.isdigit())[:11] or '0000000000',
+    }
+    remote_ip = (request.headers.get('X-Forwarded-For')
+                 or request.remote_addr or '0.0.0.0').split(',')[0].strip()
+
+    code, resp = asaas_criar_cobranca_cartao(
+        customer_id, p['total'],
+        f'Luqui Brinquedos — Pedido #{pid}',
+        p.get('parcelas') or 1, f'pedido-{pid}',
+        cc, holder, remote_ip)
+
+    if code not in (200, 201):
+        msg = 'Não foi possível processar o pagamento'
+        try:
+            errs = (resp or {}).get('errors') or []
+            if errs and errs[0].get('description'):
+                msg = errs[0]['description']
+        except Exception:
+            pass
+        log.warning(f"pedido {pid} cartao recusado: code={code} msg={msg}")
+        return jsonify({'erro': msg}), 402
+
+    cob_id = resp.get('id')
+    link = resp.get('invoiceUrl') or ''
+    status_asaas = resp.get('status', '')  # CONFIRMED, RECEIVED, PENDING, AWAITING_RISK_ANALYSIS
+    db_execute("""UPDATE pedidos SET asaas_cobranca_id=%s, asaas_link=%s
+                  WHERE id=%s""",
+               [cob_id, link, pid])
+    if status_asaas in ('CONFIRMED', 'RECEIVED'):
+        db_execute("UPDATE pedidos SET status='pago', pago_em=NOW() "
+                   "WHERE id=%s AND status='aguardando_pagto'", [pid])
+        return jsonify({'ok': True, 'status': 'pago'})
+    # AWAITING_RISK_ANALYSIS / PENDING: pagamento em análise antifraude;
+    # webhook confirma depois. Front recarrega via polling.
+    return jsonify({'ok': True, 'status': 'analise',
+                    'mensagem': 'Pagamento em análise — você será avisado em segundos'})
 
 
 @app.route('/pedido/<int:pid>/pagamento')

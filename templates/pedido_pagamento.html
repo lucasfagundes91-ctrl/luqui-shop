@@ -49,16 +49,18 @@ if(typeof gtag !== 'undefined'){
           1. Abra o app do seu banco · 2. Escolha PIX · 3. Escaneie o QR ou copie o código abaixo
         </p>
         <div style="text-align:center;background:#F8FAFC;padding:24px;border-radius:14px;margin-bottom:14px">
-          {% if p.asaas_link %}
-            <p><a href="{{ p.asaas_link }}" target="_blank" class="btn btn-amarelo">
-              Abrir página de pagamento do Asaas →
-            </a></p>
-            <p style="margin-top:14px;font-size:12px;color:var(--mut)">Ou copie o código PIX:</p>
+          {% if p.asaas_pix_qr_image %}
+            <img src="data:image/png;base64,{{ p.asaas_pix_qr_image }}"
+                 alt="QR Code PIX" style="width:240px;height:240px;background:#fff;padding:10px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06)">
+            <p style="margin:14px 0 6px;font-size:13px;color:var(--mut)">ou copie o código:</p>
           {% endif %}
           {% if p.asaas_pix_qrcode %}
             <textarea readonly onclick="this.select();document.execCommand('copy');toast('Código PIX copiado!')"
               style="width:100%;max-width:500px;padding:12px;border:1px solid var(--linha);border-radius:8px;font-family:monospace;font-size:11px;height:80px;text-align:center;cursor:pointer">{{ p.asaas_pix_qrcode }}</textarea>
             <p style="font-size:11px;color:var(--mut);margin-top:6px">(clique pra copiar)</p>
+          {% endif %}
+          {% if not p.asaas_pix_qr_image and not p.asaas_pix_qrcode and p.asaas_link %}
+            <a href="{{ p.asaas_link }}" target="_blank" class="btn btn-amarelo">Abrir pagamento PIX →</a>
           {% endif %}
         </div>
       {% elif p.forma_pagto == 'boleto' %}
@@ -76,16 +78,109 @@ if(typeof gtag !== 'undefined'){
           </a>
         {% endif %}
       {% elif p.forma_pagto == 'cartao' %}
-        <h3 style="margin-bottom:14px">💳 Pague com Cartão</h3>
-        <p style="font-size:13px;color:var(--mut);margin-bottom:14px">
-          {% if p.parcelas > 1 %}Parcelado em <b>{{ p.parcelas }}x sem juros</b>.{% endif %}
-          Você vai informar os dados do cartão na página segura do Asaas.
+        <h3 style="margin-bottom:6px">💳 Pague com Cartão</h3>
+        <p style="font-size:13px;color:var(--mut);margin-bottom:18px">
+          {% if p.parcelas and p.parcelas > 1 %}Parcelado em <b>{{ p.parcelas }}x</b>. {% endif %}
+          🔒 Dados criptografados e processados via Asaas. Não armazenamos seu cartão.
         </p>
-        {% if p.asaas_link %}
-          <a href="{{ p.asaas_link }}" target="_blank" class="btn btn-amarelo btn-block" style="padding:16px;font-size:15px">
-            💳 Pagar com cartão →
-          </a>
-        {% endif %}
+        <form id="form-cartao" autocomplete="on" onsubmit="event.preventDefault();pagarCartao()"
+              style="background:#F8FAFC;padding:20px;border-radius:14px;display:grid;gap:12px">
+          <div>
+            <label style="font-size:12px;color:var(--mut);font-weight:600">NÚMERO DO CARTÃO</label>
+            <input id="cc-numero" inputmode="numeric" autocomplete="cc-number" maxlength="23"
+                   placeholder="0000 0000 0000 0000" required
+                   style="width:100%;padding:14px;border:1px solid var(--linha);border-radius:10px;font-size:16px;letter-spacing:1px;font-family:monospace">
+          </div>
+          <div>
+            <label style="font-size:12px;color:var(--mut);font-weight:600">NOME COMO ESTÁ NO CARTÃO</label>
+            <input id="cc-titular" autocomplete="cc-name" maxlength="80" required
+                   placeholder="Como impresso no cartão"
+                   style="width:100%;padding:14px;border:1px solid var(--linha);border-radius:10px;font-size:14px;text-transform:uppercase">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <div>
+              <label style="font-size:12px;color:var(--mut);font-weight:600">MÊS</label>
+              <input id="cc-mes" inputmode="numeric" autocomplete="cc-exp-month" maxlength="2"
+                     placeholder="MM" required
+                     style="width:100%;padding:14px;border:1px solid var(--linha);border-radius:10px;font-size:16px;text-align:center;font-family:monospace">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--mut);font-weight:600">ANO</label>
+              <input id="cc-ano" inputmode="numeric" autocomplete="cc-exp-year" maxlength="4"
+                     placeholder="AAAA" required
+                     style="width:100%;padding:14px;border:1px solid var(--linha);border-radius:10px;font-size:16px;text-align:center;font-family:monospace">
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--mut);font-weight:600">CVV</label>
+              <input id="cc-cvv" inputmode="numeric" autocomplete="cc-csc" maxlength="4"
+                     placeholder="123" required
+                     style="width:100%;padding:14px;border:1px solid var(--linha);border-radius:10px;font-size:16px;text-align:center;font-family:monospace">
+            </div>
+          </div>
+          <div>
+            <label style="font-size:12px;color:var(--mut);font-weight:600">CPF DO TITULAR</label>
+            <input id="cc-cpf" inputmode="numeric" maxlength="14" required
+                   placeholder="000.000.000-00" value="{{ p.cpf or '' }}"
+                   style="width:100%;padding:14px;border:1px solid var(--linha);border-radius:10px;font-size:14px;font-family:monospace">
+          </div>
+          <div id="cc-erro" style="display:none;background:#FEE2E2;color:#991B1B;padding:12px;border-radius:10px;font-size:13px;font-weight:600"></div>
+          <button id="cc-btn" type="submit" class="btn btn-amarelo btn-block"
+                  style="padding:16px;font-size:15px;font-weight:700">
+            🔒 Pagar {{ rs(p.total) }}{% if p.parcelas and p.parcelas > 1 %} em {{ p.parcelas }}x{% endif %}
+          </button>
+        </form>
+        <script>
+        // Máscaras leves
+        const fmtCard = v => v.replace(/\D/g,'').slice(0,19).replace(/(.{4})/g,'$1 ').trim();
+        const fmtCpf = v => {
+          v = v.replace(/\D/g,'').slice(0,11);
+          if(v.length>9) return v.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2})/,'$1.$2.$3-$4');
+          if(v.length>6) return v.replace(/(\d{3})(\d{3})(\d{0,3})/,'$1.$2.$3');
+          if(v.length>3) return v.replace(/(\d{3})(\d{0,3})/,'$1.$2');
+          return v;
+        };
+        document.getElementById('cc-numero').addEventListener('input', e=>{ e.target.value = fmtCard(e.target.value); });
+        document.getElementById('cc-cpf').addEventListener('input', e=>{ e.target.value = fmtCpf(e.target.value); });
+        ['cc-mes','cc-ano','cc-cvv'].forEach(id=>{
+          document.getElementById(id).addEventListener('input', e=>{ e.target.value = e.target.value.replace(/\D/g,''); });
+        });
+        async function pagarCartao(){
+          const btn = document.getElementById('cc-btn');
+          const erroBox = document.getElementById('cc-erro');
+          erroBox.style.display = 'none';
+          btn.disabled = true;
+          btn.innerHTML = '⏳ Processando…';
+          try {
+            const r = await fetch('/api/pedido/{{ p.id }}/pagar-cartao', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                numero: document.getElementById('cc-numero').value,
+                titular_nome: document.getElementById('cc-titular').value,
+                validade_mes: document.getElementById('cc-mes').value,
+                validade_ano: document.getElementById('cc-ano').value,
+                ccv: document.getElementById('cc-cvv').value,
+                titular_cpf: document.getElementById('cc-cpf').value,
+              })
+            });
+            const d = await r.json();
+            if(!r.ok || d.erro){
+              erroBox.textContent = '⚠️ ' + (d.erro || 'Erro ao processar pagamento');
+              erroBox.style.display = 'block';
+              btn.disabled = false;
+              btn.innerHTML = '🔒 Pagar {{ rs(p.total) }}';
+              return;
+            }
+            // Sucesso (pago ou em análise) — recarrega
+            location.reload();
+          } catch(e){
+            erroBox.textContent = '⚠️ Erro de conexão — tente novamente';
+            erroBox.style.display = 'block';
+            btn.disabled = false;
+            btn.innerHTML = '🔒 Pagar {{ rs(p.total) }}';
+          }
+        }
+        </script>
       {% endif %}
 
       <div style="background:#F8FAFC;padding:18px;border-radius:10px;margin-top:20px">
