@@ -4746,6 +4746,27 @@ def pedido_pagamento(pid):
     p = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one')
     if not p:
         abort(404)
+    # Lazy-fetch da imagem do QR Code PIX se faltou na criação do pedido
+    # (pedidos antigos podem ter só o payload sem a imagem). Busca da API
+    # Asaas e salva pra próxima vez.
+    if (p.get('forma_pagto') == 'pix'
+        and p.get('asaas_cobranca_id')
+        and not p.get('asaas_pix_qr_image')):
+        try:
+            pix = asaas_buscar_pix_qr(p['asaas_cobranca_id']) or {}
+            img = pix.get('encodedImage', '')
+            payload = pix.get('payload', '') or p.get('asaas_pix_qrcode', '')
+            if img:
+                db_execute("""UPDATE pedidos SET asaas_pix_qr_image=%s,
+                              asaas_pix_qrcode=COALESCE(NULLIF(%s,''), asaas_pix_qrcode)
+                              WHERE id=%s""",
+                           [img, payload, pid])
+                p = dict(p)
+                p['asaas_pix_qr_image'] = img
+                if payload:
+                    p['asaas_pix_qrcode'] = payload
+        except Exception as e:
+            log.warning(f"lazy pix qr pedido {pid}: {e}")
     itens = db_execute(
         "SELECT * FROM pedido_itens WHERE pedido_id=%s ORDER BY id",
         [pid], fetch='all') or []
@@ -4754,6 +4775,17 @@ def pedido_pagamento(pid):
                            categorias=listar_categorias(),
                            cliente=cliente_logado(),
                            carrinho=carrinho_ler())
+
+
+@app.route('/api/pedido/<int:pid>/status')
+def api_pedido_status(pid):
+    """Polling pra página de pagamento detectar quando pago/cancelado."""
+    p = db_execute("SELECT status, pago_em FROM pedidos WHERE id=%s",
+                   [pid], fetch='one')
+    if not p:
+        return jsonify({'erro': 'não encontrado'}), 404
+    return jsonify({'status': p['status'],
+                    'pago_em': p['pago_em'].isoformat() if p.get('pago_em') else None})
 
 
 @app.route('/api/pedido/<int:pid>/nfe')
