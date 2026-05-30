@@ -2157,15 +2157,20 @@ def healthz():
         return 'down', 500
 
 
+_APP_PY_MTIME = int(os.path.getmtime(__file__))
+
+
 @app.route('/__version')
 def __version():
-    """SHA do commit em produção. Usado por scripts/deploy.sh pra confirmar
-    se o auto-deploy do GitHub passou (às vezes falha silenciosamente)."""
+    """Identifica a versão atual em produção pra deploy.sh confirmar que
+    o auto-deploy realmente subiu. Usa mtime do app.py (muda sempre que
+    o container é redeployado, sem depender de env var do Railway)."""
     sha = (os.getenv('RAILWAY_GIT_COMMIT_SHA')
            or os.getenv('SOURCE_COMMIT')
-           or 'dev')
-    return jsonify({'sha': sha[:12] if sha else 'dev',
-                    'full': sha,
+           or '')
+    return jsonify({'sha': (sha[:12] if sha else 'dev'),
+                    'full': sha or '',
+                    'mtime': _APP_PY_MTIME,
                     'branch': os.getenv('RAILWAY_GIT_BRANCH') or 'main'})
 
 
