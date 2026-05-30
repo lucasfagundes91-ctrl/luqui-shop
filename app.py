@@ -279,6 +279,8 @@ def init_db():
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS desconto_pontos NUMERIC(10,2) DEFAULT 0",
         # PNG base64 do QR Pix (pra mostrar na própria página, sem redirect)
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS asaas_pix_qr_image TEXT",
+        # Linha digitável do boleto (pra copia-cola na própria página)
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS asaas_boleto_barcode VARCHAR(80)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nfe_ref VARCHAR(80)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nfe_numero VARCHAR(20)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nfe_modelo VARCHAR(5)",
@@ -4310,6 +4312,47 @@ def asaas_buscar_pix_qr(payment_id):
     return {}
 
 
+def asaas_status_conta():
+    """Consulta dados da conta Asaas (sandbox/prod, status, etc).
+    Usado pelo admin pra confirmar se 3DS/antifraude estão ligados — a
+    ativação do 3DS é só pelo painel Asaas (Configurações → Conta), não
+    há endpoint API público pra ligar."""
+    if not ASAAS_API_KEY:
+        return {'ok': False, 'erro': 'ASAAS_API_KEY não configurada'}
+    try:
+        r = requests.get(f'{ASAAS_BASE}/myAccount',
+                         headers=_asaas_headers(), timeout=10)
+        if r.status_code == 200:
+            d = r.json() or {}
+            return {
+                'ok': True,
+                'nome': d.get('name'),
+                'email': d.get('email'),
+                'cnpj': d.get('cpfCnpj'),
+                'modo': 'sandbox' if 'sandbox' in (ASAAS_BASE or '') else 'producao',
+                'painel_3ds': 'https://www.asaas.com/account/paymentSettings',
+                'instrucao': 'Painel Asaas → Configurações da conta → '
+                             'Configurações de cartão → ativar "Autenticação 3D Secure"',
+            }
+        return {'ok': False, 'erro': f'Asaas HTTP {r.status_code}'}
+    except Exception as e:
+        return {'ok': False, 'erro': str(e)}
+
+
+def asaas_buscar_boleto_info(payment_id):
+    """Pega identificationField (linha digitável) + barCode + bankSlipUrl
+    do boleto. Usado pra mostrar copia-cola na própria página."""
+    try:
+        r = requests.get(
+            f'{ASAAS_BASE}/payments/{payment_id}/identificationField',
+            headers=_asaas_headers(), timeout=10)
+        if r.status_code == 200:
+            return r.json()
+    except Exception as e:
+        log.error("asaas boleto info: %s", e)
+    return {}
+
+
 # ─── WhatsApp (Z-API) ─────────────────────────────────────────────────────────
 def enviar_whatsapp(numero, mensagem):
     """Manda mensagem via Z-API. `numero` em E164 sem '+', ex '5545991119800'."""
@@ -4371,7 +4414,7 @@ def checkout_finalizar():
     for c in obrig:
         if not (d.get(c) or '').strip():
             return jsonify({'erro': f'Campo {c} obrigatório'}), 400
-    if d['forma_pagto'] not in ('pix', 'cartao'):
+    if d['forma_pagto'] not in ('pix', 'cartao', 'boleto'):
         return jsonify({'erro': 'Forma de pagamento inválida'}), 400
     # Calcula totais
     subtotal = sum(float(it['preco']) * float(it['qtd']) for it in itens)
@@ -4381,6 +4424,8 @@ def checkout_finalizar():
     desconto = 0.0
     if d['forma_pagto'] == 'pix':
         desconto = round(subtotal * desconto_pix_pct / 100, 2)
+    elif d['forma_pagto'] == 'boleto':
+        desconto = round(subtotal * desconto_boleto_pct / 100, 2)
     # Cupom
     cupom_codigo = (d.get('cupom_codigo') or '').strip().upper()
     cupom_desconto = 0.0
@@ -4547,9 +4592,11 @@ def checkout_finalizar():
         session.modified = True
         return jsonify({'ok': True, 'pedido_id': pid,
                         'pagamento_url': f'/pedido/{pid}/pagamento'})
-    # PIX: cria cobrança agora pra mostrar QR code visual e código copia-cola
+    # PIX ou BOLETO: cria cobrança agora pra mostrar dados de pagamento na
+    # própria página (QR visual / linha digitável). Cartão tem fluxo próprio.
+    billing = 'PIX' if d['forma_pagto'] == 'pix' else 'BOLETO'
     cobranca = asaas_criar_cobranca(
-        customer_id, total, 'PIX',
+        customer_id, total, billing,
         descricao=f'Luqui Brinquedos — Pedido #{pid}',
         parcelas=1, externa_ref=f'pedido-{pid}')
     if not cobranca:
@@ -4558,17 +4605,34 @@ def checkout_finalizar():
                                  'Tente novamente ou pedido pelo WhatsApp.'}), 502
     cob_id = cobranca.get('id')
     link = cobranca.get('invoiceUrl')
-    pix = asaas_buscar_pix_qr(cob_id) or {}
+    pix_payload, pix_image, boleto_url, boleto_barcode = '', '', None, None
+    if d['forma_pagto'] == 'pix':
+        pix = asaas_buscar_pix_qr(cob_id) or {}
+        pix_payload = pix.get('payload', '')
+        pix_image = pix.get('encodedImage', '')
+    else:  # boleto
+        boleto_url = cobranca.get('bankSlipUrl')
+        # Linha digitável (identificationField) vem do endpoint específico
+        info = asaas_buscar_boleto_info(cob_id) or {}
+        boleto_barcode = info.get('identificationField') or ''
     db_execute("""UPDATE pedidos SET asaas_cobranca_id=%s, asaas_link=%s,
-                  asaas_pix_qrcode=%s, asaas_pix_qr_image=%s
+                  asaas_pix_qrcode=%s, asaas_pix_qr_image=%s,
+                  asaas_boleto_url=%s, asaas_boleto_barcode=%s
                   WHERE id=%s""",
-               [cob_id, link, pix.get('payload', ''),
-                pix.get('encodedImage', ''), pid])
+               [cob_id, link, pix_payload, pix_image,
+                boleto_url, boleto_barcode, pid])
     # Limpa carrinho e devolve URL de pagamento
     session['carrinho'] = []
     session.modified = True
     return jsonify({'ok': True, 'pedido_id': pid,
                     'pagamento_url': f'/pedido/{pid}/pagamento'})
+
+
+@app.route('/api/admin/asaas/conta')
+@requer_admin
+def admin_asaas_conta():
+    """Mostra status da conta Asaas + link/instrução pra ativar 3DS."""
+    return jsonify(asaas_status_conta())
 
 
 @app.route('/api/pedido/<int:pid>/pagar-cartao', methods=['POST'])
@@ -4664,8 +4728,15 @@ def pedido_pagar_cartao(pid):
         db_execute("UPDATE pedidos SET status='pago', pago_em=NOW() "
                    "WHERE id=%s AND status='aguardando_pagto'", [pid])
         return jsonify({'ok': True, 'status': 'pago'})
-    # AWAITING_RISK_ANALYSIS / PENDING: pagamento em análise antifraude;
-    # webhook confirma depois. Front recarrega via polling.
+    # 3D Secure: quando a conta Asaas tem 3DS ativo, a resposta traz uma URL
+    # de autenticação. Abrimos numa popup; webhook confirma depois.
+    redirect_3ds = (resp.get('creditCard') or {}).get('authenticationUrl') \
+        or resp.get('authorizationUrl') or resp.get('paymentLink')
+    if redirect_3ds:
+        return jsonify({'ok': True, 'status': '3ds',
+                        'redirect_3ds': redirect_3ds,
+                        'mensagem': 'Confirme com seu banco para autorizar a compra'})
+    # AWAITING_RISK_ANALYSIS / PENDING: análise antifraude; webhook confirma.
     return jsonify({'ok': True, 'status': 'analise',
                     'mensagem': 'Pagamento em análise — você será avisado em segundos'})
 

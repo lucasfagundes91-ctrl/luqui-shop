@@ -64,17 +64,25 @@ if(typeof gtag !== 'undefined'){
           {% endif %}
         </div>
       {% elif p.forma_pagto == 'boleto' %}
-        <h3 style="margin-bottom:14px">📄 Pague com Boleto</h3>
-        <p style="font-size:13px;color:var(--mut);margin-bottom:14px">
-          O boleto vence em 3 dias úteis. Pode pagar em qualquer banco, lotérica ou pelo app.
+        <h3 style="margin-bottom:6px">📄 Pague com Boleto</h3>
+        <p style="font-size:13px;color:var(--mut);margin-bottom:18px">
+          Vencimento em 3 dias úteis. Pague pelo app do banco (copia-cola) ou imprima o PDF.
         </p>
+        {% if p.asaas_boleto_barcode %}
+        <div style="background:#F8FAFC;padding:20px;border-radius:14px;margin-bottom:14px">
+          <label style="font-size:12px;color:var(--mut);font-weight:600;display:block;margin-bottom:6px">LINHA DIGITÁVEL</label>
+          <textarea readonly id="boleto-barcode" onclick="this.select();document.execCommand('copy');toast('Linha digitável copiada!')"
+                    style="width:100%;padding:14px;border:1px solid var(--linha);border-radius:10px;font-family:monospace;font-size:13px;height:60px;text-align:center;cursor:pointer;background:#fff">{{ p.asaas_boleto_barcode }}</textarea>
+          <p style="font-size:11px;color:var(--mut);margin-top:6px;text-align:center">(clique pra copiar)</p>
+        </div>
+        {% endif %}
         {% if p.asaas_boleto_url %}
           <a href="{{ p.asaas_boleto_url }}" target="_blank" class="btn btn-amarelo btn-block" style="padding:16px;font-size:15px">
-            📄 Abrir/Imprimir boleto
+            📄 Abrir/Imprimir boleto em PDF
           </a>
         {% elif p.asaas_link %}
           <a href="{{ p.asaas_link }}" target="_blank" class="btn btn-amarelo btn-block" style="padding:16px;font-size:15px">
-            Abrir página de pagamento →
+            Abrir página do boleto →
           </a>
         {% endif %}
       {% elif p.forma_pagto == 'cartao' %}
@@ -171,7 +179,14 @@ if(typeof gtag !== 'undefined'){
               btn.innerHTML = '🔒 Pagar {{ rs(p.total) }}';
               return;
             }
-            // Sucesso (pago ou em análise) — recarrega
+            // 3D Secure: banco exige autenticação extra — abre popup pra
+            // confirmar; polling existente detecta a aprovação.
+            if(d.status === '3ds' && d.redirect_3ds){
+              btn.innerHTML = '🔐 Confirme com seu banco…';
+              window.open(d.redirect_3ds, '_blank', 'width=420,height=620');
+              return;
+            }
+            // pago / análise — recarrega
             location.reload();
           } catch(e){
             erroBox.textContent = '⚠️ Erro de conexão — tente novamente';
