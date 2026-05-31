@@ -1,0 +1,81 @@
+name: Verify Railway deploy
+
+# Toda vez que sobe commit no main: espera o auto-deploy do Railway pegar,
+# confere via /__version se o container reiniciou; se não em até 3min, força
+# redeploy via Railway GraphQL API. Resolve o bug do auto-deploy travar
+# silenciosamente (ver: reference_railway_auto_deploy_quebra).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Captura mtime ANTES do deploy
+        id: antes
+        env:
+          PROD_URL: ${{ vars.PROD_URL }}
+        run: |
+          mtime=$(curl -s --max-time 8 "$PROD_URL/__version?v=$(date +%s)" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin).get('mtime',0))" 2>/dev/null || echo "0")
+          echo "mtime_antes=$mtime" >> $GITHUB_OUTPUT
+          echo "🔵 mtime antes do deploy: $mtime"
+
+      - name: Aguarda auto-deploy (até 3 min)
+        id: aguarda
+        env:
+          PROD_URL: ${{ vars.PROD_URL }}
+          MTIME_ANTES: ${{ steps.antes.outputs.mtime_antes }}
+        run: |
+          deadline=$(( $(date +%s) + 180 ))
+          while [ $(date +%s) -lt $deadline ]; do
+            mtime=$(curl -s --max-time 6 "$PROD_URL/__version?v=$(date +%s)" \
+              | python3 -c "import json,sys; print(json.load(sys.stdin).get('mtime',0))" 2>/dev/null || echo "0")
+            if [ "$mtime" != "$MTIME_ANTES" ] && [ "$mtime" != "0" ]; then
+              echo "✅ Auto-deploy OK (mtime $MTIME_ANTES → $mtime)"
+              echo "ok=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            echo "   mtime=$mtime ainda igual — aguardando..."
+            sleep 15
+          done
+          echo "⚠️  Auto-deploy não rodou em 3 min."
+          echo "ok=false" >> $GITHUB_OUTPUT
+
+      - name: Força redeploy via Railway API
+        if: steps.aguarda.outputs.ok == 'false'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          SVC: ${{ vars.RAILWAY_SERVICE_ID }}
+          ENV: ${{ vars.RAILWAY_ENV_ID }}
+        run: |
+          echo "🔄 Disparando serviceInstanceRedeploy ($SVC / $ENV)..."
+          resp=$(curl -s -X POST https://backboard.railway.com/graphql/v2 \
+            -H "Authorization: Bearer $RAILWAY_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"query\":\"mutation { serviceInstanceRedeploy(serviceId: \\\"$SVC\\\", environmentId: \\\"$ENV\\\") }\"}")
+          echo "$resp"
+          echo "$resp" | grep -q '"serviceInstanceRedeploy":true' || { echo "❌ Mutation falhou"; exit 1; }
+
+      - name: Confirma redeploy manual (até 5 min)
+        if: steps.aguarda.outputs.ok == 'false'
+        env:
+          PROD_URL: ${{ vars.PROD_URL }}
+          MTIME_ANTES: ${{ steps.antes.outputs.mtime_antes }}
+        run: |
+          deadline=$(( $(date +%s) + 300 ))
+          while [ $(date +%s) -lt $deadline ]; do
+            mtime=$(curl -s --max-time 6 "$PROD_URL/__version?v=$(date +%s)" \
+              | python3 -c "import json,sys; print(json.load(sys.stdin).get('mtime',0))" 2>/dev/null || echo "0")
+            if [ "$mtime" != "$MTIME_ANTES" ] && [ "$mtime" != "0" ]; then
+              echo "✅ Redeploy manual OK (mtime $MTIME_ANTES → $mtime)"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "❌ Mesmo após redeploy manual, container não reiniciou."
+          exit 1
