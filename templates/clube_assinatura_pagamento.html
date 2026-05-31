@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block titulo %}Assinatura #{{ a.id }} — Clube Luqui{% endblock %}
+{% block conteudo %}
+<div style="max-width:780px;margin:30px auto;padding:0 16px">
+  <div style="background:#fff;padding:30px;border-radius:18px">
+    {% if a.status == 'ativa' %}
+      <div style="text-align:center">
+        <div style="font-size:60px">✅</div>
+        <h1 style="color:var(--verde);margin:14px 0">Assinatura ativa!</h1>
+        <p style="color:var(--mut);margin-bottom:6px">
+          {{ a.plano_nome }} — {{ rs(a.preco_mensal) }}/mês
+        </p>
+        <p style="color:var(--mut);margin-bottom:20px">
+          Sua 1ª Caixa Misteriosa sai em até 7 dias úteis 📦
+        </p>
+        <a href="/minha-conta" class="btn btn-amarelo">Ver minha conta</a>
+      </div>
+    {% elif a.status == 'cancelada' %}
+      <div style="text-align:center">
+        <div style="font-size:60px">❌</div>
+        <h1 style="color:var(--vermelho);margin:14px 0">Assinatura cancelada</h1>
+        <a href="/clube" class="btn btn-primario">Ver planos</a>
+      </div>
+    {% else %}
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;margin-bottom:24px">
+        <div>
+          <h1 style="font-size:24px">{{ a.plano_nome }}</h1>
+          <div style="color:var(--mut);font-size:13px">Clube Luqui — Assinatura #{{ a.id }}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:12px;color:var(--mut)">VALOR MENSAL</div>
+          <div style="color:var(--verde);font-weight:900;font-size:30px;line-height:1">{{ rs(a.preco_mensal) }}</div>
+        </div>
+      </div>
+
+      <div style="background:#FEF3C7;color:#92400E;padding:14px;border-radius:10px;margin-bottom:20px;font-size:13px;display:flex;align-items:center;gap:10px">
+        <span style="font-size:24px">⏳</span>
+        <span><b>Aguardando pagamento.</b> Esta página atualiza automaticamente quando confirmarmos.</span>
+      </div>
+
+      {% if a.forma_pagto == 'pix' %}
+        <h3 style="margin-bottom:14px">📱 Pague com PIX</h3>
+        <p style="font-size:13px;color:var(--mut);margin-bottom:14px">
+          1. Abra o app do seu banco · 2. Escolha PIX · 3. Escaneie o QR ou copie o código abaixo
+        </p>
+        <div style="text-align:center;background:#F8FAFC;padding:24px;border-radius:14px;margin-bottom:14px">
+          {% if a.asaas_pix_qr_image %}
+            <img src="data:image/png;base64,{{ a.asaas_pix_qr_image }}"
+                 alt="QR Code PIX" style="width:240px;height:240px;background:#fff;padding:10px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06)">
+            <p style="margin:14px 0 6px;font-size:13px;color:var(--mut)">ou copie o código:</p>
+          {% endif %}
+          {% if a.asaas_pix_qrcode %}
+            <textarea readonly onclick="this.select();document.execCommand('copy');toast('Código PIX copiado!')"
+              style="width:100%;max-width:500px;padding:12px;border:1px solid var(--linha);border-radius:8px;font-family:monospace;font-size:11px;height:80px;text-align:center;cursor:pointer">{{ a.asaas_pix_qrcode }}</textarea>
+            <p style="font-size:11px;color:var(--mut);margin-top:6px">(clique pra copiar)</p>
+          {% endif %}
+          {% if not a.asaas_pix_qr_image and not a.asaas_pix_qrcode and a.asaas_link %}
+            <a href="{{ a.asaas_link }}" target="_blank" class="btn btn-amarelo">Abrir pagamento PIX →</a>
+          {% endif %}
+        </div>
+      {% elif a.forma_pagto == 'boleto' %}
+        <h3 style="margin-bottom:6px">📄 Pague com Boleto</h3>
+        <p style="font-size:13px;color:var(--mut);margin-bottom:18px">
+          Vencimento em 3 dias úteis. A partir do 2º mês, geramos um novo boleto todo mês.
+        </p>
+        {% if a.asaas_boleto_barcode %}
+        <div style="background:#F8FAFC;padding:20px;border-radius:14px;margin-bottom:14px">
+          <label style="font-size:12px;color:var(--mut);font-weight:600;display:block;margin-bottom:6px">LINHA DIGITÁVEL</label>
+          <textarea readonly onclick="this.select();document.execCommand('copy');toast('Linha digitável copiada!')"
+                    style="width:100%;padding:14px;border:1px solid var(--linha);border-radius:10px;font-family:monospace;font-size:13px;height:60px;text-align:center;cursor:pointer;background:#fff">{{ a.asaas_boleto_barcode }}</textarea>
+          <p style="font-size:11px;color:var(--mut);margin-top:6px;text-align:center">(clique pra copiar)</p>
+        </div>
+        {% endif %}
+        {% if a.asaas_boleto_url %}
+          <a href="{{ a.asaas_boleto_url }}" target="_blank" class="btn btn-amarelo btn-block" style="padding:16px;font-size:15px">
+            📄 Abrir/Imprimir boleto em PDF
+          </a>
+        {% elif a.asaas_link %}
+          <a href="{{ a.asaas_link }}" target="_blank" class="btn btn-amarelo btn-block" style="padding:16px;font-size:15px">
+            Abrir página do boleto →
+          </a>
+        {% endif %}
+      {% elif a.forma_pagto == 'cartao' %}
+        <h3 style="margin-bottom:6px">💳 Pagamento no cartão</h3>
+        <p style="font-size:13px;color:var(--mut);margin-bottom:18px">
+          Estamos confirmando seu pagamento com o banco — pode levar alguns segundos.
+          A partir do 2º mês, a cobrança roda automaticamente no mesmo cartão.
+        </p>
+      {% endif %}
+
+      <div style="background:#F8FAFC;padding:18px;border-radius:10px;margin-top:20px">
+        <h4 style="font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Benefícios do plano</h4>
+        <ul style="list-style:none;padding:0;margin:0;font-size:13px;line-height:1.8">
+          {% for b in a.beneficios_json %}
+            <li><span style="color:var(--verde);font-weight:900">✓</span> {{ b }}</li>
+          {% endfor %}
+        </ul>
+        {% if a.endereco %}
+        <hr style="margin:14px 0;border:0;border-top:1px solid var(--linha)">
+        <h4 style="font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Endereço de envio</h4>
+        <div style="font-size:13px;line-height:1.6">
+          {{ a.endereco }}, {{ a.numero }}{% if a.complemento %} — {{ a.complemento }}{% endif %}<br>
+          {{ a.bairro }} · {{ a.cidade }}/{{ a.uf }} · CEP {{ a.cep }}
+        </div>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+<script>
+{% if a.status not in ('ativa', 'cancelada') %}
+setInterval(async ()=>{
+  try {
+    const r = await fetch('/api/clube/assinatura/{{ a.id }}/status');
+    const d = await r.json();
+    if(d.status === 'ativa'){ location.reload(); }
+  } catch(e){}
+}, 6000);
+{% endif %}
+</script>
+{% endblock %}

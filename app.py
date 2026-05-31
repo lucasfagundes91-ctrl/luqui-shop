@@ -371,6 +371,23 @@ def init_db():
             criado_em TIMESTAMPTZ DEFAULT NOW(),
             UNIQUE(cliente_id, produto_pdv_id)
         )""",
+        # Checkout do clube: snapshot da primeira cobrança + endereço de envio
+        "ALTER TABLE clube_assinaturas ADD COLUMN IF NOT EXISTS forma_pagto VARCHAR(10)",
+        "ALTER TABLE clube_assinaturas ADD COLUMN IF NOT EXISTS valor NUMERIC(12,2)",
+        "ALTER TABLE clube_assinaturas ADD COLUMN IF NOT EXISTS asaas_cobranca_id VARCHAR(60)",
+        "ALTER TABLE clube_assinaturas ADD COLUMN IF NOT EXISTS asaas_link TEXT",
+        "ALTER TABLE clube_assinaturas ADD COLUMN IF NOT EXISTS asaas_pix_qrcode TEXT",
+        "ALTER TABLE clube_assinaturas ADD COLUMN IF NOT EXISTS asaas_pix_qr_image TEXT",
+        "ALTER TABLE clube_assinaturas ADD COLUMN IF NOT EXISTS asaas_boleto_url TEXT",
+        "ALTER TABLE clube_assinaturas ADD COLUMN IF NOT EXISTS asaas_boleto_barcode VARCHAR(80)",
+        "ALTER TABLE clube_assinaturas ADD COLUMN IF NOT EXISTS pago_em TIMESTAMPTZ",
+        "ALTER TABLE clube_assinaturas ADD COLUMN IF NOT EXISTS cep VARCHAR(10)",
+        "ALTER TABLE clube_assinaturas ADD COLUMN IF NOT EXISTS endereco VARCHAR(200)",
+        "ALTER TABLE clube_assinaturas ADD COLUMN IF NOT EXISTS numero VARCHAR(20)",
+        "ALTER TABLE clube_assinaturas ADD COLUMN IF NOT EXISTS complemento VARCHAR(100)",
+        "ALTER TABLE clube_assinaturas ADD COLUMN IF NOT EXISTS bairro VARCHAR(100)",
+        "ALTER TABLE clube_assinaturas ADD COLUMN IF NOT EXISTS cidade VARCHAR(100)",
+        "ALTER TABLE clube_assinaturas ADD COLUMN IF NOT EXISTS uf VARCHAR(2)",
     ]
     for ddl in ddls:
         try:
@@ -2646,6 +2663,55 @@ def clube_view():
                            carrinho=carrinho_ler())
 
 
+@app.route('/clube/assinatura/<int:aid>/pagamento')
+def clube_pagamento(aid):
+    c = cliente_logado()
+    if not c:
+        return redirect(url_for('login', next=request.path))
+    ass = db_execute("""SELECT a.*, p.nome AS plano_nome, p.beneficios_json,
+                               p.preco_mensal
+                        FROM clube_assinaturas a
+                        JOIN clube_planos p ON p.id=a.plano_id
+                        WHERE a.id=%s AND a.cliente_id=%s""",
+                     [aid, c['id']], fetch='one')
+    if not ass:
+        abort(404)
+    # Lazy-fetch do QR PIX se faltou na criação (assinatura antiga)
+    if (ass.get('forma_pagto') == 'pix'
+        and ass.get('asaas_cobranca_id')
+        and not ass.get('asaas_pix_qr_image')):
+        try:
+            pix = asaas_buscar_pix_qr(ass['asaas_cobranca_id']) or {}
+            img = pix.get('encodedImage', '')
+            payload = pix.get('payload', '')
+            if img or payload:
+                db_execute("""UPDATE clube_assinaturas
+                              SET asaas_pix_qr_image=%s, asaas_pix_qrcode=%s
+                              WHERE id=%s""", [img, payload, aid])
+                ass['asaas_pix_qr_image'] = img
+                ass['asaas_pix_qrcode'] = payload
+        except Exception as e:
+            log.warning("lazy-fetch pix clube %s: %s", aid, e)
+    return render_template('clube_assinatura_pagamento.html',
+                           a=ass,
+                           categorias=listar_categorias(),
+                           cliente=c,
+                           carrinho=carrinho_ler())
+
+
+@app.route('/api/clube/assinatura/<int:aid>/status')
+def clube_assinatura_status(aid):
+    c = cliente_logado()
+    if not c:
+        return jsonify({'erro': 'login'}), 401
+    a = db_execute("""SELECT status FROM clube_assinaturas
+                      WHERE id=%s AND cliente_id=%s""",
+                   [aid, c['id']], fetch='one')
+    if not a:
+        return jsonify({'erro': 'não encontrada'}), 404
+    return jsonify({'status': a['status']})
+
+
 @app.route('/clube/assinar/<slug>')
 def clube_assinar(slug):
     plano = db_execute("SELECT * FROM clube_planos WHERE slug=%s AND ativo",
@@ -2676,11 +2742,12 @@ def clube_assinar_post():
     d = request.get_json() or {}
     slug = d.get('plano_slug')
     forma = d.get('forma_pagto') or 'pix'  # pix, boleto, cartao
+    if forma not in ('pix', 'boleto', 'cartao'):
+        return jsonify({'erro': 'Forma de pagamento inválida'}), 400
     plano = db_execute("SELECT * FROM clube_planos WHERE slug=%s AND ativo",
                        [slug], fetch='one')
     if not plano:
         return jsonify({'erro': 'Plano inválido'}), 404
-    # Já tem assinatura?
     ja = db_execute("""SELECT id FROM clube_assinaturas
                        WHERE cliente_id=%s AND status='ativa'""",
                     [c['id']], fetch='one')
@@ -2689,15 +2756,44 @@ def clube_assinar_post():
                                  'Cancele a atual antes de trocar.'}), 400
     if not c.get('cpf'):
         return jsonify({'erro': 'Preencha seu CPF antes de assinar'}), 400
-    # Cria assinatura local (aguardando)
+    # Validação de endereço de envio (obrigatório — clube manda brinquedo todo mês)
+    obrig = ['cep', 'endereco', 'numero', 'bairro', 'cidade', 'uf']
+    for k in obrig:
+        if not (d.get(k) or '').strip():
+            return jsonify({'erro': f'Campo {k} obrigatório'}), 400
+    cep = (d.get('cep') or '').strip()
+    endereco = (d.get('endereco') or '').strip()
+    numero = (d.get('numero') or '').strip()
+    complemento = (d.get('complemento') or '').strip() or None
+    bairro = (d.get('bairro') or '').strip()
+    cidade = (d.get('cidade') or '').strip()
+    uf = (d.get('uf') or '').strip().upper()
+    valor = float(plano['preco_mensal'])
+    # Atualiza endereço do cliente (auto-preenche próximo checkout)
+    try:
+        db_execute("""UPDATE clientes_site SET
+                        cep=%s, endereco=%s, numero=%s, complemento=%s,
+                        bairro=%s, cidade=%s, uf=%s
+                      WHERE id=%s""",
+                   [cep, endereco, numero, complemento,
+                    bairro, cidade, uf, c['id']])
+    except Exception as e:
+        log.warning("atualizar endereço cliente %s: %s", c['id'], e)
+    # Cria assinatura local
     nova = db_execute("""
         INSERT INTO clube_assinaturas
-            (cliente_id, plano_id, status, proximo_envio)
-        VALUES (%s,%s,'aguardando_pagto', CURRENT_DATE + INTERVAL '7 days')
+            (cliente_id, plano_id, status, proximo_envio,
+             forma_pagto, valor, cep, endereco, numero, complemento,
+             bairro, cidade, uf)
+        VALUES (%s,%s,'aguardando_pagto', CURRENT_DATE + INTERVAL '7 days',
+                %s,%s,%s,%s,%s,%s,%s,%s,%s)
         RETURNING id""",
-        [c['id'], plano['id']], fetch='one')
+        [c['id'], plano['id'], forma, valor,
+         cep, endereco, numero, complemento, bairro, cidade, uf],
+        fetch='one')
     aid = nova['id']
-    # Asaas: customer + subscription
+    descricao = f'Clube Luqui — {plano["nome"]}'
+    externa = f'clube-{aid}'
     customer_id = asaas_criar_customer(c['nome'], c['email'],
                                        c['cpf'], c.get('telefone'))
     if not customer_id:
@@ -2705,22 +2801,74 @@ def clube_assinar_post():
                    [aid])
         return jsonify({'erro': 'Falha ao criar cliente no gateway. '
                                  'Chama no WhatsApp pra ativar manualmente.'}), 502
-    billing = {'pix': 'PIX', 'boleto': 'BOLETO',
-               'cartao': 'CREDIT_CARD'}.get(forma, 'PIX')
-    sub = asaas_criar_assinatura(
-        customer_id, float(plano['preco_mensal']),
-        descricao=f'Clube Luqui — {plano["nome"]}',
-        billing_type=billing,
-        externa_ref=f'clube-{aid}',
-    )
+
+    # ── CARTÃO: checkout transparente (dados inline, primeira parcela já é cobrada)
+    if forma == 'cartao':
+        num = ''.join(ch for ch in (d.get('cc_numero') or '') if ch.isdigit())
+        mes = (d.get('cc_validade_mes') or '').strip().zfill(2)
+        ano = (d.get('cc_validade_ano') or '').strip()
+        if len(ano) == 2:
+            ano = '20' + ano
+        ccv = ''.join(ch for ch in (d.get('cc_ccv') or '') if ch.isdigit())
+        holder_nome = (d.get('cc_titular_nome') or '').strip().upper()[:80]
+        holder_cpf = ''.join(ch for ch in (d.get('cc_titular_cpf') or '')
+                             if ch.isdigit())
+        if not (12 <= len(num) <= 19):
+            return jsonify({'erro': 'Número do cartão inválido'}), 400
+        if not (3 <= len(ccv) <= 4):
+            return jsonify({'erro': 'CVV inválido'}), 400
+        try:
+            if not (1 <= int(mes) <= 12) or int(ano) < datetime.now().year:
+                raise ValueError
+        except ValueError:
+            return jsonify({'erro': 'Validade do cartão inválida'}), 400
+        if len(holder_nome) < 3:
+            return jsonify({'erro': 'Nome do titular obrigatório'}), 400
+        if len(holder_cpf) not in (11, 14):
+            return jsonify({'erro': 'CPF/CNPJ do titular obrigatório'}), 400
+        cc = {'holderName': holder_nome, 'number': num,
+              'expiryMonth': mes, 'expiryYear': ano, 'ccv': ccv}
+        holder = {
+            'name': holder_nome, 'email': c['email'], 'cpfCnpj': holder_cpf,
+            'postalCode': ''.join(ch for ch in cep if ch.isdigit()) or '00000000',
+            'addressNumber': (numero or 'S/N')[:10],
+            'phone': ''.join(ch for ch in (c.get('telefone') or '')
+                             if ch.isdigit())[:11] or '0000000000',
+        }
+        remote_ip = (request.headers.get('X-Forwarded-For')
+                     or request.remote_addr or '0.0.0.0').split(',')[0].strip()
+        code, resp = asaas_criar_assinatura_cartao(
+            customer_id, valor, descricao, externa, cc, holder, remote_ip)
+        if code not in (200, 201):
+            msg = 'Não foi possível processar o pagamento'
+            try:
+                errs = (resp or {}).get('errors') or []
+                if errs and errs[0].get('description'):
+                    msg = errs[0]['description']
+            except Exception:
+                pass
+            db_execute("UPDATE clube_assinaturas SET status='erro_asaas' WHERE id=%s",
+                       [aid])
+            return jsonify({'erro': msg}), 402
+        sub_id = resp.get('id')
+        db_execute("""UPDATE clube_assinaturas SET asaas_assinatura_id=%s,
+                                                    status='ativa', pago_em=NOW()
+                      WHERE id=%s""", [sub_id, aid])
+        return jsonify({'ok': True, 'assinatura_id': aid, 'status': 'pago',
+                        'pagamento_url': f'/clube/assinatura/{aid}/pagamento'})
+
+    # ── PIX / BOLETO: cria subscription e mostra QR/linha digitável da 1ª cobrança
+    billing = 'PIX' if forma == 'pix' else 'BOLETO'
+    sub = asaas_criar_assinatura(customer_id, valor, descricao,
+                                 billing_type=billing, externa_ref=externa)
     if not sub:
         db_execute("UPDATE clube_assinaturas SET status='erro_asaas' WHERE id=%s",
                    [aid])
         return jsonify({'erro': 'Falha ao criar assinatura no Asaas'}), 502
     sub_id = sub.get('id')
-    db_execute("""UPDATE clube_assinaturas SET asaas_assinatura_id=%s
-                  WHERE id=%s""", [sub_id, aid])
-    # Pega a primeira cobrança (já é gerada pelo Asaas)
+    cob_id, link = None, ''
+    pix_payload, pix_image = '', ''
+    boleto_url, boleto_barcode = None, None
     try:
         r = requests.get(f'{ASAAS_BASE}/subscriptions/{sub_id}/payments',
                          headers=_asaas_headers(), timeout=10)
@@ -2728,13 +2876,27 @@ def clube_assinar_post():
             payments = (r.json().get('data') or [])
             if payments:
                 first = payments[0]
-                url = first.get('invoiceUrl') or first.get('bankSlipUrl')
-                return jsonify({'ok': True, 'assinatura_id': aid,
-                                'pagamento_url': url})
+                cob_id = first.get('id')
+                link = first.get('invoiceUrl') or ''
+                if forma == 'pix':
+                    pix = asaas_buscar_pix_qr(cob_id) or {}
+                    pix_payload = pix.get('payload', '')
+                    pix_image = pix.get('encodedImage', '')
+                else:
+                    boleto_url = first.get('bankSlipUrl')
+                    info = asaas_buscar_boleto_info(cob_id) or {}
+                    boleto_barcode = info.get('identificationField') or ''
     except Exception as e:
         log.error("buscar payments da subscription: %s", e)
+    db_execute("""UPDATE clube_assinaturas
+                  SET asaas_assinatura_id=%s, asaas_cobranca_id=%s, asaas_link=%s,
+                      asaas_pix_qrcode=%s, asaas_pix_qr_image=%s,
+                      asaas_boleto_url=%s, asaas_boleto_barcode=%s
+                  WHERE id=%s""",
+               [sub_id, cob_id, link, pix_payload, pix_image,
+                boleto_url, boleto_barcode, aid])
     return jsonify({'ok': True, 'assinatura_id': aid,
-                    'pagamento_url': '/minha-conta'})
+                    'pagamento_url': f'/clube/assinatura/{aid}/pagamento'})
 
 
 @app.route('/api/clube/pausar', methods=['POST'])
@@ -4283,6 +4445,38 @@ def asaas_cancelar_assinatura(subscription_id):
         return False
 
 
+def asaas_criar_assinatura_cartao(customer_id, valor, descricao, externa_ref,
+                                  credit_card, holder_info, remote_ip):
+    """Assinatura CREDIT_CARD com cartão inline (checkout transparente).
+    Primeira parcela é cobrada na hora; Asaas tokeniza o cartão pras próximas.
+    Retorna (status_code, dict-resp)."""
+    if not ASAAS_API_KEY or not customer_id:
+        return 0, {'errors': [{'description': 'Gateway não configurado'}]}
+    proximo_venc = (datetime.now(SP_TZ).date() + timedelta(days=3)).isoformat()
+    body = {
+        'customer': customer_id,
+        'billingType': 'CREDIT_CARD',
+        'value': round(float(valor), 2),
+        'nextDueDate': proximo_venc,
+        'cycle': 'MONTHLY',
+        'description': descricao[:500],
+        'externalReference': externa_ref or '',
+        'creditCard': credit_card,
+        'creditCardHolderInfo': holder_info,
+        'remoteIp': remote_ip,
+    }
+    try:
+        r = requests.post(f'{ASAAS_BASE}/subscriptions',
+                          json=body, headers=_asaas_headers(), timeout=25)
+        try:
+            return r.status_code, r.json()
+        except Exception:
+            return r.status_code, {'errors': [{'description': r.text[:300]}]}
+    except Exception as e:
+        log.error("asaas assinatura cartao exc: %s", e)
+        return 0, {'errors': [{'description': str(e)}]}
+
+
 def asaas_criar_cobranca_cartao(customer_id, valor, descricao, parcelas,
                                 externa_ref, credit_card, holder_info, remote_ip):
     """Cobrança CREDIT_CARD com dados do cartão inline (checkout transparente).
@@ -4876,6 +5070,7 @@ def webhook_asaas():
         if event in ('PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'):
             db_execute("""UPDATE clube_assinaturas SET status='ativa',
                           ultimo_envio=NULL,
+                          pago_em=COALESCE(pago_em, NOW()),
                           proximo_envio=CURRENT_DATE + INTERVAL '7 days'
                           WHERE id=%s""", [aid])
             # Email
