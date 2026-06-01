@@ -4630,7 +4630,7 @@ def checkout_finalizar():
     # Calcula totais
     subtotal = sum(float(it['preco']) * float(it['qtd']) for it in itens)
     frete = float(d.get('frete_valor') or 0)
-    desconto_pix_pct = float(cfg('desconto_pix_pct', '10'))
+    desconto_pix_pct = float(cfg('desconto_pix_pct', '3'))
     desconto_boleto_pct = float(cfg('desconto_boleto_pct', '5'))
     desconto = 0.0
     if d['forma_pagto'] == 'pix':
