@@ -59,7 +59,7 @@
         {% else %}<span style="font-size:120px">📦</span>{% endif %}
       </div>
       {% set fotos = p.fotos or ([p.foto_url] if p.foto_url else []) %}
-      {% if fotos|length > 1 %}
+      {% if fotos|length > 1 or p.videos %}
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
         {% for u in fotos %}
         <button type="button" onclick="document.getElementById('pfoto-img').src='{{ u }}'"
@@ -67,26 +67,16 @@
           <img src="{{ u }}" style="width:100%;height:100%;object-fit:cover">
         </button>
         {% endfor %}
-      </div>
-      {% endif %}
-      {% if p.videos %}
-      <div style="margin-top:16px">
-        <div style="font-size:13px;color:var(--mut);font-weight:600;margin-bottom:6px">🎬 Vídeos do produto</div>
-        <div style="display:flex;flex-direction:column;gap:12px">
-          {% for v in p.videos %}
-          {% if v.fonte in ['upload', 'mp4'] %}
-          <video src="{{ v.embed_url }}" controls preload="metadata" playsinline
-                 style="width:100%;max-width:520px;border-radius:12px;background:#000"></video>
-          {% else %}
-          <div style="position:relative;width:100%;max-width:520px;aspect-ratio:9/16;border-radius:12px;overflow:hidden;background:#000">
-            <iframe src="{{ v.embed_url }}" frameborder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowfullscreen
-                    style="position:absolute;inset:0;width:100%;height:100%"></iframe>
-          </div>
-          {% endif %}
-          {% endfor %}
-        </div>
+        {% for v in p.videos or [] %}
+        <button type="button" onclick="abrirVideoLightbox({{ loop.index0 }})"
+                title="Ver vídeo"
+                style="width:64px;height:64px;border:2px solid #E2E8F0;border-radius:8px;padding:0;background:linear-gradient(135deg,#1f2937,#0f172a);cursor:pointer;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;color:#fff">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff" aria-hidden="true">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+          <span style="position:absolute;bottom:2px;right:3px;font-size:9px;background:rgba(0,0,0,.5);padding:1px 4px;border-radius:3px">Vídeo</span>
+        </button>
+        {% endfor %}
       </div>
       {% endif %}
     </div>
@@ -250,6 +240,48 @@
       </div>
     </div>
   </div>
+
+  {% if p.videos %}
+  <div id="video-lightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9999;align-items:center;justify-content:center;padding:20px"
+       onclick="if(event.target===this) fecharVideoLightbox()">
+    <button type="button" onclick="fecharVideoLightbox()" aria-label="Fechar"
+            style="position:absolute;top:16px;right:20px;background:rgba(255,255,255,.18);color:#fff;border:none;width:42px;height:42px;border-radius:50%;font-size:24px;cursor:pointer;line-height:1;z-index:2">×</button>
+    <div id="video-lightbox-box" style="width:100%;max-width:420px;aspect-ratio:9/16;background:#000;border-radius:14px;overflow:hidden;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.5)"></div>
+  </div>
+  <script>
+    window.PRODUTO_VIDEOS = {{ p.videos|tojson }};
+    function abrirVideoLightbox(idx){
+      const v = window.PRODUTO_VIDEOS[idx]; if(!v) return;
+      const box = document.getElementById('video-lightbox-box');
+      if(v.fonte === 'upload' || v.fonte === 'mp4'){
+        box.innerHTML = '<video src="'+v.embed_url+'" controls autoplay playsinline '
+          +'style="width:100%;height:100%;object-fit:contain;background:#000"></video>';
+      } else if(v.fonte === 'instagram'){
+        // Esconde header/footer do embed do IG via overflow + margens negativas,
+        // deixando só o vídeo aparecendo no recorte 9:16.
+        box.innerHTML = '<div style="position:absolute;inset:0;overflow:hidden">'
+          +'<iframe src="'+v.embed_url+'" frameborder="0" scrolling="no" allowfullscreen '
+          +'allow="autoplay; encrypted-media; picture-in-picture" '
+          +'style="position:absolute;left:50%;top:-58px;transform:translateX(-50%);'
+          +'width:100%;height:calc(100% + 320px);border:0"></iframe></div>';
+      } else {
+        box.innerHTML = '<iframe src="'+v.embed_url+'" frameborder="0" allowfullscreen '
+          +'allow="autoplay; encrypted-media; picture-in-picture" '
+          +'style="width:100%;height:100%;border:0"></iframe>';
+      }
+      document.getElementById('video-lightbox').style.display='flex';
+      document.body.style.overflow='hidden';
+    }
+    function fecharVideoLightbox(){
+      document.getElementById('video-lightbox-box').innerHTML='';
+      document.getElementById('video-lightbox').style.display='none';
+      document.body.style.overflow='';
+    }
+    document.addEventListener('keydown', function(e){
+      if(e.key==='Escape') fecharVideoLightbox();
+    });
+  </script>
+  {% endif %}
 
   {% if p.descricao_longa %}
     <div style="background:#fff;padding:30px;border-radius:18px;margin-top:20px">
