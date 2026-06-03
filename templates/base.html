@@ -342,23 +342,6 @@ gtag('config', '{{ GOOGLE_TAG_ID }}');
 </script>
 {% endif %}
 
-{% if META_PIXEL_ID %}
-<!-- Meta Pixel -->
-<script>
-!function(f,b,e,v,n,t,s)
-{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-n.queue=[];t=b.createElement(e);t.async=!0;
-t.src=v;s=b.getElementsByTagName(e)[0];
-s.parentNode.insertBefore(t,s)}(window, document,'script',
-'https://connect.facebook.net/en_US/fbevents.js');
-fbq('init', '{{ META_PIXEL_ID }}');
-fbq('track', 'PageView');
-</script>
-<noscript><img height="1" width="1" style="display:none"
-src="https://www.facebook.com/tr?id={{ META_PIXEL_ID }}&ev=PageView&noscript=1"/></noscript>
-{% endif %}
 </head>
 <body>
 
@@ -1049,6 +1032,14 @@ async function carrinhoAdd(produto_id, qtd=1){
     });
     const d=await r.json();
     if(d.erro){ toast(d.erro,'err'); return; }
+    if(typeof fbq !== 'undefined'){
+      fbq('track','AddToCart',{
+        content_ids:[String(produto_id)],
+        content_type:'product',
+        value: Number(d.item_subtotal || 0),
+        currency:'BRL'
+      });
+    }
     mostrarCarrinhoPopup();
     // Atualiza badge do carrinho no header sem recarregar
     const cartLabel = document.querySelector('.topo-ico a[href="/carrinho"] div div');
@@ -1065,6 +1056,14 @@ async function comprarAgora(produto_id, qtd=1){
     });
     const d=await r.json();
     if(d.erro){ toast(d.erro,'err'); return; }
+    if(typeof fbq !== 'undefined'){
+      fbq('track','AddToCart',{
+        content_ids:[String(produto_id)],
+        content_type:'product',
+        value: Number(d.item_subtotal || 0),
+        currency:'BRL'
+      });
+    }
     location.href='/checkout';
   }catch(e){ toast('Erro: '+e.message,'err'); }
 }

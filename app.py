@@ -2408,7 +2408,7 @@ def carrinho_add():
     carrinho_salvar(itens)
     sub, qtot = carrinho_total(itens)
     return jsonify({'ok': True, 'subtotal': sub, 'qtd_total': qtot,
-                    'itens': itens})
+                    'itens': itens, 'item_subtotal': preco * qtd})
 
 
 @app.route('/api/carrinho/remove', methods=['POST'])

@@ -349,8 +349,6 @@ async function aplicarCupom(){
   } catch(e){ console.error(e); }
 }
 
-if(typeof fbq !== 'undefined'){ fbq('track','InitiateCheckout',{value:SUBTOTAL,currency:'BRL'}); }
-
 // Banner primeira compra
 fetch('/api/checkout/cupom-primeira', {method:'POST'}).then(r=>r.json()).then(d=>{
   if(d.pode){ document.getElementById('banner-primeira').style.display='block'; }
