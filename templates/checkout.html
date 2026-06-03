@@ -254,7 +254,7 @@
           <label class="forma" style="border:2px solid var(--linha);padding:14px;border-radius:10px;cursor:pointer;text-align:center">
             <input type="radio" name="forma_pagto" value="boleto" onchange="aoTrocarForma()" style="display:none">
             <div style="font-size:24px">📄</div><b>Boleto</b>
-            <div style="font-size:11px;color:var(--mut)">3 dias úteis</div>
+            <div style="font-size:11px;color:var(--verde);font-weight:700">-{{ desconto_boleto_pct|int }}% off</div>
           </label>
         </div>
         <div id="parcelas-bloco" style="margin-top:14px;display:none">
@@ -508,7 +508,7 @@ function atualizarFormaResumo(){
   const meta = {
     pix:    {icone:'📱', label:'PIX',    desc:'-'+DESC_PIX+'% off',     cor:'var(--verde)'},
     cartao: {icone:'💳', label:'Cartão', desc:'até '+PARC_MAX+'x',       cor:'var(--mut)'},
-    boleto: {icone:'📄', label:'Boleto', desc:'-'+DESC_BOLETO+'% · 3 dias úteis', cor:'var(--verde)'}
+    boleto: {icone:'📄', label:'Boleto', desc:'-'+DESC_BOLETO+'% off · vence em 3 dias úteis', cor:'var(--verde)'}
   }[checked.value];
   if(!meta) return;
   document.getElementById('forma-resumo-icone').textContent = meta.icone;
