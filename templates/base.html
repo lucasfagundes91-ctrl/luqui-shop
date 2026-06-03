@@ -1024,6 +1024,23 @@ function mostrarCarrinhoPopup(){
   // Auto-fechar em 8s se ainda estiver visível
   setTimeout(()=>{ const e = document.getElementById('luq-cart-popup'); if(e) e.remove(); }, 8000);
 }
+// Avisa cliente quando produto voltar ao estoque — usado nos cards
+// de listagem e na lista de aniversário pública. Pergunta email+whats
+// via prompt e cadastra em avise_me. O cron /cron/avise-me dispara
+// o aviso quando o estoque sobe.
+async function avisarVoltaCard(pid){
+  const email = prompt('Pra te avisar quando o brinquedo voltar, qual seu e-mail?');
+  if(!email || !email.includes('@')){ if(email) toast('E-mail inválido','err'); return; }
+  const tel = prompt('WhatsApp (opcional, com DDD):') || '';
+  try {
+    const r = await fetch('/api/avise-me', {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({produto_id: pid, email, telefone: tel})});
+    const d = await r.json();
+    if(d.erro){ toast(d.erro,'err'); return; }
+    toast('🔔 Pronto! A gente te avisa assim que voltar.');
+  } catch(e){ toast('Erro: '+e.message,'err'); }
+}
 async function carrinhoAdd(produto_id, qtd=1){
   try{
     const r=await fetch('/api/carrinho/add',{
