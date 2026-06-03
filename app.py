@@ -3330,6 +3330,7 @@ def _lista_carregar_itens(lista_id):
             'preco_venda': float(p.get('preco_venda') or 0),
             'preco_promo': p.get('preco_promo'),
             'foto_url': p.get('foto_url'),
+            'estoque_atual': float(p.get('estoque_atual') or 0),
         })
     return itens
 
@@ -3413,6 +3414,14 @@ def lista_add_item(lid):
         pid = 0
     if not pid:
         return jsonify({'erro': 'produto_pdv_id obrigatório'}), 400
+    # Não deixa cadastrar produto sem estoque na lista — não faz sentido
+    # começar lista de aniversário com item zerado.
+    prod = buscar_produto(pid) or {}
+    if not prod:
+        return jsonify({'erro': 'Produto não encontrado'}), 404
+    if float(prod.get('estoque_atual') or 0) <= 0:
+        return jsonify({'erro': 'Produto indisponível no momento — '
+                                'só dá pra adicionar à lista quando voltar ao estoque'}), 400
     db_execute("""INSERT INTO lista_aniversario_itens
                   (lista_id, produto_pdv_id, qtd)
                   VALUES (%s,%s,1)
@@ -3826,6 +3835,9 @@ def lista_presentear(slug, item_id):
         p = {}
     if not p.get('id'):
         return jsonify({'erro': 'Produto indisponível'}), 404
+    if float(p.get('estoque_atual') or 0) <= 0:
+        return jsonify({'erro': 'Esse presente está indisponível no momento — '
+                                'use o botão "Me avise quando voltar"'}), 400
     # Adiciona no carrinho com flag lista_item_id pra marcar como comprado depois
     itens = carrinho_ler()
     # Remove o mesmo produto se ja estiver — sobrescreve com a flag de lista

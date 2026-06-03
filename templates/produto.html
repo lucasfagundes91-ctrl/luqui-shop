@@ -148,10 +148,12 @@
         </button>
       </div>
       {% endif %}
+      {% if em_estoque %}
       <button class="btn-mini-lista" style="margin-top:8px;width:100%;padding:10px;background:transparent;color:var(--azul);border:1px dashed var(--azul);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer"
               onclick="addNaLista({{ p.id }}, this)">
         🎁 Adicionar à lista de aniversário
       </button>
+      {% endif %}
 
       <script>
       async function calcFrete(){
