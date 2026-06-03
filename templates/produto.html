@@ -69,6 +69,26 @@
         {% endfor %}
       </div>
       {% endif %}
+      {% if p.videos %}
+      <div style="margin-top:16px">
+        <div style="font-size:13px;color:var(--mut);font-weight:600;margin-bottom:6px">🎬 Vídeos do produto</div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          {% for v in p.videos %}
+          {% if v.fonte in ['upload', 'mp4'] %}
+          <video src="{{ v.embed_url }}" controls preload="metadata" playsinline
+                 style="width:100%;max-width:520px;border-radius:12px;background:#000"></video>
+          {% else %}
+          <div style="position:relative;width:100%;max-width:520px;aspect-ratio:9/16;border-radius:12px;overflow:hidden;background:#000">
+            <iframe src="{{ v.embed_url }}" frameborder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowfullscreen
+                    style="position:absolute;inset:0;width:100%;height:100%"></iframe>
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
     </div>
     <div>
       <h1 style="font-size:24px;line-height:1.3;margin-bottom:14px">{{ p.descricao }}</h1>
