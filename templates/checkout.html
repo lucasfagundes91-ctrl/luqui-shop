@@ -508,7 +508,7 @@ function atualizarFormaResumo(){
   const meta = {
     pix:    {icone:'📱', label:'PIX',    desc:'-'+DESC_PIX+'% off',     cor:'var(--verde)'},
     cartao: {icone:'💳', label:'Cartão', desc:'até '+PARC_MAX+'x',       cor:'var(--mut)'},
-    boleto: {icone:'📄', label:'Boleto', desc:'-'+DESC_BOLETO+'% off · vence em 3 dias úteis', cor:'var(--verde)'}
+    boleto: {icone:'📄', label:'Boleto', desc:'-'+DESC_BOLETO+'% off', cor:'var(--verde)'}
   }[checked.value];
   if(!meta) return;
   document.getElementById('forma-resumo-icone').textContent = meta.icone;

@@ -518,7 +518,7 @@ def init_db():
             'frete_gratis_cidades': '',
             'frete_gratis_uf': '',
             'desconto_pix_pct': '3',
-            'desconto_boleto_pct': '5',
+            'desconto_boleto_pct': '3',
             'parcelamento_max': '12',
             'parcelas_sem_juros_max': '1',  # so 1x sem juros; 2x+ ja tem juros
             'parcela_minima': '50',  # legado (nao usado mais no calculo)
@@ -563,6 +563,10 @@ def init_db():
         # Migração one-time 2026-05-28: PIX baixou de 10% pra 3%
         db_execute("UPDATE site_config SET valor='3' "
                    "WHERE chave='desconto_pix_pct' AND valor='10'")
+        # Migração one-time 2026-06-03: Boleto equiparado ao PIX (3% em vez de 5%)
+        # — boleto tem taxa do Asaas, 5% off ficava negativo
+        db_execute("UPDATE site_config SET valor='3' "
+                   "WHERE chave='desconto_boleto_pct' AND valor='5'")
         # Atualiza o subtitulo do banner "PAGUE NO PIX" se ainda estiver
         # no texto antigo de 10%
         db_execute(
@@ -1659,7 +1663,7 @@ Horário: segunda a sexta 9h-18h · sábado 9h-13h.</p>
 </ul>
 
 <h3>📄 Boleto bancário</h3>
-<p>Também tem <b>5% de desconto</b>:</p>
+<p>Também tem <b>3% de desconto</b>:</p>
 <ul>
   <li>Vencimento em 3 dias úteis</li>
   <li>Compensa em até 2 dias úteis após o pagamento</li>
@@ -2468,7 +2472,7 @@ def checkout_view():
                            cliente=cli,
                            carrinho=itens,
                            desconto_pix_pct=float(cfg('desconto_pix_pct', '3')),
-                           desconto_boleto_pct=float(cfg('desconto_boleto_pct', '5')),
+                           desconto_boleto_pct=float(cfg('desconto_boleto_pct', '3')),
                            parcelamento_max=int(cfg('parcelamento_max', '12')),
                            parcelas_sem_juros_max=int(cfg('parcelas_sem_juros_max', '1')),
                            parcela_minima=float(cfg('parcela_minima', '50')),
@@ -4631,7 +4635,7 @@ def checkout_finalizar():
     subtotal = sum(float(it['preco']) * float(it['qtd']) for it in itens)
     frete = float(d.get('frete_valor') or 0)
     desconto_pix_pct = float(cfg('desconto_pix_pct', '3'))
-    desconto_boleto_pct = float(cfg('desconto_boleto_pct', '5'))
+    desconto_boleto_pct = float(cfg('desconto_boleto_pct', '3'))
     desconto = 0.0
     if d['forma_pagto'] == 'pix':
         desconto = round(subtotal * desconto_pix_pct / 100, 2)
