@@ -105,11 +105,17 @@
   </div>
 
   <form id="form-checkout" class="checkout-grid">
-    <!-- ─── COLUNA 1: ENDEREÇO + FRETE ─── -->
+    <!-- ─── COLUNA 1: FRETE + DADOS PESSOAIS + ENDEREÇO ─── -->
     <div>
-      <!-- ENDEREÇO -->
+      <!-- FRETE (vem primeiro — define se precisa endereço ou não) -->
+      <div id="bloco-frete" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px">
+        <h3 style="margin-bottom:16px">🚚 Entrega ou retirada</h3>
+        <div id="opcoes-frete"><div class="sub" style="font-size:13px;padding:8px 0">Carregando opções...</div></div>
+      </div>
+
+      <!-- DADOS PESSOAIS (sempre visível — vale pra retirada e entrega) -->
       <div style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px">
-        <h3 style="margin-bottom:16px">📍 Endereço de entrega</h3>
+        <h3 style="margin-bottom:16px">👤 Seus dados</h3>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <input name="nome" placeholder="Nome completo *" required
                  value="{{ (cliente.nome if cliente else '') or '' }}"
@@ -124,6 +130,13 @@
                  value="{{ (cliente.cpf if cliente else '') or '' }}"
                  onblur="aoTabularCpf(this.value)"
                  style="padding:12px;border:1px solid var(--linha);border-radius:8px">
+        </div>
+      </div>
+
+      <!-- ENDEREÇO (visivel só se NÃO for retirar na loja — controlado por aoTrocarFrete) -->
+      <div id="bloco-endereco" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px">
+        <h3 style="margin-bottom:16px">📍 Endereço de entrega</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <input name="cep" id="cep" placeholder="CEP *" required
                  value="{{ (cliente.cep if cliente else '') or '' }}"
                  onblur="buscarCep(this.value)"
@@ -147,12 +160,6 @@
                  value="{{ (cliente.uf if cliente else '') or '' }}"
                  style="padding:12px;border:1px solid var(--linha);border-radius:8px;background:#F8FAFC">
         </div>
-      </div>
-
-      <!-- FRETE -->
-      <div id="bloco-frete" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px">
-        <h3 style="margin-bottom:16px">🚚 Entrega ou retirada</h3>
-        <div id="opcoes-frete"><div class="sub" style="font-size:13px;padding:8px 0">Carregando opções...</div></div>
       </div>
     </div>
 
@@ -476,8 +483,10 @@ function aoTrocarFrete(){
     if(sel) sel.required = isLocal;
     const blocoRet = document.getElementById('bloco-retirada');
     if(blocoRet) blocoRet.style.display = isRetira ? 'block' : 'none';
-    // Se retirar na loja, endereço vira opcional (cliente não precisa
-    // informar pra retirar pessoalmente)
+    // Se retirar na loja, esconde bloco de endereço inteiro (cliente
+    // nao precisa informar endereço pra retirar pessoalmente)
+    const blocoEnd = document.getElementById('bloco-endereco');
+    if(blocoEnd) blocoEnd.style.display = isRetira ? 'none' : 'block';
     ['cep','endereco','numero','bairro','cidade','uf'].forEach(name => {
       const el = document.querySelector('input[name="'+name+'"]');
       if(el) el.required = !isRetira;
