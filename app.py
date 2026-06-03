@@ -2395,9 +2395,16 @@ def carrinho_add():
     prod = buscar_produto(pid)
     if not prod:
         return jsonify({'erro': 'Produto não encontrado'}), 404
+    estoque = float(prod.get('estoque_atual') or 0)
+    if estoque <= 0:
+        return jsonify({'erro': 'Produto indisponível no momento'}), 400
     preco = float(prod.get('preco_promo') or prod.get('preco_venda') or 0)
     itens = carrinho_ler()
     achei = next((i for i in itens if i['produto_id'] == pid), None)
+    # Não deixa qtd no carrinho ultrapassar o estoque disponível
+    qtd_atual = achei['qtd'] if achei else 0
+    if qtd_atual + qtd > estoque:
+        return jsonify({'erro': f'Estoque insuficiente — disponível: {int(estoque)} un.'}), 400
     if achei:
         achei['qtd'] += qtd
     else:

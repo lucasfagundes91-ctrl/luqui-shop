@@ -113,6 +113,8 @@
         </details>
       {% endif %}
 
+      {% set em_estoque = p.estoque_atual and p.estoque_atual|float > 0 %}
+      {% if em_estoque %}
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
         <label style="color:var(--mut);font-size:13px;font-weight:600">Quantidade:</label>
         <input id="qtd" type="number" value="1" min="1" max="20"
@@ -134,6 +136,18 @@
           <span id="fav-icon">{{ '❤️' if p.id in favs else '🤍' }}</span>
         </button>
       </div>
+      {% else %}
+      <div class="pdp-acoes">
+        <button disabled style="padding:16px;font-size:15px;background:#e2e8f0;color:#94a3b8;border:0;border-radius:10px;font-weight:700;cursor:not-allowed;flex:1">
+          😔 Indisponível no momento
+        </button>
+        <button id="btn-fav" class="btn-fav" onclick="toggleFavorito({{ p.id }})" title="Favoritar"
+                style="background:#fff;border:2px solid var(--linha);padding:0 16px;border-radius:10px;font-size:24px;cursor:pointer">
+          {% set favs = wishlist_ids() %}
+          <span id="fav-icon">{{ '❤️' if p.id in favs else '🤍' }}</span>
+        </button>
+      </div>
+      {% endif %}
       <button class="btn-mini-lista" style="margin-top:8px;width:100%;padding:10px;background:transparent;color:var(--azul);border:1px dashed var(--azul);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer"
               onclick="addNaLista({{ p.id }}, this)">
         🎁 Adicionar à lista de aniversário
