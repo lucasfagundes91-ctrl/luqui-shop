@@ -2062,6 +2062,79 @@ a escolherem com confiança!</p>
     return jsonify({'ok': True, 'enviados': enviados})
 
 
+@app.route('/cron/avise-me')
+def cron_avise_me():
+    """Roda periódico (~30min): pra cada produto com cadastro pendente em
+    avise_me, checa o estoque no PDV. Se voltou (estoque > 0), dispara
+    email (Resend) + WhatsApp (Z-API) pra todos cadastrados naquele
+    produto e marca notificado_em=NOW()."""
+    if request.args.get('token') != os.environ.get('CRON_TOKEN', 'troque'):
+        return 'unauthorized', 401
+    # Pega produto_ids únicos com cadastro pendente
+    pendentes_prods = db_execute("""
+        SELECT DISTINCT produto_pdv_id FROM avise_me
+         WHERE notificado_em IS NULL
+         LIMIT 100""", fetch='all') or []
+    if not pendentes_prods:
+        return jsonify({'ok': True, 'verificados': 0, 'disparados': 0})
+
+    disparados, verificados = 0, 0
+    for pp in pendentes_prods:
+        pid = pp['produto_pdv_id']
+        verificados += 1
+        try:
+            prod = buscar_produto(pid) or {}
+        except Exception as e:
+            log.warning("avise-me prod %s: %s", pid, e)
+            continue
+        if float(prod.get('estoque_atual') or 0) <= 0:
+            continue  # Ainda sem estoque, aguarda próxima rodada
+
+        # Voltou! Dispara pra todos cadastrados nesse produto
+        cadastros = db_execute("""
+            SELECT id, email, telefone FROM avise_me
+             WHERE produto_pdv_id=%s AND notificado_em IS NULL""",
+            [pid], fetch='all') or []
+        nome = prod.get('descricao') or f'Produto #{pid}'
+        url = f"https://www.luquibrinquedos.com.br/produto/{pid}"
+        preco = float(prod.get('preco_promo') or prod.get('preco_venda') or 0)
+        for c in cadastros:
+            try:
+                html = f"""<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
+<h2 style="color:#1652C7">🎉 Boa notícia!</h2>
+<p>Olá! O brinquedo que você pediu pra avisar voltou ao estoque na Luqui Brinquedos:</p>
+<div style="background:#F1F5F9;padding:16px;border-radius:10px;margin:14px 0">
+  <div style="font-weight:700;font-size:15px">{nome}</div>
+  <div style="color:#16a34a;font-weight:800;font-size:22px;margin-top:6px">R$ {preco:.2f}</div>
+</div>
+<p>Corre que pode acabar de novo!</p>
+<p style="margin:18px 0">
+  <a href="{url}" style="background:#FFC700;color:#1652C7;padding:12px 22px;border-radius:8px;
+       font-weight:900;text-decoration:none;display:inline-block">
+    🛒 Ver produto agora
+  </a>
+</p>
+<p style="font-size:12px;color:#64748b">Você recebeu este email porque pediu pra ser avisada quando o produto voltasse ao estoque.</p>
+</div>"""
+                if c.get('email'):
+                    enviar_email(c['email'], f'🎉 Voltou! {nome[:50]}', html)
+                if c.get('telefone'):
+                    enviar_whatsapp(c['telefone'],
+                        f"🎉 *Boa notícia!*\n\n"
+                        f"O brinquedo que você pediu pra avisar voltou ao estoque na Luqui Brinquedos:\n\n"
+                        f"*{nome}*\nR$ {preco:.2f}\n\n"
+                        f"Corre que pode acabar de novo!\n{url}")
+                db_execute("UPDATE avise_me SET notificado_em=NOW() WHERE id=%s",
+                           [c['id']])
+                disparados += 1
+            except Exception as e:
+                log.error("avise-me dispatch %s/%s: %s", pid, c['id'], e)
+    log.info("avise-me cron: %d produtos verificados, %d avisos disparados",
+             verificados, disparados)
+    return jsonify({'ok': True, 'verificados': verificados,
+                    'disparados': disparados})
+
+
 # LUQUIZINHA_SYSTEM antigo + rota /api/luquizinha removidos.
 # Substituidos pelo chatbot completo com tools (buscar_produtos, registrar_lead)
 # em /api/luquizinha/chat. Ver mais abaixo neste mesmo arquivo.
