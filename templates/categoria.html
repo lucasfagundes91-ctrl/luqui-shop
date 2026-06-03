@@ -151,6 +151,7 @@
           {% else %}
             <div class="preco">{{ rs(p.preco_venda) }}</div>
           {% endif %}
+          {% if (p.estoque_atual or 0) > 0 %}
           <div class="acoes">
             <button class="btn-mini-add" onclick="carrinhoAdd({{ p.id }})">+ Carrinho</button>
             <button class="btn-mini-buy" onclick="comprarAgora({{ p.id }})">Comprar</button>
@@ -158,6 +159,11 @@
           <button class="btn-mini-lista" onclick="addNaLista({{ p.id }}, this)">
             🎁 Lista de aniversário
           </button>
+          {% else %}
+          <button class="btn-mini-add" disabled style="background:#e2e8f0;color:#64748b;cursor:not-allowed;width:100%;margin-top:6px">
+            😔 Indisponível
+          </button>
+          {% endif %}
         </div>
       {% else %}
         <div style="grid-column:1/-1;padding:60px;text-align:center;color:var(--mut)">

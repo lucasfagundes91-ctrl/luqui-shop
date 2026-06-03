@@ -20,10 +20,16 @@
         <div class="desc">{{ p.descricao }}</div>
       </a>
       <div class="preco">{{ rs(p.preco_promo or p.preco_venda) }}</div>
+      {% if (p.estoque_atual or 0) > 0 %}
       <div class="acoes">
         <button class="btn-mini-add" onclick="carrinhoAdd({{ p.id }})">+ Carrinho</button>
         <button class="btn-mini-buy" onclick="comprarAgora({{ p.id }})">Comprar</button>
       </div>
+      {% else %}
+      <button class="btn-mini-add" disabled style="background:#e2e8f0;color:#64748b;cursor:not-allowed;width:100%;margin-top:6px">
+        😔 Indisponível
+      </button>
+      {% endif %}
     </div>
   {% endfor %}
 </section>

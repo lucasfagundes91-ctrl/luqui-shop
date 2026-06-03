@@ -24,10 +24,16 @@
     <div class="preco">{{ rs(p.preco_promo) }}</div>
     {% set economia = (p.preco_venda - p.preco_promo) %}
     <div style="font-size:11px;color:var(--verde);font-weight:700">Você economiza {{ rs(economia) }}</div>
+    {% if (p.estoque_atual or 0) > 0 %}
     <div class="acoes">
       <button class="btn-mini-add" onclick="carrinhoAdd({{ p.produto_id }})">+ Carrinho</button>
       <button class="btn-mini-buy" onclick="comprarAgora({{ p.produto_id }})">Comprar</button>
     </div>
+    {% else %}
+    <button class="btn-mini-add" disabled style="background:#e2e8f0;color:#64748b;cursor:not-allowed;width:100%;margin-top:6px">
+      😔 Indisponível
+    </button>
+    {% endif %}
   </div>
   {% endfor %}
 </section>
