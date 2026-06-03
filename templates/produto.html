@@ -321,4 +321,16 @@ async function enviarAvaliacao(){
 }
 </script>
 
+<script>
+if(typeof fbq !== 'undefined'){
+  fbq('track','ViewContent',{
+    content_ids:['{{ p.id }}'],
+    content_name:{{ p.descricao|tojson }},
+    content_type:'product',
+    value:{{ (p.preco_promo or p.preco_venda)|float }},
+    currency:'BRL'
+  });
+}
+</script>
+
 {% endblock %}

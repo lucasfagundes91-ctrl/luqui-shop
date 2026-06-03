@@ -665,4 +665,16 @@ function prePreencherDadosPdv(dStr){
 }
 </script>
 
+<script>
+if(typeof fbq !== 'undefined'){
+  fbq('track','InitiateCheckout',{
+    content_ids:[{% for it in itens %}'{{ it.produto_id }}'{% if not loop.last %},{% endif %}{% endfor %}],
+    contents:[{% for it in itens %}{id:'{{ it.produto_id }}',quantity:{{ it.qtd }}}{% if not loop.last %},{% endif %}{% endfor %}],
+    num_items:{{ itens|length }},
+    value:{{ subtotal|float }},
+    currency:'BRL'
+  });
+}
+</script>
+
 {% endblock %}
