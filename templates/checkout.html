@@ -2,7 +2,64 @@
 {% block titulo %}Finalizar compra — Luqui Brinquedos{% endblock %}
 {% block conteudo %}
 
-<div style="max-width:1100px;margin:30px auto;padding:0 16px">
+<style>
+.checkout-grid {
+  display: grid;
+  grid-template-columns: 1.3fr 1.1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+.checkout-grid > div { min-width: 0; }
+@media (max-width: 1024px) {
+  .checkout-grid { grid-template-columns: 1fr; gap: 16px; }
+  .checkout-resumo { position: static !important; top: auto !important; }
+}
+.forma-resumo {
+  background: #FFF8E1;
+  border: 1.5px dashed #FBBF24;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin: 14px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.forma-resumo .info-label {
+  font-size: 10px;
+  color: var(--mut);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  font-weight: 700;
+  display: block;
+  margin-bottom: 2px;
+}
+.forma-resumo .info-value {
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.forma-resumo .info-desc {
+  font-size: 11px;
+  font-weight: 700;
+}
+.forma-resumo .trocar {
+  color: var(--azul);
+  font-weight: 700;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+  white-space: nowrap;
+  background: none;
+  border: 0;
+  padding: 4px 6px;
+}
+</style>
+
+<div style="max-width:1280px;margin:30px auto;padding:0 16px">
   <h1 style="margin-bottom:20px">Finalizar compra</h1>
 
   {% if not cliente %}
@@ -47,7 +104,8 @@
     pra ganhar <b>10% OFF</b> em compras a partir de R$ 50.
   </div>
 
-  <form id="form-checkout" style="display:grid;grid-template-columns:1.4fr 1fr;gap:24px">
+  <form id="form-checkout" class="checkout-grid">
+    <!-- ─── COLUNA 1: ENDEREÇO + FRETE ─── -->
     <div>
       <!-- ENDEREÇO -->
       <div style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px">
@@ -96,7 +154,10 @@
         <h3 style="margin-bottom:16px">🚚 Entrega ou retirada</h3>
         <div id="opcoes-frete"><div class="sub" style="font-size:13px;padding:8px 0">Carregando opções...</div></div>
       </div>
+    </div>
 
+    <!-- ─── COLUNA 2: CLUBE + PAGAMENTO + PRESENTE ─── -->
+    <div>
       <!-- PONTOS DO CLUBE -->
       <div id="bloco-pontos" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px;display:{% if pontos_info and pontos_info.cliente_existe %}block{% else %}none{% endif %}">
         <h3 style="margin-bottom:8px">⭐ Clube Luqui</h3>
@@ -194,9 +255,9 @@
       </div>
     </div>
 
-    <!-- RESUMO -->
+    <!-- ─── COLUNA 3: RESUMO sticky ─── -->
     <div>
-      <div style="background:#fff;padding:24px;border-radius:14px;position:sticky;top:20px">
+      <div class="checkout-resumo" style="background:#fff;padding:24px;border-radius:14px;position:sticky;top:20px">
         <h3 style="margin-bottom:14px">Resumo</h3>
         {% for it in itens %}
         <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px">
@@ -236,7 +297,21 @@
           <span style="font-weight:700">Total</span>
           <span id="resumo-total" style="color:var(--verde);font-weight:900;font-size:28px">{{ rs(subtotal) }}</span>
         </div>
-        <button type="submit" class="btn btn-amarelo btn-block" style="margin-top:20px;padding:16px;font-size:15px">
+
+        <!-- Mostra a forma de pagamento escolhida (evita finalizar sem perceber) -->
+        <div class="forma-resumo" id="forma-resumo-bloco">
+          <div>
+            <span class="info-label">Forma de pagamento</span>
+            <div class="info-value">
+              <span id="forma-resumo-icone">📱</span>
+              <span id="forma-resumo-label">PIX</span>
+              <span id="forma-resumo-desc" class="info-desc" style="color:var(--verde)">-{{ desconto_pix_pct|int }}% off</span>
+            </div>
+          </div>
+          <button type="button" class="trocar" onclick="scrollParaPagamento()">trocar</button>
+        </div>
+
+        <button type="submit" class="btn btn-amarelo btn-block" style="margin-top:8px;padding:16px;font-size:15px">
           Pagar e finalizar →
         </button>
         <p style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">
@@ -288,6 +363,7 @@ document.querySelectorAll('.forma').forEach(l=>{
   });
 });
 document.querySelector('.forma').style.borderColor='var(--azul)';
+atualizarFormaResumo();
 
 // Tipo do embrulho (menino/menina/neutro): destaca o selecionado
 document.querySelectorAll('.emb-tipo').forEach(l=>{
@@ -415,7 +491,33 @@ function aoTrocarForma(){
   const f = document.querySelector('input[name="forma_pagto"]:checked').value;
   document.getElementById('parcelas-bloco').style.display = (f==='cartao'?'block':'none');
   if(f==='cartao') montarParcelas();
+  atualizarFormaResumo();
   recalcular();
+}
+function atualizarFormaResumo(){
+  const checked = document.querySelector('input[name="forma_pagto"]:checked');
+  if(!checked) return;
+  const meta = {
+    pix:    {icone:'📱', label:'PIX',    desc:'-'+DESC_PIX+'% off',     cor:'var(--verde)'},
+    cartao: {icone:'💳', label:'Cartão', desc:'até '+PARC_MAX+'x',       cor:'var(--mut)'},
+    boleto: {icone:'📄', label:'Boleto', desc:'-'+DESC_BOLETO+'% · 3 dias úteis', cor:'var(--verde)'}
+  }[checked.value];
+  if(!meta) return;
+  document.getElementById('forma-resumo-icone').textContent = meta.icone;
+  document.getElementById('forma-resumo-label').textContent = meta.label;
+  const desc = document.getElementById('forma-resumo-desc');
+  desc.textContent = meta.desc;
+  desc.style.color = meta.cor;
+}
+function scrollParaPagamento(){
+  const inp = document.querySelector('input[name="forma_pagto"]');
+  if(!inp) return;
+  const sec = inp.closest('label').parentElement.parentElement;
+  sec.scrollIntoView({behavior:'smooth', block:'center'});
+  // pisca a borda pra chamar atenção
+  sec.style.transition = 'box-shadow .3s';
+  sec.style.boxShadow = '0 0 0 3px #FBBF24';
+  setTimeout(()=>{ sec.style.boxShadow = 'none'; }, 1200);
 }
 function descontoFormaPct(f){
   if(f==='pix') return DESC_PIX;
