@@ -105,14 +105,8 @@
   </div>
 
   <form id="form-checkout" class="checkout-grid">
-    <!-- ─── COLUNA 1: FRETE + DADOS PESSOAIS + ENDEREÇO ─── -->
+    <!-- ─── COLUNA 1: DADOS PESSOAIS + CLUBE LUQUI ─── -->
     <div>
-      <!-- FRETE (vem primeiro — define se precisa endereço ou não) -->
-      <div id="bloco-frete" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px">
-        <h3 style="margin-bottom:16px">🚚 Entrega ou retirada</h3>
-        <div id="opcoes-frete"><div class="sub" style="font-size:13px;padding:8px 0">Carregando opções...</div></div>
-      </div>
-
       <!-- DADOS PESSOAIS (sempre visível — vale pra retirada e entrega) -->
       <div style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px">
         <h3 style="margin-bottom:16px">👤 Seus dados</h3>
@@ -133,38 +127,6 @@
         </div>
       </div>
 
-      <!-- ENDEREÇO (visivel só se NÃO for retirar na loja — controlado por aoTrocarFrete) -->
-      <div id="bloco-endereco" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px">
-        <h3 style="margin-bottom:16px">📍 Endereço de entrega</h3>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <input name="cep" id="cep" placeholder="CEP *" required
-                 value="{{ (cliente.cep if cliente else '') or '' }}"
-                 onblur="buscarCep(this.value)"
-                 style="padding:12px;border:1px solid var(--linha);border-radius:8px">
-          <input name="cidade" id="cidade" placeholder="Cidade *" required readonly
-                 value="{{ (cliente.cidade if cliente else '') or '' }}"
-                 style="padding:12px;border:1px solid var(--linha);border-radius:8px;background:#F8FAFC">
-          <input name="endereco" id="endereco" placeholder="Endereço *" required
-                 value="{{ (cliente.endereco if cliente else '') or '' }}"
-                 style="grid-column:1/-1;padding:12px;border:1px solid var(--linha);border-radius:8px">
-          <input name="numero" placeholder="Nº *" required
-                 value="{{ (cliente.numero if cliente else '') or '' }}"
-                 style="padding:12px;border:1px solid var(--linha);border-radius:8px">
-          <input name="bairro" id="bairro" placeholder="Bairro *" required
-                 value="{{ (cliente.bairro if cliente else '') or '' }}"
-                 style="padding:12px;border:1px solid var(--linha);border-radius:8px">
-          <input name="complemento" placeholder="Complemento"
-                 value="{{ (cliente.complemento if cliente else '') or '' }}"
-                 style="grid-column:1/-1;padding:12px;border:1px solid var(--linha);border-radius:8px">
-          <input name="uf" id="uf" placeholder="UF" required readonly maxlength="2"
-                 value="{{ (cliente.uf if cliente else '') or '' }}"
-                 style="padding:12px;border:1px solid var(--linha);border-radius:8px;background:#F8FAFC">
-        </div>
-      </div>
-    </div>
-
-    <!-- ─── COLUNA 2: CLUBE + PAGAMENTO + PRESENTE ─── -->
-    <div>
       <!-- PONTOS DO CLUBE -->
       <div id="bloco-pontos" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px;display:{% if pontos_info and pontos_info.cliente_existe %}block{% else %}none{% endif %}">
         <h3 style="margin-bottom:8px">⭐ Clube Luqui</h3>
@@ -197,36 +159,47 @@
           ℹ️ Pode usar pontos pra abater <b>até 50%</b> do valor do pedido (após outros descontos).
         </p>
       </div>
+    </div>
 
-      <!-- PAGAMENTO -->
-      <div style="background:#fff;padding:24px;border-radius:14px">
-        <h3 style="margin-bottom:16px">💳 Forma de pagamento</h3>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
-          <label class="forma" style="border:2px solid var(--linha);padding:14px;border-radius:10px;cursor:pointer;text-align:center">
-            <input type="radio" name="forma_pagto" value="pix" checked onchange="aoTrocarForma()" style="display:none">
-            <div style="font-size:24px">📱</div><b>PIX</b>
-            <div style="font-size:11px;color:var(--verde);font-weight:700">-{{ desconto_pix_pct|int }}% off</div>
-          </label>
-          <label class="forma" style="border:2px solid var(--linha);padding:14px;border-radius:10px;cursor:pointer;text-align:center">
-            <input type="radio" name="forma_pagto" value="cartao" onchange="aoTrocarForma()" style="display:none">
-            <div style="font-size:24px">💳</div><b>Cartão</b>
-            <div style="font-size:11px;color:var(--mut)">até {{ parcelamento_max }}x</div>
-          </label>
-          <label class="forma" style="border:2px solid var(--linha);padding:14px;border-radius:10px;cursor:pointer;text-align:center">
-            <input type="radio" name="forma_pagto" value="boleto" onchange="aoTrocarForma()" style="display:none">
-            <div style="font-size:24px">📄</div><b>Boleto</b>
-            <div style="font-size:11px;color:var(--mut)">3 dias úteis</div>
-          </label>
-        </div>
-        <div id="parcelas-bloco" style="margin-top:14px;display:none">
-          <label style="font-size:13px;color:var(--mut);font-weight:600">Parcelas</label>
-          <select name="parcelas" id="parcelas" style="width:100%;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-top:6px"></select>
-          <p id="parcela-info" style="font-size:11px;color:var(--mut);margin-top:6px"></p>
+    <!-- ─── COLUNA 2: FRETE + ENDEREÇO + PRESENTE ─── -->
+    <div>
+      <!-- FRETE -->
+      <div id="bloco-frete" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px">
+        <h3 style="margin-bottom:16px">🚚 Entrega ou retirada</h3>
+        <div id="opcoes-frete"><div class="sub" style="font-size:13px;padding:8px 0">Carregando opções...</div></div>
+      </div>
+
+      <!-- ENDEREÇO (visivel só se NÃO for retirar na loja — controlado por aoTrocarFrete) -->
+      <div id="bloco-endereco" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px">
+        <h3 style="margin-bottom:16px">📍 Endereço de entrega</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <input name="cep" id="cep" placeholder="CEP *" required
+                 value="{{ (cliente.cep if cliente else '') or '' }}"
+                 onblur="buscarCep(this.value)"
+                 style="padding:12px;border:1px solid var(--linha);border-radius:8px">
+          <input name="cidade" id="cidade" placeholder="Cidade *" required readonly
+                 value="{{ (cliente.cidade if cliente else '') or '' }}"
+                 style="padding:12px;border:1px solid var(--linha);border-radius:8px;background:#F8FAFC">
+          <input name="endereco" id="endereco" placeholder="Endereço *" required
+                 value="{{ (cliente.endereco if cliente else '') or '' }}"
+                 style="grid-column:1/-1;padding:12px;border:1px solid var(--linha);border-radius:8px">
+          <input name="numero" placeholder="Nº *" required
+                 value="{{ (cliente.numero if cliente else '') or '' }}"
+                 style="padding:12px;border:1px solid var(--linha);border-radius:8px">
+          <input name="bairro" id="bairro" placeholder="Bairro *" required
+                 value="{{ (cliente.bairro if cliente else '') or '' }}"
+                 style="padding:12px;border:1px solid var(--linha);border-radius:8px">
+          <input name="complemento" placeholder="Complemento"
+                 value="{{ (cliente.complemento if cliente else '') or '' }}"
+                 style="grid-column:1/-1;padding:12px;border:1px solid var(--linha);border-radius:8px">
+          <input name="uf" id="uf" placeholder="UF" required readonly maxlength="2"
+                 value="{{ (cliente.uf if cliente else '') or '' }}"
+                 style="padding:12px;border:1px solid var(--linha);border-radius:8px;background:#F8FAFC">
         </div>
       </div>
 
       <!-- PAPEL DE PRESENTE -->
-      <div style="background:#fff;padding:24px;border-radius:14px;margin-top:18px">
+      <div style="background:#fff;padding:24px;border-radius:14px">
         <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer">
           <input type="checkbox" id="embrulho-check" name="embrulho_presente"
                  onchange="document.getElementById('embrulho-msg').style.display=this.checked?'block':'none'"
@@ -262,8 +235,36 @@
       </div>
     </div>
 
-    <!-- ─── COLUNA 3: RESUMO sticky ─── -->
+    <!-- ─── COLUNA 3: PAGAMENTO + RESUMO sticky ─── -->
     <div>
+      <!-- PAGAMENTO (no topo da col 3, junto com resumo+botao) -->
+      <div style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px">
+        <h3 style="margin-bottom:16px">💳 Forma de pagamento</h3>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+          <label class="forma" style="border:2px solid var(--linha);padding:14px;border-radius:10px;cursor:pointer;text-align:center">
+            <input type="radio" name="forma_pagto" value="pix" checked onchange="aoTrocarForma()" style="display:none">
+            <div style="font-size:24px">📱</div><b>PIX</b>
+            <div style="font-size:11px;color:var(--verde);font-weight:700">-{{ desconto_pix_pct|int }}% off</div>
+          </label>
+          <label class="forma" style="border:2px solid var(--linha);padding:14px;border-radius:10px;cursor:pointer;text-align:center">
+            <input type="radio" name="forma_pagto" value="cartao" onchange="aoTrocarForma()" style="display:none">
+            <div style="font-size:24px">💳</div><b>Cartão</b>
+            <div style="font-size:11px;color:var(--mut)">até {{ parcelamento_max }}x</div>
+          </label>
+          <label class="forma" style="border:2px solid var(--linha);padding:14px;border-radius:10px;cursor:pointer;text-align:center">
+            <input type="radio" name="forma_pagto" value="boleto" onchange="aoTrocarForma()" style="display:none">
+            <div style="font-size:24px">📄</div><b>Boleto</b>
+            <div style="font-size:11px;color:var(--mut)">3 dias úteis</div>
+          </label>
+        </div>
+        <div id="parcelas-bloco" style="margin-top:14px;display:none">
+          <label style="font-size:13px;color:var(--mut);font-weight:600">Parcelas</label>
+          <select name="parcelas" id="parcelas" style="width:100%;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-top:6px"></select>
+          <p id="parcela-info" style="font-size:11px;color:var(--mut);margin-top:6px"></p>
+        </div>
+      </div>
+
+      <!-- RESUMO -->
       <div class="checkout-resumo" style="background:#fff;padding:24px;border-radius:14px;position:sticky;top:20px">
         <h3 style="margin-bottom:14px">Resumo</h3>
         {% for it in itens %}
