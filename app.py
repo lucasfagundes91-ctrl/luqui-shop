@@ -1970,13 +1970,14 @@ def cron_carrinho_abandonado():
          WHERE status='aguardando_pagto'
            AND criado_em < NOW() - INTERVAL '24 hours'
            AND criado_em > NOW() - INTERVAL '48 hours'
-           AND COALESCE(observacao,'') NOT LIKE '%[lembrete-enviado]%'
-        LIMIT 50""", fetch='all') or []
+           AND COALESCE(observacao,'') NOT LIKE %s
+        LIMIT 50""", ['%[lembrete-enviado]%'], fetch='all') or []
     enviados = 0
     for p in rows:
         try:
+            primeiro = ((p.get('nome') or '').strip().split() or ['amigo(a)'])[0]
             enviar_whatsapp(p['telefone'],
-                f"💛 Oi {p['nome'].split()[0]}! "
+                f"💛 Oi {primeiro}! "
                 f"Vi que você começou um pedido aqui na Luqui mas ainda não finalizou.\n\n"
                 f"Total: *{rs(p['total'])}*\n\n"
                 f"Tá tudo certinho? Quer finalizar?\n"
@@ -2036,14 +2037,15 @@ def cron_email_pos_compra():
            AND pago_em IS NOT NULL
            AND pago_em < NOW() - INTERVAL '7 days'
            AND pago_em > NOW() - INTERVAL '14 days'
-           AND COALESCE(observacao,'') NOT LIKE '%[avaliacao-enviada]%'
-        LIMIT 50""", fetch='all') or []
+           AND COALESCE(observacao,'') NOT LIKE %s
+        LIMIT 50""", ['%[avaliacao-enviada]%'], fetch='all') or []
     enviados = 0
     for p in candidatos:
         try:
+            primeiro = ((p.get('nome') or '').strip().split() or ['amigo(a)'])[0]
             enviar_email(p['email'],
                 f'Como foi seu pedido #{p["id"]}? 💛',
-                f"""<p>Oi {p['nome'].split()[0]}! Tudo bem?</p>
+                f"""<p>Oi {primeiro}! Tudo bem?</p>
 <p>Faz uma semana que seu pedido <b>#{p['id']}</b> foi confirmado.
 Esperamos que tudo tenha chegado certinho! 🧸</p>
 <p>Que tal contar pra gente o que você achou? Sua avaliação ajuda outras famílias
