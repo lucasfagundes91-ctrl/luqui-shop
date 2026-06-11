@@ -13,8 +13,9 @@
       <tr style="background:#F8FAFC;font-size:12px;color:#64748B;text-transform:uppercase">
         <th style="padding:12px;text-align:left">Cliente</th>
         <th style="padding:12px;text-align:left">Criança</th>
-        <th style="padding:12px;text-align:left">WhatsApp</th>
-        <th style="padding:12px;text-align:center">Msgs</th>
+        <th style="padding:12px;text-align:left">Procurando</th>
+        <th style="padding:12px;text-align:center" title="Mensagens do cliente">Msgs</th>
+        <th style="padding:12px;text-align:center" title="Vezes que a IA buscou produto">🔍</th>
         <th style="padding:12px;text-align:center">Lead</th>
         <th style="padding:12px;text-align:left">Última msg</th>
         <th style="padding:12px"></th>
@@ -27,9 +28,15 @@
         <td style="padding:12px;font-size:13px">
           {% if c.sexo_crianca %}{{ c.sexo_crianca }}{% endif %}
           {% if c.idade_crianca %} · {{ c.idade_crianca }}a{% endif %}
+          {% if not c.sexo_crianca and not c.idade_crianca %}<span style="color:#94A3B8">—</span>{% endif %}
         </td>
-        <td style="padding:12px;font-size:13px">{{ c.lead_telefone or '—' }}</td>
+        <td style="padding:12px;font-size:13px;color:#475569;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ c.primeira_msg or '' }}">
+          {{ (c.primeira_msg or '')[:60] }}{% if c.primeira_msg and c.primeira_msg|length > 60 %}…{% endif %}
+        </td>
         <td style="padding:12px;text-align:center"><b>{{ c.msgs_user or 0 }}</b></td>
+        <td style="padding:12px;text-align:center;font-size:12px">
+          {% if c.buscas_feitas %}{{ c.buscas_feitas }}{% else %}<span style="color:#94A3B8">—</span>{% endif %}
+        </td>
         <td style="padding:12px;text-align:center">
           {% if c.lead_marcado %}
             <span style="background:#DCFCE7;color:#15803D;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700">✓ LEAD</span>
@@ -45,7 +52,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="7" style="padding:40px;text-align:center;color:#94A3B8">Nenhuma conversa ainda.</td></tr>
+      <tr><td colspan="8" style="padding:40px;text-align:center;color:#94A3B8">Nenhuma conversa ainda.</td></tr>
       {% endfor %}
     </tbody>
   </table>

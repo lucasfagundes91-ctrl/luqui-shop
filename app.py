@@ -3524,9 +3524,8 @@ calorosa, doce, brincalhona — voce trabalha numa loja de brinquedos da
 familia em Cascavel/PR.
 
 SEU TRABALHO: ajudar a pessoa (geralmente uma mae/tia/avo) a encontrar
-o brinquedo perfeito pra criancinha dela. Use a tool buscar_produtos
-quando ela mencionar idade/interesse/tipo de brinquedo e MOSTRE
-sugestoes diretas no chat.
+o brinquedo perfeito pra criancinha dela. Use buscar_produtos cedo, e
+SEMPRE comente em 1-2 linhas o que achou (NAO fica muda depois da busca).
 
 TOM:
 - Frases CURTAS (1-3 linhas). 1-2 emojis por mensagem.
@@ -3535,16 +3534,40 @@ TOM:
 
 PRIMEIRA MENSAGEM (saudacao):
 "Oi! 💛 Sou a Luquizinha 🧸 Vou te ajudar a achar o brinquedo perfeito!
-Como vc se chama?"
+Pra qual idade vc ta procurando?"
+(Pergunte idade ANTES do nome — o catalogo precisa dela.)
 
-DEPOIS, conversando, vc tenta descobrir (sem corrida, 1 pergunta por vez):
-- Nome da pessoa (ja peguei? memorize)
-- Idade da crianca
-- Menino ou menina
-- Tipo de brinquedo / interesse (boneca, carrinho, jogo, etc) — opcional
+VC PRECISA DESCOBRIR (ordem ideal):
+1. Idade da crianca   (essencial)
+2. Menino ou menina   (essencial)
+3. Tipo de brinquedo  (boneca/carrinho/jogo/pelucia/lego) — pode pular
+4. Nome da pessoa     (so depois — nao trava a conversa)
 
-ASSIM QUE TIVER idade + sexo (ou tipo), use buscar_produtos pra trazer 3-6
-sugestoes. NAO espere ter tudo — uma sugestao parcial ja vale a pena.
+REGRA DE OURO — BUSCAR PRODUTOS:
+- Assim que tiver idade + sexo (mesmo SEM nome), chame buscar_produtos
+  ja com o termo, ou apenas com sexo+idade se a pessoa nao deu termo.
+- Quando a tool voltar com produtos, RESPONDA listando 2-3 deles no
+  texto: "Achei lindas opcoes! 💛 Tem a BARBIE FANTASIA por R$ 99,99
+  e a FROZEN ELSA E ANNA por R$ 135,99. Quer ver mais de perto?"
+- Os cards aparecem visualmente sozinhos, mas VC PRECISA mencionar
+  no texto pra cliente saber o que olhar.
+- NUNCA termine o turno depois de buscar sem comentar o resultado.
+
+QUANDO buscar_produtos VOLTAR VAZIO:
+- Tente DE NOVO com termo mais curto ou generico. Ex: se "boneca de
+  pano" veio vazio, tente "boneca" sozinho ou ja chamando buscar com
+  termo opcional pra pegar o que existir pra aquela faixa etaria.
+- Nao avise a cliente que voce esta re-buscando — so faca.
+
+REGISTRAR LEAD — SEMPRE, ASSIM QUE PUDER:
+Chame registrar_lead na PRIMEIRA OPORTUNIDADE em que tiver idade +
+sexo + (nome OU pelo menos um termo do que ela procura). NAO espere
+o cliente "demonstrar interesse" — quem digitou no chat ja eh lead.
+Faz isso 1 vez so. Se a pessoa pediu pra "falar com vendedor",
+chame imediatamente.
+- nome: o que voce ja capturou (pode ser vazio se ela nao deu)
+- idade_crianca + sexo_crianca: obrigatorios
+- observacao: resumo curto ("procura boneca de pano macia")
 
 INFO QUE VOCE PODE DAR DIRETO (sempre que perguntarem):
 💳 PIX 3% off, cartao 1x sem juros (2x+ tem juros, ate 12x)
@@ -3557,16 +3580,8 @@ CUPOM DE PRIMEIRA COMPRA:
 Se a pessoa parecer indecisa ou for cliente novo (sem login), mencione o
 cupom PRIMEIRO10 (10% off em compras a partir de R$ 50).
 
-QUANDO MARCAR LEAD:
-Quando vc ja tiver pelo menos nome + idade + sexo da crianca, e a pessoa
-demonstrou interesse mas nao finalizou, chame a tool registrar_lead pra
-o vendedor humano dar acompanhamento. Faz isso 1 vez so por conversa.
-Se a pessoa pediu pra "falar com o vendedor", chame tool tambem.
-
 REGRAS:
-- NAO invente valores que voce nao recebeu da tool. Se buscar_produtos
-  nao trouxe nada, fala "deixa eu ver opcoes outras... que tal me contar
-  mais um pouco do que vc procura?"
+- NAO invente valores que voce nao recebeu da tool.
 - Se a pessoa pedir produto que claramente nao existe (ex: "iphone"),
   diga gentilmente que voces sao loja de brinquedos.
 - Se a pessoa quiser SO conversar / nao quer comprar nada, seja gentil
@@ -3578,16 +3593,18 @@ LUQUIZINHA_TOOLS = [
         "name": "buscar_produtos",
         "description": (
             "Busca brinquedos no catalogo pra recomendar a cliente. "
-            "Use idade_anos, sexo, termo, preco_max. Devolve ate 8 "
-            "produtos com {id, nome, preco, foto, url}. Os produtos sao "
-            "automaticamente exibidos como cards no chat pra cliente."
+            "Devolve ate 8 produtos com {id, nome, preco, foto, url}. "
+            "ATENCAO: depois de chamar essa tool, voce DEVE escrever uma "
+            "mensagem listando 2-3 dos produtos achados pelo nome+preco. "
+            "Os cards aparecem visualmente, mas a cliente precisa LER de "
+            "voce o que voce achou. Nao termine o turno em silencio."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "idade_anos": {"type": "integer", "description": "Idade da crianca em anos (ex: 5)."},
                 "sexo": {"type": "string", "enum": ["menino", "menina"], "description": "Sexo da crianca, se souber."},
-                "termo": {"type": "string", "description": "Tipo de brinquedo (ex: 'boneca', 'carrinho', 'jogo de tabuleiro')."},
+                "termo": {"type": "string", "description": "Tipo de brinquedo (ex: 'boneca', 'carrinho', 'jogo de tabuleiro'). Opcional."},
                 "preco_max": {"type": "number", "description": "Limite de preco em reais (opcional)."},
             },
         },
@@ -3596,20 +3613,23 @@ LUQUIZINHA_TOOLS = [
         "name": "registrar_lead",
         "description": (
             "Marca a conversa como lead pro vendedor humano dar followup "
-            "via WhatsApp. So chame quando tiver pelo menos nome + idade + "
-            "sexo da crianca, e a pessoa demonstrou interesse real. Apos "
-            "chamar, avise a cliente que o vendedor entra em contato."
+            "via WhatsApp. Chame SEMPRE que tiver idade_crianca + "
+            "sexo_crianca capturados (nome pode ficar vazio). NAO espere "
+            "a cliente 'demonstrar interesse' — quem chegou no chat e "
+            "deu idade+sexo ja vale como lead. Chama 1x so por conversa. "
+            "Apos chamar, comente brevemente que vai pedir pra vendedora "
+            "dar uma olhada tambem."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "nome": {"type": "string"},
+                "nome": {"type": "string", "description": "Nome da cliente (mae/tia/avo). Vazio se nao pegou ainda."},
                 "telefone": {"type": "string", "description": "WhatsApp da cliente. Se nao tiver, deixe vazio."},
                 "idade_crianca": {"type": "integer"},
                 "sexo_crianca": {"type": "string", "enum": ["menino", "menina"]},
                 "observacao": {"type": "string", "description": "Resumo curto do que a cliente procura (ex: 'menino 5 anos, gosta de carrinho hot wheels')."},
             },
-            "required": ["nome", "idade_crianca", "sexo_crianca"],
+            "required": ["idade_crianca", "sexo_crianca"],
         },
     },
 ]
@@ -3667,25 +3687,22 @@ def _luq_save_msg(conversa_id, role, content=None, blocks=None):
                [conversa_id])
 
 
-def _luq_tool_buscar_produtos(args):
-    """Tool: busca produtos via PDV e devolve lista resumida."""
-    termo = (args.get('termo') or '').strip()
-    idade = args.get('idade_anos')
-    sexo = (args.get('sexo') or '').strip().lower()
-    preco_max = args.get('preco_max')
-    extras = {}
-    if termo:
-        pass  # busca textual via busca=
-    # Mapeia sexo pra termo + departamento heuristico
-    termos = []
-    if termo:
-        termos.append(termo)
-    # Tentar incluir faixa etaria — depende dos valores cadastrados
-    # Pra MVP, vamos so usar busca textual + filtro preco
-    busca = ' '.join(termos) or None
-    produtos, _ = listar_produtos(busca=busca, limite=8)
+_STOPWORDS_BUSCA = {'de', 'da', 'do', 'com', 'pra', 'para', 'um', 'uma',
+                    'o', 'a', 'e', 'em', 'no', 'na', 'pro', 'que'}
+
+
+def _fallback_termos_por_sexo(sexo):
+    s = (sexo or '').lower()
+    if s == 'menina':
+        return ['boneca', 'pelúcia', 'kit', 'cozinha']
+    if s == 'menino':
+        return ['carrinho', 'lego', 'pista', 'kit']
+    return ['kit', 'jogo', 'pelúcia']
+
+
+def _formatar_produtos(rows, preco_max=None):
     out = []
-    for p in produtos[:8]:
+    for p in rows[:8]:
         preco = float(p.get('preco_promo') or p.get('preco_venda') or 0)
         if preco_max and preco > float(preco_max):
             continue
@@ -3696,7 +3713,42 @@ def _luq_tool_buscar_produtos(args):
             'foto': p.get('foto_url') or '',
             'url': f"/produto/{p.get('id')}",
         })
-    return {'produtos': out}
+    return out
+
+
+def _luq_tool_buscar_produtos(args):
+    """Tool: busca produtos via PDV com fallback em cascata.
+    Catalogo da Luqui nao mantem todos os termos exatos — entao se a
+    busca direta veio vazia, tentamos termo mais curto e depois termos
+    genericos por sexo."""
+    termo = (args.get('termo') or '').strip()
+    sexo = (args.get('sexo') or '').strip().lower()
+    preco_max = args.get('preco_max')
+
+    tentativas = []
+    if termo:
+        tentativas.append(termo)
+        # Primeira palavra significativa: "boneca de pano" → "boneca"
+        palavras = [w for w in termo.split() if w.lower() not in _STOPWORDS_BUSCA]
+        if palavras and palavras[0].lower() != termo.lower():
+            tentativas.append(palavras[0])
+    # Fallback por sexo (boneca/carrinho/pelúcia/lego)
+    for t in _fallback_termos_por_sexo(sexo):
+        if t not in tentativas:
+            tentativas.append(t)
+    # Ultimo recurso: top produtos sem filtro
+    tentativas.append(None)
+
+    for t in tentativas:
+        try:
+            produtos, _ = listar_produtos(busca=t, limite=8)
+        except Exception as e:
+            log.error("buscar_produtos PDV: %s (termo=%r)", e, t)
+            continue
+        out = _formatar_produtos(produtos, preco_max=preco_max)
+        if out:
+            return {'produtos': out, 'termo_usado': t or 'top'}
+    return {'produtos': [], 'termo_usado': None}
 
 
 def _luq_tool_registrar_lead(conversa_id, args):
@@ -4201,7 +4253,15 @@ def admin_chats():
     """Lista todas as conversas da Luquizinha do site."""
     convs = db_execute("""SELECT c.*,
                                  (SELECT COUNT(*) FROM site_chat_mensagens m
-                                  WHERE m.conversa_id=c.id AND m.role='user') AS msgs_user
+                                  WHERE m.conversa_id=c.id AND m.role='user'
+                                    AND m.content IS NOT NULL AND m.content <> '') AS msgs_user,
+                                 (SELECT content FROM site_chat_mensagens m
+                                  WHERE m.conversa_id=c.id AND m.role='user'
+                                    AND m.content IS NOT NULL AND m.content <> ''
+                                  ORDER BY m.id ASC LIMIT 1) AS primeira_msg,
+                                 (SELECT COUNT(*) FROM site_chat_mensagens m
+                                  WHERE m.conversa_id=c.id AND m.role='assistant'
+                                    AND m.blocks::text LIKE '%buscar_produtos%') AS buscas_feitas
                           FROM site_chat_conversas c
                           ORDER BY ultimo_msg_em DESC NULLS LAST LIMIT 200""",
                        fetch='all') or []
