@@ -3687,8 +3687,127 @@ def _luq_save_msg(conversa_id, role, content=None, blocks=None):
                [conversa_id])
 
 
+LUQUIZINHA_SITE_MODEL = os.environ.get('LUQUIZINHA_SITE_MODEL', 'claude-sonnet-4-6')
+LUQUIZINHA_MAX_TURNOS = int(os.environ.get('LUQUIZINHA_MAX_TURNOS', '8'))
+
+
 _STOPWORDS_BUSCA = {'de', 'da', 'do', 'com', 'pra', 'para', 'um', 'uma',
                     'o', 'a', 'e', 'em', 'no', 'na', 'pro', 'que'}
+
+
+# ── Auto-extração de qualificação ────────────────────────────────────────────
+# Heurísticas regex pra preencher nome/idade/sexo da conversa SEM depender da
+# IA chamar registrar_lead. Roda a cada msg do user.
+_RE_IDADE = re.compile(r'\b(\d{1,2})\s*(?:anos?|aninhos?|a)\b', re.I)
+_RE_IDADE_SOLTA = re.compile(r'^\s*(\d{1,2})\s*$')
+_RE_MENINA = re.compile(r'\b(menina|filha|sobrinha|neta|princesinha)\b', re.I)
+_RE_MENINO = re.compile(r'\b(menino|filho|sobrinho|neto|principezinho)\b', re.I)
+_RE_TEL = re.compile(r'(?:\+?55\s*)?\(?(\d{2})\)?\s*9?\s*(\d{4})[-\s]?(\d{4})')
+
+
+def _luq_extrair_da_msg(texto, ja_tem):
+    """Tenta extrair nome/idade/sexo/telefone do texto do user.
+    `ja_tem` = dict com o que já capturamos (não sobrescreve)."""
+    out = {}
+    t = texto.strip()
+    if not t:
+        return out
+    # idade
+    if not ja_tem.get('idade_crianca'):
+        m = _RE_IDADE.search(t) or _RE_IDADE_SOLTA.match(t)
+        if m:
+            try:
+                idade = int(m.group(1))
+                if 0 < idade <= 18:
+                    out['idade_crianca'] = idade
+            except (ValueError, IndexError):
+                pass
+    # sexo
+    if not ja_tem.get('sexo_crianca'):
+        if _RE_MENINA.search(t):
+            out['sexo_crianca'] = 'menina'
+        elif _RE_MENINO.search(t):
+            out['sexo_crianca'] = 'menino'
+    # telefone
+    if not ja_tem.get('lead_telefone'):
+        m = _RE_TEL.search(t)
+        if m:
+            tel = ''.join(m.groups())
+            if len(tel) >= 10:
+                out['lead_telefone'] = tel[:20]
+    # nome — só se for resposta CURTA de 1-2 palavras (heurística fraca)
+    if not ja_tem.get('nome') and len(t) <= 30 and ' ' not in t.strip():
+        if t.isalpha() and 2 <= len(t) <= 20 and not _RE_MENINA.search(t) and not _RE_MENINO.search(t):
+            # capitaliza
+            out['nome'] = t.strip().capitalize()
+    return out
+
+
+def _luq_atualizar_qualificacao(conversa_id, extraido):
+    """Atualiza colunas em site_chat_conversas com o que foi extraído."""
+    if not extraido:
+        return
+    sets, params = [], []
+    for k, v in extraido.items():
+        sets.append(f"{k} = COALESCE({k}, %s)")
+        params.append(v)
+    params.append(conversa_id)
+    db_execute(f"UPDATE site_chat_conversas SET {', '.join(sets)} WHERE id=%s",
+               params)
+
+
+def _luq_contexto_persistente(cli, ip):
+    """Monta bloco de contexto pra system prompt com base em conversas
+    anteriores (mesmo cliente_id OU mesmo IP) + listas de aniversário."""
+    pedacos = []
+    if cli:
+        nome_cli = cli.get('nome') or ''
+        if nome_cli:
+            pedacos.append(f"Cliente logado: {nome_cli}.")
+        # Listas de aniversario = filhos/afilhados cadastrados
+        listas = db_execute("""SELECT nome_crianca, idade, data_aniversario
+                               FROM listas_aniversario
+                               WHERE cliente_id=%s AND ativo
+                               ORDER BY criado_em DESC LIMIT 4""",
+                            [cli['id']], fetch='all') or []
+        if listas:
+            partes = []
+            for l in listas:
+                p = l.get('nome_crianca') or 'crianca'
+                if l.get('idade'):
+                    p += f" ({l['idade']}a)"
+                partes.append(p)
+            pedacos.append("Criancas cadastradas: " + ', '.join(partes))
+        # Pedidos recentes
+        pcount = db_execute("""SELECT COUNT(*) AS n FROM pedidos
+                               WHERE cliente_id=%s
+                                 AND criado_em > NOW() - INTERVAL '180 days'""",
+                            [cli['id']], fetch='one') or {}
+        n = int((pcount or {}).get('n') or 0)
+        if n > 0:
+            pedacos.append(f"Ja fez {n} pedido(s) recentes. Cliente recorrente.")
+    # Conversa anterior do mesmo IP (mesma pessoa em outra sessao)
+    if ip:
+        ant = db_execute("""SELECT nome, idade_crianca, sexo_crianca, criado_em
+                            FROM site_chat_conversas
+                            WHERE ip=%s
+                              AND criado_em > NOW() - INTERVAL '60 days'
+                              AND (nome IS NOT NULL OR idade_crianca IS NOT NULL)
+                            ORDER BY criado_em DESC LIMIT 1""",
+                         [ip], fetch='one')
+        if ant:
+            d = dict(ant)
+            partes = []
+            if d.get('nome'):
+                partes.append(d['nome'])
+            if d.get('sexo_crianca'):
+                partes.append(d['sexo_crianca'])
+            if d.get('idade_crianca'):
+                partes.append(f"{d['idade_crianca']}a")
+            if partes:
+                pedacos.append("Ja conversou comigo antes: " + ', '.join(partes)
+                               + ". Pode chamar pelo nome se tiver.")
+    return '\n'.join(pedacos)
 
 
 def _fallback_termos_por_sexo(sexo):
@@ -3848,15 +3967,44 @@ def luquizinha_chat():
             return resp
     conv = _luq_get_or_create_conversa(sid)
     _luq_save_msg(conv['id'], 'user', content=texto)
+    # Auto-extração: preenche nome/idade/sexo/tel direto, sem depender da IA
+    extraido = _luq_extrair_da_msg(texto, dict(conv))
+    if extraido:
+        _luq_atualizar_qualificacao(conv['id'], extraido)
+        conv.update(extraido)
     messages = _luq_carregar_historico(conv['id'])
-    # Loop tool use (max 4 turnos)
+    # Contexto persistente: o que sabemos da cliente (logada, IP recorrente)
+    cli = cliente_logado()
+    contexto = _luq_contexto_persistente(cli, conv.get('ip'))
+    # Estado atual da qualificacao (pra IA nao re-perguntar)
+    estado = []
+    if conv.get('nome'):
+        estado.append(f"Nome: {conv['nome']}")
+    if conv.get('idade_crianca'):
+        estado.append(f"Idade da crianca: {conv['idade_crianca']}a")
+    if conv.get('sexo_crianca'):
+        estado.append(f"Sexo: {conv['sexo_crianca']}")
+    if conv.get('lead_marcado'):
+        estado.append("LEAD JA REGISTRADO — nao chame registrar_lead de novo.")
+    contexto_extra = ''
+    if contexto:
+        contexto_extra += '\n\n[CONTEXTO DA CLIENTE]\n' + contexto
+    if estado:
+        contexto_extra += '\n\n[JA CAPTUREI]\n' + '\n'.join(estado)
+    system_blocks = [
+        {'type': 'text', 'text': LUQUIZINHA_SITE_PROMPT,
+         'cache_control': {'type': 'ephemeral'}},
+    ]
+    if contexto_extra.strip():
+        system_blocks.append({'type': 'text', 'text': contexto_extra.strip()})
+    # Loop tool use
     resposta_texto = ''
     produtos_exibir = []
-    for _ in range(4):
+    for _ in range(LUQUIZINHA_MAX_TURNOS):
         payload = {
-            'model': 'claude-haiku-4-5-20251001',  # mais barato pra chat
-            'max_tokens': 800,
-            'system': LUQUIZINHA_SITE_PROMPT,
+            'model': LUQUIZINHA_SITE_MODEL,
+            'max_tokens': 1024,
+            'system': system_blocks,
             'tools': LUQUIZINHA_TOOLS,
             'messages': messages,
         }
@@ -3865,7 +4013,7 @@ def luquizinha_chat():
                               headers={'Content-Type': 'application/json',
                                        'x-api-key': ANTHROPIC_API_KEY,
                                        'anthropic-version': '2023-06-01'},
-                              json=payload, timeout=30)
+                              json=payload, timeout=45)
             if r.status_code != 200:
                 log.error("Luquizinha %s: %s", r.status_code, r.text[:200])
                 break
