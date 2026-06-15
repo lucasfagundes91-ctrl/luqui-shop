@@ -559,8 +559,9 @@ function montarParcelas(){
   document.getElementById('parcela-info').textContent =
     `Parcela mínima R$ ${PARC_MIN.toFixed(2).replace('.',',')} sem juros. Acima disso aplica juros de ${(JUROS_AM*100).toFixed(2).replace('.',',')}% a.m.`;
 }
-// Saldo do Clube em reais (saldo de pontos * valor_por_ponto)
-const SALDO_REAIS = Math.round(PONTOS_SALDO * PONTOS_VPP * 100) / 100;
+// Saldo do Clube em reais (saldo de pontos * valor_por_ponto).
+// `let` porque o JS de busca-cpf reatualiza quando cliente é encontrado.
+let SALDO_REAIS = Math.round(PONTOS_SALDO * PONTOS_VPP * 100) / 100;
 
 function limiteAbaterReais(){
   // Maximo que o cliente pode abater nessa compra:
@@ -720,23 +721,32 @@ async function aoTabularCpf(cpfRaw, silent){
     return;
   }
   // Atualiza bloco do Clube Luqui — mostra SEMPRE quando cliente existe no
-  // PDV (mesmo com 0 pontos), pra divulgar o programa.
+  // PDV (mesmo com 0 saldo), pra divulgar o programa.
   const clube = d.clube || {};
   PONTOS_SALDO = clube.saldo || 0;
   PONTOS_VPP = clube.valor_por_ponto || 0;
+  // Recalcula saldo em reais
+  SALDO_REAIS = Math.round(PONTOS_SALDO * PONTOS_VPP * 100) / 100;
   const blocoP = document.getElementById('bloco-pontos');
   if(blocoP){
     blocoP.style.display = 'block';
     const info = document.getElementById('pontos-info');
     if(info){
-      if(PONTOS_SALDO > 0){
-        info.innerHTML = 'Você tem <b>' + Math.floor(PONTOS_SALDO) + ' pontos</b> · vale até '
-          + '<b style="color:var(--verde)">R$ ' + (clube.valor_disponivel||0).toFixed(2).replace('.',',') + '</b>'
-          + ' de desconto nessa compra! 🎉';
+      if(SALDO_REAIS > 0){
+        const saldoStr = 'R$ ' + SALDO_REAIS.toFixed(2).replace('.',',');
+        info.innerHTML = ''
+          + 'Você tem <b style="color:var(--verde)">' + saldoStr + '</b> em pontos pra usar! 🎉'
+          + '<div style="margin-top:6px">'
+          +   '👉 Nessa compra pode abater até '
+          +   '<b id="pontos-limite-ui" style="color:var(--verde)">R$ 0,00</b> '
+          +   '<span style="font-size:11px;color:var(--mut)">(25% do valor após outros descontos)</span>'
+          + '</div>';
+        // Recalcula o teto agora que o saldo mudou
+        if(typeof atualizarLimiteUI === 'function') atualizarLimiteUI();
       } else {
-        info.innerHTML = '<b>Você é cliente Luqui! 💛</b> Você ainda não tem pontos no Clube Luqui, mas '
-          + '<b>essa compra já começa a contar</b> — a cada R$ 1,00 gasto você acumula pontos '
-          + 'que viram desconto nas próximas compras.';
+        info.innerHTML = '<b>Você é cliente Luqui! 💛</b> Você ainda não tem saldo no Clube Luqui, mas '
+          + '<b>essa compra já começa a contar</b> — a cada R$ 1,00 gasto você acumula crédito '
+          + 'pra abater nas próximas compras.';
       }
     }
   }
