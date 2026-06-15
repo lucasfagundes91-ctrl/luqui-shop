@@ -2729,7 +2729,7 @@ def checkout_frete():
             'id': 'RETIRA',
             'servico': 'Retirar na loja',
             'valor': 0,
-            'prazo': 'Pronto em ~'+cfg('loja_tempo_separacao_min', '30')+' min',
+            'prazo': 'Pronto em até '+cfg('loja_tempo_separacao_min', '30')+' min',
             'endereco': cfg('loja_endereco_completo', ''),
             'horario': cfg('loja_horario_funcionamento', ''),
             'tempo_min': cfg('loja_tempo_separacao_min', '30'),
