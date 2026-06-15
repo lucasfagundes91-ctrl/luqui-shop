@@ -35,6 +35,7 @@
          style="height:50px;width:auto;display:block;margin:0 auto 14px;background:#fff;padding:6px 10px;border-radius:8px">
     <h1 style="font-size:11px;color:#FFC700;text-align:center;letter-spacing:2px;margin-bottom:20px">ADMIN</h1>
     <a href="/admin" {% if pagina == 'home' %}class="on"{% endif %}>📊 Dashboard</a>
+    <a href="/admin/analytics" {% if pagina == 'analytics' %}class="on"{% endif %}>📈 Visitas do site</a>
     <a href="/admin/pedidos" {% if pagina == 'pedidos' %}class="on"{% endif %}>🛒 Pedidos</a>
     <a href="/admin/clientes" {% if pagina == 'clientes' %}class="on"{% endif %}>👥 Clientes</a>
     <a href="/admin/assinantes" {% if pagina == 'assinantes' %}class="on"{% endif %}>🎁 Assinantes</a>

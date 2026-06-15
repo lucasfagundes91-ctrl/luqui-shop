@@ -4,6 +4,7 @@ Stack Flask+PG. Produtos/estoque/promoções são puxados do PDV Pro em tempo re
 via API (X-API-Key). Quando um pedido é pago, dispara webhook que cria a venda
 no PDV Pro automaticamente.
 """
+import hashlib
 import json
 import logging
 import os
@@ -78,6 +79,46 @@ def db_execute(sql, params=None, fetch=None):
         return None
     finally:
         cur.close()
+
+
+# ─── Tracker de visitas do site (analytics) ───────────────────────────────────
+_BOT_HINTS = ('bot', 'crawler', 'spider', 'curl', 'wget', 'headless',
+              'python-', 'go-http', 'http-client', 'facebookexternal',
+              'whatsapp', 'preview', 'fetch')
+_VISITA_SKIP_PREFIXES = ('/static/', '/admin', '/api/', '/webhook', '/auth/',
+                         '/cron/', '/_', '/sw.js', '/robots.txt',
+                         '/favicon', '/sitemap', '/health')
+
+
+@app.before_request
+def _track_visita():
+    """Grava pageviews em site_visitas. Silencioso em erro."""
+    try:
+        if request.method != 'GET':
+            return
+        p = request.path or '/'
+        for pref in _VISITA_SKIP_PREFIXES:
+            if p == pref or p.startswith(pref):
+                return
+        ua = (request.headers.get('User-Agent') or '')[:300]
+        ref = (request.headers.get('Referer') or '')[:500]
+        ip = (request.headers.get('CF-Connecting-IP')
+              or (request.headers.get('X-Forwarded-For') or '').split(',')[0].strip()
+              or request.remote_addr or '')
+        ip_h = hashlib.sha256(
+            (ip + (app.secret_key or 'salt')).encode('utf-8')
+        ).hexdigest()[:40]
+        ua_low = ua.lower()
+        is_bot = any(b in ua_low for b in _BOT_HINTS)
+        cid = session.get('cliente_id')
+        db_execute(
+            """INSERT INTO site_visitas
+               (path, referer, user_agent, ip_hash, is_bot, cliente_id)
+               VALUES (%s,%s,%s,%s,%s,%s)""",
+            [p[:500], ref, ua, ip_h, is_bot, cid])
+    except Exception:
+        # nunca quebra request por erro de tracking
+        pass
 
 
 # ─── Inicialização do banco ───────────────────────────────────────────────────
@@ -388,6 +429,20 @@ def init_db():
         "ALTER TABLE clube_assinaturas ADD COLUMN IF NOT EXISTS bairro VARCHAR(100)",
         "ALTER TABLE clube_assinaturas ADD COLUMN IF NOT EXISTS cidade VARCHAR(100)",
         "ALTER TABLE clube_assinaturas ADD COLUMN IF NOT EXISTS uf VARCHAR(2)",
+        # Analytics: pageviews do site público
+        """CREATE TABLE IF NOT EXISTS site_visitas (
+            id BIGSERIAL PRIMARY KEY,
+            ts TIMESTAMPTZ DEFAULT NOW(),
+            path VARCHAR(500) NOT NULL,
+            referer VARCHAR(500),
+            user_agent VARCHAR(300),
+            ip_hash VARCHAR(64),
+            is_bot BOOLEAN DEFAULT FALSE,
+            cliente_id INT REFERENCES clientes_site(id) ON DELETE SET NULL
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_site_visitas_ts ON site_visitas(ts DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_site_visitas_path ON site_visitas(path, ts DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_site_visitas_ip ON site_visitas(ip_hash, ts DESC)",
     ]
     for ddl in ddls:
         try:
@@ -4242,6 +4297,67 @@ def admin_home():
                            pedidos=pedidos_recentes,
                            assinaturas=assinaturas_ativas,
                            stats=stats)
+
+
+@app.route('/admin/analytics')
+@requer_admin
+def admin_analytics():
+    """Dashboard de visitas do site público."""
+    try:
+        dias = int(request.args.get('dias', 14))
+    except Exception:
+        dias = 14
+    if dias not in (1, 7, 14, 30, 90):
+        dias = 14
+    intervalo = f"{dias} days"
+
+    resumo = db_execute("""
+        SELECT
+          COUNT(*) FILTER (WHERE ts >= NOW() - %s::interval AND NOT is_bot) AS humanos,
+          COUNT(*) FILTER (WHERE ts >= NOW() - %s::interval AND is_bot) AS bots,
+          COUNT(DISTINCT ip_hash) FILTER (WHERE ts >= NOW() - %s::interval AND NOT is_bot) AS unicos,
+          COUNT(*) FILTER (WHERE ts >= NOW() - INTERVAL '1 day' AND NOT is_bot) AS humanos_24h
+        FROM site_visitas""",
+        [intervalo, intervalo, intervalo], fetch='one') or {}
+
+    por_dia = db_execute("""
+        SELECT DATE(ts AT TIME ZONE 'America/Sao_Paulo') AS dia,
+               COUNT(*) FILTER (WHERE NOT is_bot) AS visitas,
+               COUNT(DISTINCT ip_hash) FILTER (WHERE NOT is_bot) AS unicos
+        FROM site_visitas
+        WHERE ts >= NOW() - %s::interval
+        GROUP BY dia ORDER BY dia""", [intervalo], fetch='all') or []
+
+    top_paginas = db_execute("""
+        SELECT path, COUNT(*) AS visitas,
+               COUNT(DISTINCT ip_hash) AS unicos
+        FROM site_visitas
+        WHERE ts >= NOW() - %s::interval AND NOT is_bot
+        GROUP BY path ORDER BY visitas DESC LIMIT 20""",
+        [intervalo], fetch='all') or []
+
+    top_referrers = db_execute("""
+        SELECT
+          CASE
+            WHEN referer IS NULL OR referer = '' THEN '(direto)'
+            ELSE COALESCE(substring(referer from 'https?://([^/]+)'), '(outro)')
+          END AS origem,
+          COUNT(*) AS visitas
+        FROM site_visitas
+        WHERE ts >= NOW() - %s::interval AND NOT is_bot
+        GROUP BY origem ORDER BY visitas DESC LIMIT 15""",
+        [intervalo], fetch='all') or []
+
+    ultimas = db_execute("""
+        SELECT ts, path, referer, user_agent, is_bot
+        FROM site_visitas
+        ORDER BY ts DESC LIMIT 50""", fetch='all') or []
+
+    return render_template('admin_analytics.html',
+                           resumo=resumo, por_dia=por_dia,
+                           top_paginas=top_paginas,
+                           top_referrers=top_referrers,
+                           ultimas=ultimas, dias=dias)
 
 
 @app.route('/admin/pedidos')
