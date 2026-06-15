@@ -135,6 +135,12 @@
             Você tem <b>{{ '%.0f'|format(pontos_info.saldo) }} pontos</b> · vale até
             <b style="color:var(--verde)">R$ {{ '%.2f'|format(pontos_info.valor_disponivel) }}</b>
             de desconto nessa compra! 🎉
+            {% if pontos_info.proxima_expiracao %}
+              <div style="font-size:12px;color:#92400e;margin-top:6px">
+                ⏳ Use até <b>{{ pontos_info.proxima_expiracao[8:10] }}/{{ pontos_info.proxima_expiracao[5:7] }}/{{ pontos_info.proxima_expiracao[0:4] }}</b>
+                — depois disso os pontos expiram.
+              </div>
+            {% endif %}
           {% elif pontos_info and pontos_info.cliente_existe %}
             <b>Você é cliente Luqui! 💛</b> Você ainda não tem pontos no Clube Luqui, mas
             <b>essa compra já começa a contar</b> — a cada R$ 1,00 gasto você acumula pontos
@@ -156,7 +162,7 @@
           </button>
         </div>
         <p style="font-size:11px;color:var(--mut);margin-top:8px">
-          ℹ️ Pode usar pontos pra abater <b>até 50%</b> do valor do pedido (após outros descontos).
+          ℹ️ Pode usar pontos pra abater <b>até 25%</b> do valor do pedido (após outros descontos).
         </p>
       </div>
     </div>
@@ -205,26 +211,22 @@
                  onchange="document.getElementById('embrulho-msg').style.display=this.checked?'block':'none'"
                  style="margin-top:3px;width:18px;height:18px;cursor:pointer">
           <div>
-            <b style="font-size:15px">🎁 Embrulhar pra presente</b>
+<b style="font-size:15px">🎁 Embrulhar pra presente</b>
             <p style="font-size:12px;color:var(--mut);margin-top:2px">
-              Mandamos seu pedido embalado em papel de presente, sem mostrar o valor na nota.
+              Mandamos seu pedido já embrulhado em papel de presente.
             </p>
           </div>
         </label>
         <div id="embrulho-msg" style="display:none;margin-top:12px">
           <label style="font-size:12px;color:var(--mut);font-weight:600;display:block;margin-bottom:6px">Papel de presente pra...</label>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px">
             <label class="emb-tipo" style="border:2px solid var(--linha);padding:10px;border-radius:8px;cursor:pointer;text-align:center;font-size:13px;font-weight:600">
-              <input type="radio" name="embrulho_tipo" value="menino" style="display:none">
+              <input type="radio" name="embrulho_tipo" value="menino" checked style="display:none">
               💙 Menino
             </label>
             <label class="emb-tipo" style="border:2px solid var(--linha);padding:10px;border-radius:8px;cursor:pointer;text-align:center;font-size:13px;font-weight:600">
               <input type="radio" name="embrulho_tipo" value="menina" style="display:none">
               💖 Menina
-            </label>
-            <label class="emb-tipo" style="border:2px solid var(--linha);padding:10px;border-radius:8px;cursor:pointer;text-align:center;font-size:13px;font-weight:600">
-              <input type="radio" name="embrulho_tipo" value="neutro" checked style="display:none">
-              🎨 Neutro
             </label>
           </div>
           <label style="font-size:12px;color:var(--mut);font-weight:600">Mensagem no cartãozinho (opcional)</label>
@@ -567,8 +569,8 @@ function pontosEmReais(){
   const desc = SUBTOTAL * (descontoFormaPct(fval)/100);
   const dcup = cupom ? cupom.desconto : 0;
   const parcial = Math.max(0, SUBTOTAL + frete - desc - dcup);
-  const limite50 = parcial * 0.5;
-  let valor = Math.min(p * PONTOS_VPP, limite50);
+  const limiteMax = parcial * 0.25;
+  let valor = Math.min(p * PONTOS_VPP, limiteMax);
   // Reajusta pontos pra bater com o valor maximo permitido
   if(valor < p * PONTOS_VPP){
     p = PONTOS_VPP > 0 ? Math.floor(valor / PONTOS_VPP) : 0;
@@ -583,14 +585,14 @@ function atualizarPontos(){
   recalcular();
 }
 function usarMaximoPontos(){
-  // Calcula o max teorico (limitado pelo limite 50% + saldo)
+  // Calcula o max teorico (limitado pelo limite 25% + saldo)
   const f = document.querySelector('input[name="forma_pagto"]:checked');
   const fval = f ? f.value : 'pix';
   const desc = SUBTOTAL * (descontoFormaPct(fval)/100);
   const dcup = cupom ? cupom.desconto : 0;
   const parcial = Math.max(0, SUBTOTAL + frete - desc - dcup);
-  const limite50 = parcial * 0.5;
-  const maxPorReais = PONTOS_VPP > 0 ? Math.floor(limite50 / PONTOS_VPP) : 0;
+  const limiteMax = parcial * 0.25;
+  const maxPorReais = PONTOS_VPP > 0 ? Math.floor(limiteMax / PONTOS_VPP) : 0;
   const maxFinal = Math.min(PONTOS_SALDO, maxPorReais);
   const inp = document.getElementById('pontos-usar');
   if(inp){ inp.value = maxFinal; }

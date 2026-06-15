@@ -1873,7 +1873,7 @@ PAGINAS_DEFAULTS['clube-sobre'] = {
         '<p>Junta pontos comprando na loja física da Luqui e usa pra abater nas '
         'compras do site.</p>'
         '<p>A cada R$ 1,00 gasto na loja você ganha pontos. No site, na hora de '
-        'fechar a compra, escolha quantos pontos usar — até 50% do valor do pedido.</p>'
+        'fechar a compra, escolha quantos pontos usar — até 25% do valor do pedido.</p>'
     ),
 }
 
@@ -2776,8 +2776,10 @@ def checkout_frete():
                 })
         except Exception as e:
             log.warning("ME cotação falhou (fallback hardcode): %s", e)
-    # Fallback hardcode (sem ME ou sem CEP) — sempre devolve algo
-    if not [o for o in opcoes if (o.get('id') or '') != 'LOCAL']:
+    # Fallback hardcode (sem ME ou sem CEP) — sempre devolve algo.
+    # RETIRA/LOCAL nao contam como "opcao de envio" — sao complementares.
+    # Sem fallback, cliente fora de Cascavel ficava preso so com Retirar na loja.
+    if not [o for o in opcoes if (o.get('id') or '') not in ('LOCAL', 'RETIRA')]:
         if uf == 'PR':
             opcoes += [
                 {'servico': 'PAC',   'valor': 24.90, 'prazo': '3-5 dias úteis'},
@@ -3627,7 +3629,7 @@ chame imediatamente.
 INFO QUE VOCE PODE DAR DIRETO (sempre que perguntarem):
 💳 PIX 3% off, cartao 1x sem juros (2x+ tem juros, ate 12x)
 🚚 Cascavel R$ 10 fixo, retire na loja gratis, outras cidades cota no checkout
-🎁 Clube de Pontos: 1pt por R$1, vale R$0,10/pt, max 50% da compra
+🎁 Clube de Pontos: 1pt por R$1, vale R$0,10/pt, max 25% da compra
 📍 Rua Engenheiro Reboucas, 2053 — Cascavel/PR
 ⏰ Seg-sex 9-18h · Sab 9-13h · Dom fechado
 
@@ -5073,7 +5075,7 @@ def checkout_finalizar():
             else:
                 cupom_desconto = min(float(c['valor']), subtotal)
             db_execute("UPDATE cupons SET usos=usos+1 WHERE id=%s", [c['id']])
-    # Pontos do Clube (max 50% do total apos descontos PIX/cupom)
+    # Pontos do Clube (max 25% do total apos descontos PIX/cupom)
     pontos_resgatados = 0.0
     desconto_pontos = 0.0
     pontos_pedidos = 0.0
@@ -5088,12 +5090,12 @@ def checkout_finalizar():
             vpp = float(info_pontos.get('valor_por_ponto') or 0)
             pontos_pedidos = min(pontos_pedidos, saldo)
             valor_em_reais = round(pontos_pedidos * vpp, 2)
-            # Limite de 50% do total apos descontos
+            # Limite de 25% do total apos descontos
             parcial = max(0, subtotal + frete - desconto - cupom_desconto)
-            limite_50 = round(parcial * 0.5, 2)
-            if valor_em_reais > limite_50:
-                valor_em_reais = limite_50
-                pontos_pedidos = round(limite_50 / vpp, 2) if vpp > 0 else 0
+            limite_max = round(parcial * 0.25, 2)
+            if valor_em_reais > limite_max:
+                valor_em_reais = limite_max
+                pontos_pedidos = round(limite_max / vpp, 2) if vpp > 0 else 0
             if valor_em_reais > 0:
                 pontos_resgatados = pontos_pedidos
                 desconto_pontos = valor_em_reais
@@ -5116,7 +5118,7 @@ def checkout_finalizar():
     embrulho = bool(d.get('embrulho_presente'))
     embrulho_msg = ((d.get('embrulho_mensagem') or '').strip()[:300]) if embrulho else None
     embrulho_tipo_raw = (d.get('embrulho_tipo') or '').strip().lower()
-    embrulho_tipo = embrulho_tipo_raw if (embrulho and embrulho_tipo_raw in ('menino', 'menina', 'neutro')) else None
+    embrulho_tipo = embrulho_tipo_raw if (embrulho and embrulho_tipo_raw in ('menino', 'menina')) else None
     entrega_agendada = ((d.get('entrega_agendada') or '').strip()[:40]) or None
     ped = db_execute("""
         INSERT INTO pedidos
