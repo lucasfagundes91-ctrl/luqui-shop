@@ -132,9 +132,12 @@
         <h3 style="margin-bottom:8px">⭐ Clube Luqui</h3>
         <div id="pontos-info" style="background:#FFF8E1;border:1px solid #FBBF24;border-radius:10px;padding:14px;font-size:14px;line-height:1.6">
           {% if pontos_info and pontos_info.saldo > 0 %}
-            Você tem <b>{{ '%.0f'|format(pontos_info.saldo) }} pontos</b> · vale até
-            <b style="color:var(--verde)">R$ {{ '%.2f'|format(pontos_info.valor_disponivel) }}</b>
-            de desconto nessa compra! 🎉
+            Você tem <b style="color:var(--verde)">R$ {{ '%.2f'|format(pontos_info.valor_disponivel) }}</b>
+            em pontos pra usar! 🎉
+            <div style="margin-top:6px">
+              👉 Nessa compra pode abater até <b id="pontos-limite-ui" style="color:var(--verde)">R$ 0,00</b>
+              <span style="font-size:11px;color:var(--mut)">(25% do valor após outros descontos)</span>
+            </div>
             {% if pontos_info.proxima_expiracao %}
               <div style="font-size:12px;color:#92400e;margin-top:6px">
                 ⏳ Use até <b>{{ pontos_info.proxima_expiracao[8:10] }}/{{ pontos_info.proxima_expiracao[5:7] }}/{{ pontos_info.proxima_expiracao[0:4] }}</b>
@@ -142,28 +145,25 @@
               </div>
             {% endif %}
           {% elif pontos_info and pontos_info.cliente_existe %}
-            <b>Você é cliente Luqui! 💛</b> Você ainda não tem pontos no Clube Luqui, mas
-            <b>essa compra já começa a contar</b> — a cada R$ 1,00 gasto você acumula pontos
-            que viram desconto nas próximas compras.
+            <b>Você é cliente Luqui! 💛</b> Você ainda não tem saldo no Clube Luqui, mas
+            <b>essa compra já começa a contar</b> — a cada R$ 1,00 gasto você acumula crédito
+            pra abater nas próximas compras.
           {% else %}
-            <b>🎁 Clube Luqui</b> — a cada compra você acumula pontos que viram desconto.
+            <b>🎁 Clube Luqui</b> — a cada compra você acumula crédito que vira desconto.
             Use o mesmo CPF aqui no site e na loja física pra somar tudo num lugar só.
           {% endif %}
         </div>
         <div style="margin-top:14px;display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
           <div style="flex:1;min-width:160px">
-            <label style="font-size:12px;color:var(--mut);font-weight:600">Quantos pontos usar?</label>
-            <input id="pontos-usar" type="number" min="0" step="1" placeholder="0"
-                   value="0" onchange="atualizarPontos()"
+            <label style="font-size:12px;color:var(--mut);font-weight:600">Quanto quer abater? (R$)</label>
+            <input id="abater-reais" type="number" min="0" step="0.10" placeholder="0,00"
+                   value="0" onchange="atualizarAbatimento()"
                    style="width:100%;padding:10px;border:1px solid var(--linha);border-radius:8px;margin-top:4px;font-size:15px">
           </div>
           <button type="button" onclick="usarMaximoPontos()" class="btn btn-amarelo" style="padding:10px 16px;font-size:13px">
             Usar máximo permitido
           </button>
         </div>
-        <p style="font-size:11px;color:var(--mut);margin-top:8px">
-          ℹ️ Pode usar pontos pra abater <b>até 25%</b> do valor do pedido (após outros descontos).
-        </p>
       </div>
     </div>
 
@@ -559,49 +559,55 @@ function montarParcelas(){
   document.getElementById('parcela-info').textContent =
     `Parcela mínima R$ ${PARC_MIN.toFixed(2).replace('.',',')} sem juros. Acima disso aplica juros de ${(JUROS_AM*100).toFixed(2).replace('.',',')}% a.m.`;
 }
-function pontosEmReais(){
-  const inp = document.getElementById('pontos-usar');
-  if(!inp || PONTOS_VPP <= 0) return {pontos:0, valor:0};
-  let p = parseFloat(inp.value) || 0;
-  p = Math.max(0, Math.min(p, PONTOS_SALDO));
+// Saldo do Clube em reais (saldo de pontos * valor_por_ponto)
+const SALDO_REAIS = Math.round(PONTOS_SALDO * PONTOS_VPP * 100) / 100;
+
+function limiteAbaterReais(){
+  // Maximo que o cliente pode abater nessa compra:
+  // min(saldo total em R$, 25% do parcial apos descontos PIX/cupom)
   const f = document.querySelector('input[name="forma_pagto"]:checked');
   const fval = f ? f.value : 'pix';
   const desc = SUBTOTAL * (descontoFormaPct(fval)/100);
   const dcup = cupom ? cupom.desconto : 0;
   const parcial = Math.max(0, SUBTOTAL + frete - desc - dcup);
-  const limiteMax = parcial * 0.25;
-  let valor = Math.min(p * PONTOS_VPP, limiteMax);
-  // Reajusta pontos pra bater com o valor maximo permitido
-  if(valor < p * PONTOS_VPP){
-    p = PONTOS_VPP > 0 ? Math.floor(valor / PONTOS_VPP) : 0;
-    valor = p * PONTOS_VPP;
-  }
-  return {pontos: p, valor: Math.round(valor*100)/100};
+  const limite25 = parcial * 0.25;
+  return Math.round(Math.min(SALDO_REAIS, limite25) * 100) / 100;
 }
-function atualizarPontos(){
-  const {pontos} = pontosEmReais();
-  const inp = document.getElementById('pontos-usar');
-  if(inp && parseFloat(inp.value) !== pontos) inp.value = pontos;
+function atualizarLimiteUI(){
+  const el = document.getElementById('pontos-limite-ui');
+  if(el){
+    const lim = limiteAbaterReais();
+    el.textContent = 'R$ ' + lim.toFixed(2).replace('.',',');
+  }
+}
+function pontosEmReais(){
+  // Retorna {pontos, valor} a partir do input EM REAIS (abater-reais)
+  const inp = document.getElementById('abater-reais');
+  if(!inp || PONTOS_VPP <= 0) return {pontos:0, valor:0};
+  let valor = parseFloat(inp.value) || 0;
+  valor = Math.max(0, Math.min(valor, limiteAbaterReais()));
+  // Arredonda pro multiplo de PONTOS_VPP (pra ter pontos inteiros)
+  const pontos = PONTOS_VPP > 0 ? Math.floor(valor / PONTOS_VPP) : 0;
+  valor = Math.round(pontos * PONTOS_VPP * 100) / 100;
+  return {pontos, valor};
+}
+function atualizarAbatimento(){
+  // Reajusta o input pro valor real possivel (pode ter cortado pelo limite)
+  const {valor} = pontosEmReais();
+  const inp = document.getElementById('abater-reais');
+  if(inp && parseFloat(inp.value) !== valor) inp.value = valor.toFixed(2);
   recalcular();
 }
 function usarMaximoPontos(){
-  // Calcula o max teorico (limitado pelo limite 25% + saldo)
-  const f = document.querySelector('input[name="forma_pagto"]:checked');
-  const fval = f ? f.value : 'pix';
-  const desc = SUBTOTAL * (descontoFormaPct(fval)/100);
-  const dcup = cupom ? cupom.desconto : 0;
-  const parcial = Math.max(0, SUBTOTAL + frete - desc - dcup);
-  const limiteMax = parcial * 0.25;
-  const maxPorReais = PONTOS_VPP > 0 ? Math.floor(limiteMax / PONTOS_VPP) : 0;
-  const maxFinal = Math.min(PONTOS_SALDO, maxPorReais);
-  const inp = document.getElementById('pontos-usar');
-  if(inp){ inp.value = maxFinal; }
+  const inp = document.getElementById('abater-reais');
+  if(inp){ inp.value = limiteAbaterReais().toFixed(2); }
   recalcular();
 }
 function recalcular(){
   const f = document.querySelector('input[name="forma_pagto"]:checked').value;
   const desconto = SUBTOTAL * (descontoFormaPct(f)/100);
   const dcupom = cupom ? cupom.desconto : 0;
+  atualizarLimiteUI();
   const {valor: descPontos} = pontosEmReais();
   let total = Math.max(0, SUBTOTAL + frete - desconto - dcupom - descPontos);
   let juros = 0;
