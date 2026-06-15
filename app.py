@@ -5065,6 +5065,48 @@ def checkout_finalizar():
             return jsonify({'erro': f'Campo {c} obrigatório'}), 400
     if d['forma_pagto'] not in ('pix', 'cartao', 'boleto'):
         return jsonify({'erro': 'Forma de pagamento inválida'}), 400
+    # CPF tem que ter 11 digitos exatos (NF-e exige documento valido)
+    cpf_digs = ''.join(c for c in (d.get('cpf') or '') if c.isdigit())
+    if len(cpf_digs) != 11:
+        return jsonify({'erro': 'CPF inválido — precisa ter 11 dígitos'}), 400
+    # CEP 8 digitos (se for entrega)
+    if not is_retira:
+        cep_digs = ''.join(c for c in (d.get('cep') or '') if c.isdigit())
+        if len(cep_digs) != 8:
+            return jsonify({'erro': 'CEP inválido — precisa ter 8 dígitos'}), 400
+        uf_d = (d.get('uf') or '').strip().upper()
+        if len(uf_d) != 2:
+            return jsonify({'erro': 'UF inválida'}), 400
+    # Valida que cada produto tem dados fiscais no PDV Pro (NCM/CFOP/CSOSN).
+    # Sem isso a NF-e nao emite e o pedido fica sem nota — bloqueia ANTES de
+    # cobrar do cliente em vez de descobrir depois do pagamento.
+    if PDVPRO_API_KEY and PDVPRO_URL:
+        try:
+            ids = [int(it.get('produto_id') or 0) for it in itens
+                   if it.get('produto_id')]
+            if ids:
+                r = requests.post(
+                    PDVPRO_URL + '/api/integracao/validar-fiscal',
+                    json={'ids': ids},
+                    headers={'X-API-Key': PDVPRO_API_KEY},
+                    timeout=8)
+                if r.status_code == 200:
+                    resp = r.json() or {}
+                    if not resp.get('ok') and resp.get('problemas'):
+                        falt = []
+                        for pid, info in (resp['problemas'] or {}).items():
+                            falt.append(f"{info.get('descricao','')} "
+                                        f"(falta: {', '.join(info.get('faltando') or [])})")
+                        log.warning(f"checkout bloqueado por fiscal: {falt}")
+                        return jsonify({
+                            'erro': ('Não conseguimos emitir nota fiscal pra '
+                                     'esses produtos no momento. Por favor, '
+                                     'fale com a loja pelo WhatsApp pra '
+                                     'finalizar a compra: '
+                                     + '; '.join(falt[:3]))
+                        }), 400
+        except Exception as e:
+            log.warning(f"falha ao validar fiscal no PDV (segue): {e}")
     # Calcula totais
     subtotal = sum(float(it['preco']) * float(it['qtd']) for it in itens)
     frete = float(d.get('frete_valor') or 0)
