@@ -601,12 +601,17 @@ def init_db():
             # Retirada na loja
             'retirada_loja_ativa': '1',
             'loja_endereco_completo': 'R. Eng. Rebouças, 2053 - Cascavel/PR',
-            'loja_horario_funcionamento': 'Seg a Sex: 8h às 18h · Sáb: 9h às 13h',
+            'loja_horario_funcionamento': 'Seg a Sex: 9h às 18h · Sáb: 9h às 13h',
             'loja_tempo_separacao_min': '30',
         }
         for k, v in defaults.items():
             db_execute("""INSERT INTO site_config (chave, valor) VALUES (%s,%s)
                           ON CONFLICT (chave) DO NOTHING""", [k, v])
+        # Migração one-time: corrige horario antigo (Seg-Sex abria 8h, é 9h)
+        db_execute("UPDATE site_config SET valor=%s "
+                   "WHERE chave='loja_horario_funcionamento' "
+                   "  AND valor='Seg a Sex: 8h às 18h · Sáb: 9h às 13h'",
+                   ['Seg a Sex: 9h às 18h · Sáb: 9h às 13h'])
         # Migração one-time: tira Toledo da lista de frete-grátis antiga
         # (agora a regra é frete_fixo_cidades=Cascavel, Toledo cota no ME)
         db_execute("UPDATE site_config SET valor='' "
@@ -2605,7 +2610,7 @@ def checkout_view():
     pontos_info = None
     if cli and cli.get('cpf'):
         pontos_info = pdv_consultar_pontos(cli['cpf'])
-    return render_template('checkout.html',
+    resp = render_template('checkout.html',
                            itens=itens, subtotal=sub,
                            categorias=listar_categorias(),
                            cliente=cli,
@@ -2617,6 +2622,13 @@ def checkout_view():
                            parcela_minima=float(cfg('parcela_minima', '50')),
                            juros_parcelamento_am=float(cfg('juros_parcelamento_am', '2.49')),
                            pontos_info=pontos_info)
+    # Sem cache: garante que o cliente veja sempre a versao mais nova do
+    # checkout (sem isso, Safari/PWA pode segurar HTML antigo por horas).
+    from flask import make_response
+    r = make_response(resp)
+    r.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    r.headers['Pragma'] = 'no-cache'
+    return r
 
 
 @app.route('/api/checkout/consultar-pontos')
