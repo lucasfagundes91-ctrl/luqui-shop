@@ -2,191 +2,214 @@
 {% set pagina = 'melhorenvio' %}
 {% block titulo %}Melhor Envio — Admin{% endblock %}
 {% block conteudo %}
+<style>
+  .me-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:14px}
+  .me-header h2{margin:0}
+  .me-header .ambiente{background:#FEF3C7;color:#92400E;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase}
+  .me-header .ambiente.prod{background:#D1FAE5;color:#065F46}
+  /* Card de status grande */
+  .conexao-card{background:#fff;border-radius:14px;padding:24px;margin-bottom:18px;box-shadow:0 1px 3px rgba(0,0,0,.04);
+    position:relative;overflow:hidden}
+  .conexao-card.ok{background:linear-gradient(135deg,#F0FDF4 0%,#fff 60%);border-left:4px solid #16A34A}
+  .conexao-card.off{background:linear-gradient(135deg,#FEF3F2 0%,#fff 60%);border-left:4px solid #DC2626}
+  .conexao-grid{display:grid;grid-template-columns:auto 1fr auto;gap:24px;align-items:center}
+  .conexao-icon{width:64px;height:64px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:32px}
+  .conexao-card.ok .conexao-icon{background:#D1FAE5;color:#16A34A}
+  .conexao-card.off .conexao-icon{background:#FEE2E2;color:#DC2626}
+  .conexao-info h3{font-size:18px;margin:0 0 4px;color:#0F172A}
+  .conexao-info p{font-size:13px;color:#475569;margin:0}
+  .saldo-badge{background:#FFC700;color:#082B7A;padding:10px 18px;border-radius:10px;font-weight:900;font-size:18px;
+    box-shadow:0 2px 0 #E0A800;display:inline-flex;align-items:center;gap:6px}
+  .btn-conectar{background:linear-gradient(135deg,#1652C7,#0E3A8F);color:#fff;padding:14px 28px;border-radius:10px;
+    text-decoration:none;font-weight:800;display:inline-flex;align-items:center;gap:8px;
+    box-shadow:0 4px 12px rgba(22,82,199,.3);transition:transform .12s}
+  .btn-conectar:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(22,82,199,.4)}
+  .btn-desconectar{background:#FEE2E2;color:#991B1B;border:1px solid #FECACA;padding:8px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px}
+  .btn-desconectar:hover{background:#FECACA}
+  /* Form cards */
+  .form-card{background:#fff;border-radius:14px;padding:24px;margin-bottom:18px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  .form-card .card-titulo{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:800;margin-bottom:6px;color:#0F172A}
+  .form-card .card-sub{font-size:12.5px;color:#64748B;margin-bottom:18px;line-height:1.5}
+  .form-grid{display:grid;gap:14px}
+  .form-grid.cols-2{grid-template-columns:repeat(2,1fr)}
+  .form-grid.cols-3{grid-template-columns:2fr 1fr 1fr}
+  .form-grid.cols-4{grid-template-columns:repeat(4,1fr)}
+  .form-field label{display:block;font-size:11px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+  .form-field input{width:100%;padding:11px 13px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:14px;font-family:inherit;
+    transition:border-color .15s,box-shadow .15s;outline:none}
+  .form-field input:focus{border-color:#1652C7;box-shadow:0 0 0 3px rgba(22,82,199,.1)}
+  /* Botão salvar grande */
+  .btn-salvar{background:#FFC700;color:#082B7A;border:0;padding:14px 30px;border-radius:10px;font-weight:900;cursor:pointer;
+    font-size:14px;letter-spacing:.5px;text-transform:uppercase;box-shadow:0 4px 0 #E0A800;transition:transform .12s}
+  .btn-salvar:hover{transform:translateY(-2px);box-shadow:0 6px 0 #E0A800}
+  .btn-salvar:active{transform:translateY(2px);box-shadow:0 2px 0 #E0A800}
+  /* Alertas */
+  .alert{padding:12px 16px;border-radius:10px;margin-bottom:18px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+  .alert.success{background:#D1FAE5;color:#065F46;border-left:4px solid #16A34A}
+  .alert.info{background:#DBEAFE;color:#1E40AF;border-left:4px solid #1652C7}
+  .alert.warn{background:#FEF3C7;color:#92400E;border-left:4px solid #F59E0B}
+  .alert code{background:#fff;padding:2px 6px;border-radius:4px;font-size:12px;border:1px solid #FCD34D}
+  /* Action bar bottom */
+  .save-bar{position:sticky;bottom:0;background:linear-gradient(180deg,transparent 0%,#F8FAFC 30%,#F8FAFC 100%);
+    padding:20px 0;margin:30px -30px -30px;text-align:right;padding-right:30px}
+</style>
 
-<h2>📮 Melhor Envio</h2>
+<div class="me-header">
+  <h2>📮 Melhor Envio</h2>
+  <span class="ambiente {% if ambiente == 'prod' %}prod{% endif %}">{{ ambiente|upper }}</span>
+</div>
 
 {% if request.args.get('conectado') %}
-  <div class="card" style="background:#D1FAE5;color:#065F46;border-left:4px solid #16A34A">
-    ✓ Conectado ao Melhor Envio com sucesso!
-  </div>
+  <div class="alert success">✓ Conectado ao Melhor Envio com sucesso!</div>
 {% endif %}
 {% if request.args.get('salvo') %}
-  <div class="card" style="background:#DBEAFE;color:#1E40AF;border-left:4px solid #1652C7">
-    ✓ Dados salvos.
-  </div>
+  <div class="alert info">✓ Dados salvos com sucesso.</div>
 {% endif %}
 
-<!-- Status da conexão -->
-<div class="card">
-  <h3 style="font-size:16px;margin-bottom:10px">Conexão ({{ ambiente|upper }})</h3>
-  {% if not configurado %}
-    <p style="color:#92400E;background:#FEF3C7;padding:10px;border-radius:8px">
-      ⚠️ Configure as variáveis no Railway:<br>
+<!-- Status de conexão -->
+{% if not configurado %}
+  <div class="alert warn">
+    <span>⚠️</span>
+    <div>
+      <b>Configuração faltando.</b> Defina no Railway:
       <code>MELHOR_ENVIO_CLIENT_ID</code>, <code>MELHOR_ENVIO_CLIENT_SECRET</code>,
       <code>MELHOR_ENVIO_AMBIENTE</code> (sandbox/prod) e
       <code>MELHOR_ENVIO_REDIRECT_URI</code>.
-    </p>
-  {% elif conectado %}
-    <p>
-      <span class="pill verde">CONECTADO</span>
-      {% if saldo %}
-        — Saldo: <b>R$ {{ '%.2f'|format(saldo.balance or 0) }}</b>
-      {% endif %}
-    </p>
-    <form action="/admin/melhorenvio/desconectar" method="post" style="margin-top:10px"
-          onsubmit="return confirm('Desconectar Melhor Envio? Vai precisar reautorizar pra emitir etiquetas.')">
-      <button type="submit" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;
-              padding:8px 14px;border-radius:8px;font-weight:700;cursor:pointer">
-        Desconectar
-      </button>
-    </form>
-  {% else %}
-    <p><span class="pill cinza">DESCONECTADO</span></p>
-    <a href="/admin/melhorenvio/conectar"
-       style="display:inline-block;margin-top:10px;background:#1652C7;color:#fff;
-              padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700">
-      Conectar com Melhor Envio
-    </a>
-    <p style="margin-top:8px;font-size:12.5px;color:#64748B">
-      Vai abrir o Melhor Envio pra você autorizar o LuquiShop a cotar/emitir etiquetas.
-    </p>
-  {% endif %}
-</div>
+    </div>
+  </div>
+{% elif conectado %}
+  <div class="conexao-card ok">
+    <div class="conexao-grid">
+      <div class="conexao-icon">✓</div>
+      <div class="conexao-info">
+        <h3>Conectado ao Melhor Envio</h3>
+        <p>Etiquetas vão ser geradas automaticamente após o pagamento dos pedidos.</p>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:10px">
+        {% if saldo %}
+          <div class="saldo-badge">💰 R$ {{ '%.2f'|format(saldo.balance or 0) }}</div>
+        {% endif %}
+        <form action="/admin/melhorenvio/desconectar" method="post"
+              onsubmit="return confirm('Desconectar Melhor Envio? Vai precisar reautorizar pra emitir etiquetas.')">
+          <button type="submit" class="btn-desconectar">Desconectar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+{% else %}
+  <div class="conexao-card off">
+    <div class="conexao-grid">
+      <div class="conexao-icon">⛔</div>
+      <div class="conexao-info">
+        <h3>Desconectado</h3>
+        <p>Conecta sua conta do Melhor Envio pra começar a cotar e emitir etiquetas automaticamente.</p>
+      </div>
+      <a href="/admin/melhorenvio/conectar" class="btn-conectar">🔗 Conectar agora</a>
+    </div>
+  </div>
+{% endif %}
 
-<!-- Dados do remetente / origem -->
 <form method="post">
-<div class="card">
-  <h3 style="font-size:16px;margin-bottom:14px">Remetente / origem dos envios</h3>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-    <div>
-      <label style="font-size:12px;color:#64748B">Nome da loja</label>
-      <input name="me_remetente_nome" value="{{ cfg('me_remetente_nome') }}"
-             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+<!-- Remetente -->
+<div class="form-card">
+  <div class="card-titulo">📍 Remetente / origem dos envios</div>
+  <p class="card-sub">Esses dados aparecem na etiqueta como remetente. CEP de origem é usado pra cotar o frete.</p>
+  <div class="form-grid cols-2">
+    <div class="form-field">
+      <label>Nome da loja</label>
+      <input name="me_remetente_nome" value="{{ cfg('me_remetente_nome') }}">
     </div>
-    <div>
-      <label style="font-size:12px;color:#64748B">CNPJ (só números)</label>
-      <input name="me_remetente_cnpj" value="{{ cfg('me_remetente_cnpj') }}"
-             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    <div class="form-field">
+      <label>CNPJ (só números)</label>
+      <input name="me_remetente_cnpj" value="{{ cfg('me_remetente_cnpj') }}">
     </div>
-    <div>
-      <label style="font-size:12px;color:#64748B">Telefone</label>
-      <input name="me_remetente_telefone" value="{{ cfg('me_remetente_telefone') }}"
-             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    <div class="form-field">
+      <label>Telefone</label>
+      <input name="me_remetente_telefone" value="{{ cfg('me_remetente_telefone') }}">
     </div>
-    <div>
-      <label style="font-size:12px;color:#64748B">E-mail</label>
-      <input name="me_remetente_email" value="{{ cfg('me_remetente_email') }}"
-             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    <div class="form-field">
+      <label>E-mail</label>
+      <input name="me_remetente_email" value="{{ cfg('me_remetente_email') }}">
     </div>
-    <div>
-      <label style="font-size:12px;color:#64748B">CEP de origem</label>
-      <input name="me_cep_origem" value="{{ cfg('me_cep_origem') }}"
-             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    <div class="form-field">
+      <label>CEP de origem</label>
+      <input name="me_cep_origem" value="{{ cfg('me_cep_origem') }}">
     </div>
     <div></div>
-    <div>
-      <label style="font-size:12px;color:#64748B">Logradouro</label>
-      <input name="me_remetente_logradouro" value="{{ cfg('me_remetente_logradouro') }}"
-             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    <div class="form-field" style="grid-column:1/-1">
+      <label>Logradouro</label>
+      <input name="me_remetente_logradouro" value="{{ cfg('me_remetente_logradouro') }}">
     </div>
-    <div>
-      <label style="font-size:12px;color:#64748B">Número</label>
-      <input name="me_remetente_numero" value="{{ cfg('me_remetente_numero') }}"
-             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    <div class="form-field">
+      <label>Número</label>
+      <input name="me_remetente_numero" value="{{ cfg('me_remetente_numero') }}">
     </div>
-    <div>
-      <label style="font-size:12px;color:#64748B">Complemento</label>
-      <input name="me_remetente_complemento" value="{{ cfg('me_remetente_complemento') }}"
-             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    <div class="form-field">
+      <label>Complemento</label>
+      <input name="me_remetente_complemento" value="{{ cfg('me_remetente_complemento') }}">
     </div>
-    <div>
-      <label style="font-size:12px;color:#64748B">Bairro</label>
-      <input name="me_remetente_bairro" value="{{ cfg('me_remetente_bairro') }}"
-             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    <div class="form-field">
+      <label>Bairro</label>
+      <input name="me_remetente_bairro" value="{{ cfg('me_remetente_bairro') }}">
     </div>
-    <div>
-      <label style="font-size:12px;color:#64748B">Cidade</label>
-      <input name="me_remetente_cidade" value="{{ cfg('me_remetente_cidade') }}"
-             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    <div class="form-field">
+      <label>Cidade</label>
+      <input name="me_remetente_cidade" value="{{ cfg('me_remetente_cidade') }}">
     </div>
-    <div>
-      <label style="font-size:12px;color:#64748B">UF</label>
-      <input name="me_remetente_uf" value="{{ cfg('me_remetente_uf') }}" maxlength="2"
-             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    <div class="form-field">
+      <label>UF</label>
+      <input name="me_remetente_uf" value="{{ cfg('me_remetente_uf') }}" maxlength="2">
     </div>
   </div>
 </div>
 
-<!-- Frete local (entrega própria) -->
-<div class="card">
-  <h3 style="font-size:16px;margin-bottom:6px">🚚 Frete local (entrega própria)</h3>
-  <p style="font-size:12.5px;color:#64748B;margin-bottom:14px">
-    Cidades atendidas pela entrega da Luqui — pagam um valor FIXO no checkout
-    (em vez de cotar pelos Correios). Outras cidades cotam pelo Melhor Envio
-    normalmente.
-  </p>
-  <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px">
-    <div>
-      <label style="font-size:12px;color:#64748B">Cidades atendidas (separe por vírgula)</label>
-      <input name="frete_fixo_cidades" value="{{ cfg('frete_fixo_cidades') or 'Cascavel' }}"
-             placeholder="Ex: Cascavel, Cascavel Velho"
-             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+<!-- Frete local -->
+<div class="form-card">
+  <div class="card-titulo">🚚 Entrega Luqui (frete local)</div>
+  <p class="card-sub">Cidades atendidas pela entrega própria — pagam valor FIXO no checkout em vez de cotar pelos Correios. Outras cidades vão cotar pelo Melhor Envio normalmente.</p>
+  <div class="form-grid cols-3">
+    <div class="form-field">
+      <label>Cidades atendidas (separe por vírgula)</label>
+      <input name="frete_fixo_cidades" value="{{ cfg('frete_fixo_cidades') or 'Cascavel' }}" placeholder="Ex: Cascavel, Cascavel Velho">
     </div>
-    <div>
-      <label style="font-size:12px;color:#64748B">UF</label>
-      <input name="frete_fixo_uf" value="{{ cfg('frete_fixo_uf') or 'PR' }}" maxlength="2"
-             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    <div class="form-field">
+      <label>UF</label>
+      <input name="frete_fixo_uf" value="{{ cfg('frete_fixo_uf') or 'PR' }}" maxlength="2">
     </div>
-    <div>
-      <label style="font-size:12px;color:#64748B">Valor fixo (R$)</label>
-      <input name="frete_fixo_cascavel" type="number" step="0.01" min="0"
-             value="{{ cfg('frete_fixo_cascavel') or '10' }}"
-             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    <div class="form-field">
+      <label>Valor fixo (R$)</label>
+      <input name="frete_fixo_cascavel" type="number" step="0.01" min="0" value="{{ cfg('frete_fixo_cascavel') or '10' }}">
     </div>
   </div>
 </div>
 
-<!-- Caixa padrão / fallback -->
-<div class="card">
-  <h3 style="font-size:16px;margin-bottom:6px">Caixa "fallback"</h3>
-  <p style="font-size:12.5px;color:#64748B;margin-bottom:14px">
-    Usada na cotação quando o produto não tem dimensão cadastrada.
-  </p>
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
-    <div>
-      <label style="font-size:12px;color:#64748B">Largura (cm)</label>
-      <input name="me_caixa_padrao_largura" type="number" step="0.1"
-             value="{{ cfg('me_caixa_padrao_largura') }}"
-             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+<!-- Caixa padrão -->
+<div class="form-card">
+  <div class="card-titulo">📦 Caixa padrão (fallback)</div>
+  <p class="card-sub">Dimensão usada quando um produto não tem medida cadastrada. Quanto mais perto da realidade, mais preciso o frete cotado.</p>
+  <div class="form-grid cols-4">
+    <div class="form-field">
+      <label>Largura (cm)</label>
+      <input name="me_caixa_padrao_largura" type="number" step="0.1" value="{{ cfg('me_caixa_padrao_largura') }}">
     </div>
-    <div>
-      <label style="font-size:12px;color:#64748B">Altura (cm)</label>
-      <input name="me_caixa_padrao_altura" type="number" step="0.1"
-             value="{{ cfg('me_caixa_padrao_altura') }}"
-             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    <div class="form-field">
+      <label>Altura (cm)</label>
+      <input name="me_caixa_padrao_altura" type="number" step="0.1" value="{{ cfg('me_caixa_padrao_altura') }}">
     </div>
-    <div>
-      <label style="font-size:12px;color:#64748B">Comprimento (cm)</label>
-      <input name="me_caixa_padrao_comprimento" type="number" step="0.1"
-             value="{{ cfg('me_caixa_padrao_comprimento') }}"
-             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    <div class="form-field">
+      <label>Comprimento (cm)</label>
+      <input name="me_caixa_padrao_comprimento" type="number" step="0.1" value="{{ cfg('me_caixa_padrao_comprimento') }}">
     </div>
-    <div>
-      <label style="font-size:12px;color:#64748B">Peso (kg)</label>
-      <input name="me_caixa_padrao_peso_kg" type="number" step="0.01"
-             value="{{ cfg('me_caixa_padrao_peso_kg') }}"
-             style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px">
+    <div class="form-field">
+      <label>Peso (kg)</label>
+      <input name="me_caixa_padrao_peso_kg" type="number" step="0.01" value="{{ cfg('me_caixa_padrao_peso_kg') }}">
     </div>
   </div>
 </div>
 
-<div style="margin-bottom:30px">
-  <button type="submit"
-          style="background:#1652C7;color:#fff;border:0;padding:11px 22px;
-                 border-radius:8px;font-weight:700;cursor:pointer">
-    Salvar configurações
-  </button>
+<div class="save-bar">
+  <button type="submit" class="btn-salvar">💾 Salvar configurações</button>
 </div>
 </form>
 
