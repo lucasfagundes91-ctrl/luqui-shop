@@ -202,12 +202,6 @@
           </div>
         </div>
       </div>
-      <!-- FRETE — só aparece se modo_entrega=entrega + CEP preenchido -->
-      <div id="bloco-frete" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px;display:none">
-        <h3 style="margin-bottom:16px">📦 Escolha o serviço de entrega</h3>
-        <div id="opcoes-frete"><div class="sub" style="font-size:13px;padding:8px 0">Preencha seu endereço pra calcular o frete...</div></div>
-      </div>
-
       <!-- ENDEREÇO — só aparece quando cliente escolhe Receber em casa -->
       <div id="bloco-endereco" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px;display:none">
         <h3 style="margin-bottom:16px">📍 Endereço de entrega</h3>
@@ -235,6 +229,12 @@
                  value="{{ (cliente.uf if cliente else '') or '' }}"
                  style="padding:12px;border:1px solid var(--linha);border-radius:8px;background:#F8FAFC">
         </div>
+      </div>
+
+      <!-- FRETE — só aparece se modo_entrega=entrega + CEP preenchido -->
+      <div id="bloco-frete" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px;display:none">
+        <h3 style="margin-bottom:16px">📦 Escolha o serviço de entrega</h3>
+        <div id="opcoes-frete"><div class="sub" style="font-size:13px;padding:8px 0">Preencha o CEP pra calcular o frete...</div></div>
       </div>
 
       <!-- PAPEL DE PRESENTE -->
