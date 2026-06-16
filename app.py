@@ -2265,11 +2265,73 @@ def pag_termos():
 
 @app.route('/robots.txt')
 def robots_txt():
-    txt = """User-agent: *
+    # Bloqueia AI scrapers (treinam LLM, não trazem cliente) e SEO scrapers
+    # de concorrente (Ahrefs/Semrush/etc). Os bots de busca legítimos
+    # (Googlebot/Bingbot/Applebot) continuam livres.
+    txt = """# AI Crawlers — bloqueados (treinam LLM, não trazem cliente)
+User-agent: GPTBot
+Disallow: /
+User-agent: ChatGPT-User
+Disallow: /
+User-agent: OAI-SearchBot
+Disallow: /
+User-agent: ClaudeBot
+Disallow: /
+User-agent: anthropic-ai
+Disallow: /
+User-agent: PerplexityBot
+Disallow: /
+User-agent: Perplexity-User
+Disallow: /
+User-agent: Google-Extended
+Disallow: /
+User-agent: Applebot-Extended
+Disallow: /
+User-agent: meta-externalagent
+Disallow: /
+User-agent: meta-externalfetcher
+Disallow: /
+User-agent: FacebookBot
+Disallow: /
+User-agent: Amazonbot
+Disallow: /
+User-agent: cohere-ai
+Disallow: /
+User-agent: Bytespider
+Disallow: /
+User-agent: CCBot
+Disallow: /
+User-agent: Diffbot
+Disallow: /
+User-agent: Omgilibot
+Disallow: /
+User-agent: Omgili
+Disallow: /
+
+# SEO scrapers de concorrente
+User-agent: AhrefsBot
+Disallow: /
+User-agent: SemrushBot
+Disallow: /
+User-agent: MJ12bot
+Disallow: /
+User-agent: DotBot
+Disallow: /
+User-agent: BLEXBot
+Disallow: /
+User-agent: PetalBot
+Disallow: /
+User-agent: YandexBot
+Disallow: /
+
+# Regras gerais — buscas legítimas (Google/Bing/Apple) seguem indexando
+User-agent: *
 Allow: /
 Disallow: /admin
 Disallow: /api/
 Disallow: /pedido/
+Disallow: /produtos?
+Crawl-delay: 5
 
 Sitemap: https://www.luquibrinquedos.com.br/sitemap.xml
 """
