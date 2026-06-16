@@ -550,19 +550,34 @@ async function buscarFrete(){
     freteCalculado = false;
     return;
   }
-  box.innerHTML = ops.map((o,i)=>{
+  // Separa em 2 grupos: Entrega Luqui (local) + Correios/Transportadora (ME)
+  const grupoLocal = ops.filter(o=>o.id==='LOCAL');
+  const grupoME    = ops.filter(o=>o.id!=='LOCAL');
+  if(grupoLocal.length) SLOTS_LOCAL = grupoLocal[0].agendamento || [];
+  // Marca a 1a opcao como checked (prefere Entrega Luqui se tiver, senao 1a ME)
+  let idxGlobal = 0;
+  const renderOp = (o,i,first)=>{
     const isLocal = o.id === 'LOCAL';
-    if(isLocal) SLOTS_LOCAL = o.agendamento || [];
     const prazoTexto = isLocal && SLOTS_LOCAL.length ? '📅 Agendar entrega' : o.prazo;
     return `
     <label style="display:flex;justify-content:space-between;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-bottom:8px;cursor:pointer">
       <span>
-        <input type="radio" name="frete_servico" value="${o.servico}" data-valor="${o.valor}" data-id="${o.id||''}" ${i===0?'checked':''} onchange="aoTrocarFrete()" style="margin-right:8px">
+        <input type="radio" name="frete_servico" value="${o.servico}" data-valor="${o.valor}" data-id="${o.id||''}" ${first?'checked':''} onchange="aoTrocarFrete()" style="margin-right:8px">
         <b>${o.servico}</b><br><span style="font-size:12px;color:var(--mut);margin-left:24px">${prazoTexto}</span>
       </span>
       <b style="color:${o.valor===0?'var(--verde)':'var(--txt)'}">${o.valor===0?'GRÁTIS':'R$ '+o.valor.toFixed(2).replace('.',',')}</b>
     </label>`;
-  }).join('');
+  };
+  let html = '';
+  if(grupoLocal.length){
+    html += '<div style="font-size:11px;font-weight:800;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin:4px 0 6px 4px">🚚 Entrega da loja</div>';
+    grupoLocal.forEach((o,i)=>{ html += renderOp(o,i, idxGlobal===0); idxGlobal++; });
+  }
+  if(grupoME.length){
+    html += '<div style="font-size:11px;font-weight:800;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px 4px">📮 Correios / Transportadora</div>';
+    grupoME.forEach((o,i)=>{ html += renderOp(o,i, idxGlobal===0); idxGlobal++; });
+  }
+  box.innerHTML = html;
   // Bloco do select de horario (LOCAL = entrega Luqui na cidade)
   box.innerHTML += `<div id="bloco-agendamento" style="display:none;margin:-4px 0 12px 24px;padding:12px;background:#F8FAFC;border-radius:8px">
     <label style="font-size:12px;color:var(--mut);font-weight:700;display:block;margin-bottom:6px">⏰ ESCOLHA O HORÁRIO DE ENTREGA</label>
