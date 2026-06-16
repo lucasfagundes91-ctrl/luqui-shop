@@ -16,7 +16,10 @@
             <td><b>{{ rs(p.total) }}</b><br><span style="font-size:11px;color:#64748B">{{ p.forma_pagto }}</span></td>
             <td><span class="pill {{ 'verde' if p.status in ('pago','entregue') else 'amarelo' if p.status == 'aguardando_pagto' else 'azul' }}">{{ p.status }}</span></td>
             <td>
-              {% if p.melhorenvio_etiqueta_url %}
+              {% set is_retira = (p.frete_servico or '').lower().startswith('retirar') %}
+              {% if is_retira %}
+                <span style="color:#16a34a;font-size:12px;font-weight:600">🏪 Retirada na loja</span>
+              {% elif p.melhorenvio_etiqueta_url %}
                 <a href="{{ p.melhorenvio_etiqueta_url }}" target="_blank"
                    style="background:#0E3D9E;color:#fff;padding:5px 10px;border-radius:6px;text-decoration:none;font-size:12px">📄 PDF</a>
                 {% if p.melhorenvio_rastreio %}
