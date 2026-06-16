@@ -4417,21 +4417,26 @@ def admin_pagina_restaurar(slug):
 @requer_admin
 def admin_home():
     pedidos_recentes = db_execute(
-        "SELECT * FROM pedidos ORDER BY criado_em DESC LIMIT 20",
+        "SELECT * FROM pedidos ORDER BY criado_em DESC LIMIT 10",
         fetch='all') or []
     assinaturas_ativas = db_execute(
         """SELECT a.*, p.nome AS plano_nome, c.nome AS cliente_nome
            FROM clube_assinaturas a
            JOIN clube_planos p ON p.id=a.plano_id
            JOIN clientes_site c ON c.id=a.cliente_id
-           WHERE a.status='ativa' ORDER BY a.proximo_envio""",
+           WHERE a.status='ativa' ORDER BY a.proximo_envio LIMIT 10""",
         fetch='all') or []
     stats = db_execute(
         """SELECT
-              (SELECT COUNT(*) FROM pedidos) AS pedidos_total,
+              (SELECT COUNT(*) FROM pedidos WHERE status NOT IN ('cancelado')) AS pedidos_total,
               (SELECT COUNT(*) FROM pedidos WHERE status='pago') AS pedidos_pagos,
+              (SELECT COUNT(*) FROM pedidos WHERE status='aguardando_pagto') AS pedidos_aguardando,
+              (SELECT COUNT(*) FROM pedidos WHERE status='pago' AND pdv_venda_id IS NULL) AS pedidos_sem_pdv,
               (SELECT COUNT(*) FROM clientes_site) AS clientes,
-              (SELECT COUNT(*) FROM clube_assinaturas WHERE status='ativa') AS assinantes
+              (SELECT COUNT(*) FROM clientes_site WHERE criado_em > NOW() - INTERVAL '30 days') AS clientes_30d,
+              (SELECT COUNT(*) FROM clube_assinaturas WHERE status='ativa') AS assinantes,
+              (SELECT COALESCE(SUM(total),0) FROM pedidos WHERE status NOT IN ('cancelado','aguardando_pagto')) AS receita_total,
+              (SELECT COALESCE(SUM(total),0) FROM pedidos WHERE status NOT IN ('cancelado','aguardando_pagto') AND criado_em > NOW() - INTERVAL '30 days') AS receita_30d
         """, fetch='one') or {}
     return render_template('admin_home.html',
                            pedidos=pedidos_recentes,

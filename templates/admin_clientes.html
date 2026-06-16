@@ -2,43 +2,95 @@
 {% set pagina = 'clientes' %}
 {% block titulo %}Clientes — LuquiShop{% endblock %}
 {% block conteudo %}
-<h2>👥 Clientes ({{ clientes|length }})</h2>
+<style>
+  .head-cli{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:14px}
+  .head-cli h2{margin:0}
+  .head-cli .total{background:#1652C7;color:#fff;padding:4px 14px;border-radius:20px;font-size:13px;font-weight:800}
+  .busca-card{background:#fff;padding:14px;border-radius:12px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  .busca-card input{width:100%;padding:11px 16px;border:1.5px solid #E2E8F0;border-radius:24px;font-size:14px;font-family:inherit;outline:none;transition:border-color .15s}
+  .busca-card input:focus{border-color:#1652C7;box-shadow:0 0 0 3px rgba(22,82,199,.1)}
+  /* Tabela como cards */
+  .tab-cli{width:100%;border-collapse:separate;border-spacing:0 8px;font-size:13px}
+  .tab-cli thead th{text-align:left;font-size:10px;text-transform:uppercase;color:#64748B;letter-spacing:.5px;font-weight:800;padding:0 14px 6px}
+  .tab-cli tbody tr{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04);transition:transform .12s}
+  .tab-cli tbody tr:hover{transform:translateX(2px);box-shadow:0 2px 6px rgba(22,82,199,.08)}
+  .tab-cli td{padding:14px;vertical-align:middle;border-top:none;border-bottom:none}
+  .tab-cli td:first-child{border-radius:10px 0 0 10px}
+  .tab-cli td:last-child{border-radius:0 10px 10px 0}
+  .nome-cli{font-weight:700;color:#0F172A}
+  .sub-cli{font-size:11px;color:#64748B;margin-top:2px}
+  .qtd-pedidos{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:28px;
+    background:#DBEAFE;color:#1E40AF;border-radius:6px;font-size:13px;font-weight:800;padding:0 8px}
+  .qtd-pedidos.zero{background:#F1F5F9;color:#94A3B8}
+  .valor-gasto{font-weight:800;color:#16A34A;font-size:13px}
+  .valor-gasto.zero{color:#94A3B8}
+  .pill{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.3px}
+  .pill.amarelo{background:#FEF3C7;color:#92400E}
+  .pill.verde{background:#D1FAE5;color:#065F46}
+  .btn-wa{background:#16A34A;color:#fff;text-decoration:none;padding:7px 12px;border-radius:8px;font-size:12px;
+    font-weight:700;display:inline-flex;align-items:center;gap:5px;transition:transform .12s}
+  .btn-wa:hover{transform:translateY(-1px);background:#15803D}
+  .vazio{text-align:center;padding:60px 20px;color:#94A3B8;background:#fff;border-radius:14px}
+  .vazio .emoji{font-size:48px;margin-bottom:14px}
+</style>
 
-<div class="card">
-  {% if clientes %}
-  <input id="busca-cliente" type="search" placeholder="Buscar por nome/email/cidade..."
-         oninput="filtrar(this.value)"
-         style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-bottom:14px">
-  <table id="tabela-clientes">
-    <thead><tr>
-      <th>Cliente</th><th>Localização</th><th>Pedidos</th><th>Total gasto</th>
-      <th>Último pedido</th><th>Clube</th><th>Cadastro</th><th></th>
-    </tr></thead>
+<div class="head-cli">
+  <h2>👥 Clientes</h2>
+  <span class="total">{{ clientes|length }} cadastrados</span>
+</div>
+
+{% if clientes %}
+  <div class="busca-card">
+    <input id="busca-cliente" type="search"
+           placeholder="🔎 Buscar por nome, e-mail, telefone ou cidade..."
+           oninput="filtrar(this.value)">
+  </div>
+
+  <table class="tab-cli" id="tabela-clientes">
+    <thead>
+      <tr>
+        <th>Cliente</th>
+        <th>Localização</th>
+        <th>Pedidos</th>
+        <th>Total gasto</th>
+        <th>Último pedido</th>
+        <th>Clube</th>
+        <th>Cadastro</th>
+        <th></th>
+      </tr>
+    </thead>
     <tbody>
       {% for c in clientes %}
       <tr>
         <td>
-          <b>{{ c.nome }}</b>
-          <div style="font-size:11px;color:#64748B">{{ c.email }}<br>{{ c.telefone or '—' }}</div>
+          <div class="nome-cli">{{ c.nome }}</div>
+          <div class="sub-cli">📧 {{ c.email }}{% if c.telefone %} · 📞 {{ c.telefone }}{% endif %}</div>
         </td>
         <td>{{ c.cidade or '—' }}{% if c.uf %}/{{ c.uf }}{% endif %}</td>
-        <td><b>{{ c.qtd_pedidos }}</b></td>
-        <td><b style="color:#16A34A">{{ rs(c.total_gasto) }}</b></td>
-        <td>{{ c.ultimo_pedido.strftime('%d/%m/%Y') if c.ultimo_pedido else '—' }}</td>
-        <td>{% if c.assinatura_ativa %}<span class="pill amarelo">🎁 ativo</span>{% else %}—{% endif %}</td>
-        <td><small>{{ c.criado_em.strftime('%d/%m/%Y') if c.criado_em else '—' }}</small></td>
         <td>
-          <a href="https://wa.me/55{{ c.telefone|replace(' ','')|replace('(','')|replace(')','')|replace('-','') if c.telefone else '' }}"
-             target="_blank" class="pill verde" style="text-decoration:none">💬 WA</a>
+          <span class="qtd-pedidos {% if not c.qtd_pedidos %}zero{% endif %}">{{ c.qtd_pedidos }}</span>
+        </td>
+        <td><span class="valor-gasto {% if not c.total_gasto %}zero{% endif %}">{{ rs(c.total_gasto) }}</span></td>
+        <td style="font-size:12px;color:#475569">{{ c.ultimo_pedido.strftime('%d/%m/%Y') if c.ultimo_pedido else '—' }}</td>
+        <td>{% if c.assinatura_ativa %}<span class="pill amarelo">🎁 Ativo</span>{% else %}<span style="color:#94A3B8;font-size:12px">—</span>{% endif %}</td>
+        <td style="font-size:12px;color:#475569">{{ c.criado_em.strftime('%d/%m/%Y') if c.criado_em else '—' }}</td>
+        <td>
+          {% if c.telefone %}
+            <a href="https://wa.me/55{{ c.telefone|replace(' ','')|replace('(','')|replace(')','')|replace('-','') }}"
+               target="_blank" class="btn-wa">💬 WhatsApp</a>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
-  {% else %}
-  <p style="color:#64748B">Nenhum cliente cadastrado ainda.</p>
-  {% endif %}
-</div>
+{% else %}
+  <div class="vazio">
+    <div class="emoji">👤</div>
+    <h3 style="color:#475569;margin-bottom:8px">Nenhum cliente cadastrado ainda</h3>
+    <p>Quando alguém se cadastrar no site ou fizer uma compra, aparece aqui.</p>
+  </div>
+{% endif %}
 
 <script>
 function filtrar(q){

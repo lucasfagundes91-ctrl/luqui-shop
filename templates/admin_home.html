@@ -1,54 +1,160 @@
 {% extends "admin_base.html" %}
 {% set pagina = 'home' %}
 {% block conteudo %}
-<h2>📊 Dashboard</h2>
-<div class="stat">
-  <div class="c azul"><div class="lbl">Pedidos total</div><div class="val">{{ stats.pedidos_total or 0 }}</div></div>
-  <div class="c verde"><div class="lbl">Pedidos pagos</div><div class="val">{{ stats.pedidos_pagos or 0 }}</div></div>
-  <div class="c amarelo"><div class="lbl">Clientes</div><div class="val">{{ stats.clientes or 0 }}</div></div>
-  <div class="c"><div class="lbl">Assinantes ativos</div><div class="val" style="color:#3FA89C">{{ stats.assinantes or 0 }}</div></div>
+<style>
+  /* Dashboard hero */
+  .hero{background:linear-gradient(135deg,#1652C7 0%,#0E3A8F 100%);color:#fff;padding:28px 32px;border-radius:16px;margin-bottom:22px;
+    box-shadow:0 8px 24px rgba(22,82,199,.2);position:relative;overflow:hidden}
+  .hero::before{content:'';position:absolute;right:-40px;top:-40px;width:200px;height:200px;background:#FFC700;opacity:.12;border-radius:50%}
+  .hero::after{content:'';position:absolute;right:60px;bottom:-80px;width:140px;height:140px;background:#fff;opacity:.06;border-radius:50%}
+  .hero h2{font-size:24px;margin:0 0 4px;color:#fff}
+  .hero p{font-size:14px;color:#DBEAFE;margin:0}
+  .hero .agora{font-size:12px;color:#93C5FD;margin-top:8px}
+  /* Stat cards melhorados */
+  .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:22px}
+  .stat-row .c{background:#fff;padding:18px 20px;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.04);
+    position:relative;overflow:hidden;transition:transform .15s}
+  .stat-row .c:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.08)}
+  .stat-row .c .ico{position:absolute;right:14px;top:14px;font-size:22px;opacity:.18}
+  .stat-row .c .lbl{font-size:10px;text-transform:uppercase;color:#64748B;letter-spacing:.6px;font-weight:800}
+  .stat-row .c .val{font-size:26px;font-weight:900;margin-top:4px;color:#0F172A}
+  .stat-row .c .sub{font-size:11px;color:#64748B;margin-top:4px;font-weight:600}
+  .stat-row .c .sub.up{color:#16A34A}
+  .stat-row .c.azul{border-left:4px solid #1652C7}
+  .stat-row .c.azul .val{color:#1652C7}
+  .stat-row .c.verde{border-left:4px solid #16A34A}
+  .stat-row .c.verde .val{color:#16A34A}
+  .stat-row .c.amarelo{border-left:4px solid #FFC700}
+  .stat-row .c.amarelo .val{color:#E0A800}
+  .stat-row .c.alerta{border-left:4px solid #DC2626}
+  .stat-row .c.alerta .val{color:#DC2626}
+  /* Section cards */
+  .section{background:#fff;border-radius:14px;padding:24px;margin-bottom:18px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  .section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px}
+  .section-head h3{font-size:16px;margin:0;color:#0F172A;font-weight:800}
+  .section-head .ver-todos{font-size:12px;color:#1652C7;text-decoration:none;font-weight:700}
+  .section-head .ver-todos:hover{text-decoration:underline}
+  /* Tabela limpa */
+  .tab-clean{width:100%;border-collapse:collapse;font-size:13px}
+  .tab-clean th{text-align:left;font-size:10px;text-transform:uppercase;color:#64748B;letter-spacing:.5px;font-weight:800;
+    padding:8px 12px;border-bottom:1px solid #E2E8F0}
+  .tab-clean td{padding:12px;border-bottom:1px solid #F1F5F9}
+  .tab-clean tr:last-child td{border-bottom:0}
+  .tab-clean tr:hover{background:#F8FAFC}
+  .vazio{text-align:center;padding:30px 20px;color:#94A3B8}
+  /* Pill (usa o do admin_base mas reforça) */
+  .pill{display:inline-block;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px}
+  .pill.amarelo{background:#FEF3C7;color:#92400E}
+  .pill.verde{background:#D1FAE5;color:#065F46}
+  .pill.azul{background:#DBEAFE;color:#1E40AF}
+  .pill.cinza{background:#E2E8F0;color:#475569}
+  .pill.vermelho{background:#FEE2E2;color:#991B1B}
+</style>
+
+<div class="hero">
+  <h2>📊 Dashboard Luqui Brinquedos</h2>
+  <p>Acompanha aqui o resumo da loja, pedidos do dia e assinantes do clube.</p>
+  <div class="agora">{{ rs(stats.receita_30d or 0) }} faturado nos últimos 30 dias</div>
 </div>
 
-<div class="card">
-  <h3 style="margin-bottom:14px">🛒 Últimos pedidos</h3>
+<div class="stat-row">
+  <div class="c azul">
+    <div class="ico">🛒</div>
+    <div class="lbl">Pedidos total</div>
+    <div class="val">{{ stats.pedidos_total or 0 }}</div>
+  </div>
+  <div class="c verde">
+    <div class="ico">💰</div>
+    <div class="lbl">Pagos confirmados</div>
+    <div class="val">{{ stats.pedidos_pagos or 0 }}</div>
+  </div>
+  {% if stats.pedidos_aguardando %}
+  <div class="c amarelo">
+    <div class="ico">⏳</div>
+    <div class="lbl">Aguardando pagto</div>
+    <div class="val">{{ stats.pedidos_aguardando }}</div>
+  </div>
+  {% endif %}
+  {% if stats.pedidos_sem_pdv %}
+  <div class="c alerta">
+    <div class="ico">⚠️</div>
+    <div class="lbl">Pagos s/ PDV</div>
+    <div class="val">{{ stats.pedidos_sem_pdv }}</div>
+    <div class="sub">Reconciliação em retry</div>
+  </div>
+  {% endif %}
+  <div class="c azul">
+    <div class="ico">👥</div>
+    <div class="lbl">Clientes</div>
+    <div class="val">{{ stats.clientes or 0 }}</div>
+    {% if stats.clientes_30d %}<div class="sub up">+{{ stats.clientes_30d }} em 30d</div>{% endif %}
+  </div>
+  <div class="c amarelo">
+    <div class="ico">🎁</div>
+    <div class="lbl">Assinantes clube</div>
+    <div class="val">{{ stats.assinantes or 0 }}</div>
+  </div>
+  <div class="c verde">
+    <div class="ico">📈</div>
+    <div class="lbl">Receita total</div>
+    <div class="val" style="font-size:18px">{{ rs(stats.receita_total or 0) }}</div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-head">
+    <h3>🛒 Últimos pedidos</h3>
+    <a href="/admin/pedidos" class="ver-todos">Ver todos →</a>
+  </div>
   {% if pedidos %}
-    <table>
+    <table class="tab-clean">
       <thead><tr><th>#</th><th>Cliente</th><th>Data</th><th>Total</th><th>Status</th></tr></thead>
       <tbody>
         {% for p in pedidos %}
           <tr>
-            <td><b>#{{ p.id }}</b></td>
-            <td>{{ p.nome or '—' }}</td>
-            <td>{{ p.criado_em.strftime('%d/%m %H:%M') if p.criado_em else '—' }}</td>
+            <td><b style="color:#1652C7">#{{ p.id }}</b></td>
+            <td>{{ p.nome or '—' }}<div style="font-size:11px;color:#64748B">{{ p.cidade }}{% if p.uf %}/{{ p.uf }}{% endif %}</div></td>
+            <td style="font-size:12px;color:#475569">{{ p.criado_em.strftime('%d/%m %H:%M') if p.criado_em else '—' }}</td>
             <td><b>{{ rs(p.total) }}</b></td>
-            <td><span class="pill {{ 'verde' if p.status == 'pago' else 'amarelo' }}">{{ p.status }}</span></td>
+            <td>
+              {% if p.status == 'pago' %}<span class="pill verde">💰 Pago</span>
+              {% elif p.status == 'aguardando_pagto' %}<span class="pill amarelo">⏳ Aguardando</span>
+              {% elif p.status == 'preparando' %}<span class="pill azul">📦 Preparando</span>
+              {% elif p.status == 'enviado' %}<span class="pill azul">🚚 Enviado</span>
+              {% elif p.status == 'entregue' %}<span class="pill verde">✓ Entregue</span>
+              {% elif p.status == 'cancelado' %}<span class="pill vermelho">❌ Cancelado</span>
+              {% else %}<span class="pill cinza">{{ p.status }}</span>{% endif %}
+            </td>
           </tr>
         {% endfor %}
       </tbody>
     </table>
   {% else %}
-    <p style="color:#64748B">Nenhum pedido ainda.</p>
+    <div class="vazio">📭 Nenhum pedido ainda. Quando alguém comprar, aparece aqui.</div>
   {% endif %}
 </div>
 
-<div class="card">
-  <h3 style="margin-bottom:14px">🎁 Assinaturas ativas</h3>
+<div class="section">
+  <div class="section-head">
+    <h3>🎁 Assinaturas ativas do clube</h3>
+    <a href="/admin/assinantes" class="ver-todos">Ver todos →</a>
+  </div>
   {% if assinaturas %}
-    <table>
+    <table class="tab-clean">
       <thead><tr><th>Cliente</th><th>Plano</th><th>Próximo envio</th><th>Status</th></tr></thead>
       <tbody>
         {% for a in assinaturas %}
           <tr>
-            <td>{{ a.cliente_nome }}</td>
+            <td><b>{{ a.cliente_nome }}</b></td>
             <td>{{ a.plano_nome }}</td>
-            <td>{{ a.proximo_envio.strftime('%d/%m/%Y') if a.proximo_envio else '—' }}</td>
+            <td style="font-size:12px;color:#475569">{{ a.proximo_envio.strftime('%d/%m/%Y') if a.proximo_envio else '—' }}</td>
             <td><span class="pill verde">{{ a.status }}</span></td>
           </tr>
         {% endfor %}
       </tbody>
     </table>
   {% else %}
-    <p style="color:#64748B">Nenhuma assinatura ativa ainda.</p>
+    <div class="vazio">📦 Nenhuma assinatura ativa ainda. Os planos do clube ficam em <a href="/admin/planos" style="color:#1652C7">Planos do clube</a>.</div>
   {% endif %}
 </div>
 {% endblock %}
