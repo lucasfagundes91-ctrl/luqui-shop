@@ -1119,8 +1119,7 @@ def admin_pedido_cotar(pid):
 
 def _admin_ou_api_key():
     """Permite admin logado OU X-API-Key do PDV Pro."""
-    from flask import session
-    if session.get('admin'):
+    if admin_logado():
         return True
     return _verifica_api_key_pdv()
 
