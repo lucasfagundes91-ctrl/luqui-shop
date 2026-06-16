@@ -865,6 +865,8 @@ def me_cotar(cep_destino, itens):
             'prazo':    f"{opt.get('delivery_time') or '?'} dias úteis",
             'company':  opt.get('company', {}).get('name', ''),
         })
+    # Ordena por preço crescente (mais barato primeiro). Empate: prazo menor.
+    out.sort(key=lambda o: (o['valor'], o.get('prazo', '')))
     return out
 
 

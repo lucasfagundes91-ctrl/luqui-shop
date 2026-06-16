@@ -554,16 +554,27 @@ async function buscarFrete(){
   const grupoLocal = ops.filter(o=>o.id==='LOCAL');
   const grupoME    = ops.filter(o=>o.id!=='LOCAL');
   if(grupoLocal.length) SLOTS_LOCAL = grupoLocal[0].agendamento || [];
+  // Ordena ME por preço crescente (backend já ordena, mas garante no front)
+  grupoME.sort((a,b)=> (a.valor||0) - (b.valor||0));
+  // Acha o ID da opção MAIS BARATA (do grupo ME ou geral) pra destacar
+  const todasParaComparar = grupoME.filter(o=>o.valor>0);
+  const maisBarata = todasParaComparar.length ? todasParaComparar[0] : null;
   // Marca a 1a opcao como checked (prefere Entrega Luqui se tiver, senao 1a ME)
   let idxGlobal = 0;
   const renderOp = (o,i,first)=>{
     const isLocal = o.id === 'LOCAL';
     const prazoTexto = isLocal && SLOTS_LOCAL.length ? '📅 Agendar entrega' : o.prazo;
+    const isMaisBarato = maisBarata && o.servico === maisBarata.servico && o.id === maisBarata.id;
+    const badge = isMaisBarato
+      ? '<span style="display:inline-block;background:#16a34a;color:#fff;font-size:10px;font-weight:800;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle">✨ MAIS BARATO</span>'
+      : '';
+    const borderColor = isMaisBarato ? '#16a34a' : 'var(--linha)';
+    const bgColor     = isMaisBarato ? '#F0FDF4' : '#fff';
     return `
-    <label style="display:flex;justify-content:space-between;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-bottom:8px;cursor:pointer">
+    <label style="display:flex;justify-content:space-between;padding:12px;border:1px solid ${borderColor};background:${bgColor};border-radius:8px;margin-bottom:8px;cursor:pointer">
       <span>
         <input type="radio" name="frete_servico" value="${o.servico}" data-valor="${o.valor}" data-id="${o.id||''}" ${first?'checked':''} onchange="aoTrocarFrete()" style="margin-right:8px">
-        <b>${o.servico}</b><br><span style="font-size:12px;color:var(--mut);margin-left:24px">${prazoTexto}</span>
+        <b>${o.servico}</b>${badge}<br><span style="font-size:12px;color:var(--mut);margin-left:24px">${prazoTexto}</span>
       </span>
       <b style="color:${o.valor===0?'var(--verde)':'var(--txt)'}">${o.valor===0?'GRÁTIS':'R$ '+o.valor.toFixed(2).replace('.',',')}</b>
     </label>`;
@@ -574,7 +585,7 @@ async function buscarFrete(){
     grupoLocal.forEach((o,i)=>{ html += renderOp(o,i, idxGlobal===0); idxGlobal++; });
   }
   if(grupoME.length){
-    html += '<div style="font-size:11px;font-weight:800;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px 4px">📮 Correios / Transportadora</div>';
+    html += '<div style="font-size:11px;font-weight:800;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px 4px">📮 Correios / Transportadora <span style="font-weight:500;text-transform:none;font-size:11px">(do mais barato pro mais caro)</span></div>';
     grupoME.forEach((o,i)=>{ html += renderOp(o,i, idxGlobal===0); idxGlobal++; });
   }
   box.innerHTML = html;
