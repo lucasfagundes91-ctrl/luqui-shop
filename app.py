@@ -333,6 +333,10 @@ def init_db():
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS aceito_por VARCHAR(80)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pronto_em TIMESTAMPTZ",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pdv_cliente_id INT",  # vinculo permanente
+        # Reconciliacao: contador + ultima tentativa de POST pro PDV Pro
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pdv_tentativas INT DEFAULT 0",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pdv_ultima_tentativa TIMESTAMPTZ",
+        "CREATE INDEX IF NOT EXISTS idx_pedidos_pdv_pendente ON pedidos(pago_em) WHERE status='pago' AND pdv_venda_id IS NULL",
         # Cliente site → cliente loja física (mesmo CPF = mesma pessoa)
         "ALTER TABLE clientes_site ADD COLUMN IF NOT EXISTS pdv_cliente_id INT",
         "CREATE INDEX IF NOT EXISTS idx_pedidos_fila_caixa ON pedidos(status, aceito_em) WHERE status='pago' AND aceito_em IS NULL",
@@ -5583,6 +5587,119 @@ def pedido_status(pid):
                     'pago_em': p['pago_em'].isoformat() if p['pago_em'] else None})
 
 
+# ─── Envia pedido pro PDV Pro (cria venda + baixa estoque + emite NF) ─────────
+def _enviar_pedido_pro_pdv(pid):
+    """Monta payload do pedido e POSTa no /api/integracao/pedido do PDV Pro.
+    Retorna (ok, resposta_dict_ou_None). Atualiza pedidos.pdv_venda_id +
+    nfe_ref + tentativas_pdv. Reutilizado pelo webhook Asaas E pelo cron de
+    reconciliação (caso o webhook falhe no meio — Railway pode reiniciar
+    o serviço durante o request)."""
+    p = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one')
+    if not p:
+        return False, None
+    itens = db_execute("SELECT * FROM pedido_itens WHERE pedido_id=%s",
+                       [pid], fetch='all') or []
+    pdv_payload = {
+        'pedido_id': pid,
+        'cliente': {'nome': p['nome'], 'email': p['email'],
+                    'cpf': p['cpf'], 'telefone': p['telefone']},
+        'endereco': {
+            'cep': p['cep'], 'endereco': p['endereco'],
+            'numero': p['numero'], 'complemento': p.get('complemento'),
+            'bairro': p['bairro'], 'cidade': p['cidade'], 'uf': p['uf']
+        },
+        'itens': [{'produto_id': i['produto_pdv_id'],
+                   'descricao': i['descricao'],
+                   'preco_unitario': float(i['preco_unitario']),
+                   'quantidade': float(i['quantidade']),
+                   'subtotal': float(i['subtotal'])} for i in itens],
+        'total': float(p['total']),
+        'desconto': float(p['desconto']),
+        'frete': float(p['frete']),
+        'forma_pagto': p['forma_pagto'],
+        'frete_servico': p.get('frete_servico') or '',
+    }
+    try:
+        # Incrementa tentativas ANTES de tentar — assim mesmo se travar a
+        # gente sabe quantas vezes foi tentado.
+        db_execute("UPDATE pedidos SET pdv_tentativas=COALESCE(pdv_tentativas,0)+1, "
+                   "pdv_ultima_tentativa=NOW() WHERE id=%s", [pid])
+        r = requests.post(PDVPRO_URL + '/api/integracao/pedido',
+                          json=pdv_payload,
+                          headers={'X-API-Key': PDVPRO_API_KEY}, timeout=20)
+        if r.status_code != 200:
+            log.error("PDV /pedido %s status %s: %s", pid, r.status_code, r.text[:300])
+            return False, None
+        resp_pdv = r.json() or {}
+        pdv_vid = resp_pdv.get('venda_id')
+        nfe_ref = resp_pdv.get('nfe_ref')
+        if pdv_vid:
+            db_execute("UPDATE pedidos SET pdv_venda_id=%s WHERE id=%s",
+                       [pdv_vid, pid])
+            log.info("pedido %s → PDV venda %s (NF ref=%s)",
+                     pid, pdv_vid, nfe_ref or 'n/a')
+        if nfe_ref:
+            db_execute("""UPDATE pedidos SET nfe_ref=%s, nfe_numero=%s,
+                          nfe_modelo=%s WHERE id=%s""",
+                       [nfe_ref, str(resp_pdv.get('nfe_numero') or ''),
+                        str(resp_pdv.get('nfe_modelo') or ''), pid])
+        if resp_pdv.get('nfe_erro'):
+            log.warning("NF auto pedido %s: %s", pid, resp_pdv['nfe_erro'])
+        return True, resp_pdv
+    except Exception as e:
+        log.error("falha ao enviar pedido %s pro PDV Pro: %s", pid, e)
+        return False, None
+
+
+# ─── Cron: reconcilia pedidos pago + sem pdv_venda_id ─────────────────────────
+@app.route('/cron/reconciliar-pedidos-site')
+def cron_reconciliar_pedidos_site():
+    """Rede de segurança: se o webhook Asaas processa o pagamento mas o
+    POST pro PDV Pro falha (Railway reinicia no meio, PDV fora, timeout...),
+    o pedido fica 'pago' sem 'pdv_venda_id'. Esse cron pega esses casos a
+    cada 5 min, re-tenta o envio. Após 3 falhas seguidas, manda WhatsApp
+    pro admin pra investigar manualmente."""
+    if request.args.get('token') != os.environ.get('CRON_TOKEN', 'troque'):
+        return 'forbidden', 403
+    pendentes = db_execute("""
+        SELECT id, total, pdv_tentativas, pago_em
+        FROM pedidos
+        WHERE status='pago'
+          AND pdv_venda_id IS NULL
+          AND pago_em > NOW() - INTERVAL '7 days'
+          AND COALESCE(pdv_tentativas, 0) < 10
+        ORDER BY pago_em ASC
+        LIMIT 20
+    """, fetch='all') or []
+    reenviados, falhas, alertas = 0, 0, []
+    for ped in pendentes:
+        ok, _ = _enviar_pedido_pro_pdv(ped['id'])
+        if ok:
+            reenviados += 1
+        else:
+            falhas += 1
+            # Após 3 tentativas falhas, avisa admin uma vez
+            tentativas = int(ped.get('pdv_tentativas') or 0) + 1  # +1 = a que acabou
+            if tentativas == 3:
+                alertas.append((ped['id'], float(ped['total'])))
+    for pid, tot in alertas:
+        try:
+            enviar_whatsapp(ADMIN_WHATSAPP,
+                f"⚠️ *Pedido #{pid} (R$ {tot:.2f}) não foi pro PDV Pro*\n\n"
+                f"Cliente pagou mas o sistema não conseguiu enviar a venda "
+                f"depois de 3 tentativas. O cron vai continuar tentando, mas "
+                f"vale conferir manualmente em /admin/pedidos.".replace('.', ','))
+        except Exception as e:
+            log.warning(f"alerta WhatsApp pedido {pid}: {e}")
+    return jsonify({
+        'ok': True,
+        'pendentes_encontrados': len(pendentes),
+        'reenviados': reenviados,
+        'falhas': falhas,
+        'alertas_admin': len(alertas),
+    })
+
+
 # ─── Webhook Asaas: confirma pagamento ────────────────────────────────────────
 @app.route('/webhook/asaas', methods=['POST'])
 def webhook_asaas():
@@ -5678,57 +5795,7 @@ Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp
         db_execute("""UPDATE pedidos SET status='pago', pago_em=NOW(),
                       atualizado_em=NOW() WHERE id=%s""", [pid])
         # Dispara venda no PDV Pro
-        try:
-            itens = db_execute(
-                "SELECT * FROM pedido_itens WHERE pedido_id=%s",
-                [pid], fetch='all') or []
-            pdv_payload = {
-                'pedido_id': pid,
-                'cliente': {'nome': p['nome'], 'email': p['email'],
-                            'cpf': p['cpf'], 'telefone': p['telefone']},
-                'endereco': {
-                    'cep': p['cep'], 'endereco': p['endereco'],
-                    'numero': p['numero'], 'complemento': p.get('complemento'),
-                    'bairro': p['bairro'], 'cidade': p['cidade'],
-                    'uf': p['uf']
-                },
-                'itens': [{'produto_id': i['produto_pdv_id'],
-                           'descricao': i['descricao'],
-                           'preco_unitario': float(i['preco_unitario']),
-                           'quantidade': float(i['quantidade']),
-                           'subtotal': float(i['subtotal'])} for i in itens],
-                'total': float(p['total']),
-                'desconto': float(p['desconto']),
-                'frete': float(p['frete']),
-                'forma_pagto': p['forma_pagto'],
-            }
-            r = requests.post(
-                PDVPRO_URL + '/api/integracao/pedido',
-                json=pdv_payload,
-                headers={'X-API-Key': PDVPRO_API_KEY},
-                timeout=20)
-            if r.status_code == 200:
-                resp_pdv = r.json() or {}
-                pdv_vid = resp_pdv.get('venda_id')
-                nfe_ref = resp_pdv.get('nfe_ref')
-                if pdv_vid:
-                    db_execute(
-                        "UPDATE pedidos SET pdv_venda_id=%s WHERE id=%s",
-                        [pdv_vid, pid])
-                    log.info("pedido %s → PDV venda %s (NF ref=%s)",
-                             pid, pdv_vid, nfe_ref or 'n/a')
-                if nfe_ref:
-                    db_execute(
-                        """UPDATE pedidos SET nfe_ref=%s, nfe_numero=%s,
-                           nfe_modelo=%s WHERE id=%s""",
-                        [nfe_ref, str(resp_pdv.get('nfe_numero') or ''),
-                         str(resp_pdv.get('nfe_modelo') or ''), pid])
-                if resp_pdv.get('nfe_erro'):
-                    log.error("NF auto: %s", resp_pdv['nfe_erro'])
-            else:
-                log.error("PDV /pedido %s: %s", r.status_code, r.text[:300])
-        except Exception as e:
-            log.error("falha ao enviar pedido pro PDV Pro: %s", e)
+        _enviar_pedido_pro_pdv(pid)
         # ─ Gera etiqueta Melhor Envio AUTOMATICAMENTE (se nao for retirada)
         # Pre-condicoes: tem service_id (cliente escolheu PAC/SEDEX/etc no
         # checkout) e nao tem etiqueta ainda. Tudo em try/except — falha aqui
