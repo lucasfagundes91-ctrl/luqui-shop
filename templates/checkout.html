@@ -734,13 +734,23 @@ async function aoTabularCpf(cpfRaw, silent){
     if(info){
       if(SALDO_REAIS > 0){
         const saldoStr = 'R$ ' + SALDO_REAIS.toFixed(2).replace('.',',');
+        // Validade dos pontos (vem como YYYY-MM-DD do PDV Pro)
+        let validadeHtml = '';
+        const exp = clube.proxima_expiracao;
+        if(exp && /^\d{4}-\d{2}-\d{2}/.test(exp)){
+          const dd = exp.substring(8,10), mm = exp.substring(5,7), yy = exp.substring(0,4);
+          validadeHtml = '<div style="font-size:12px;color:#92400e;margin-top:6px">'
+            + '⏳ Use até <b>' + dd + '/' + mm + '/' + yy + '</b> — depois disso os pontos expiram.'
+            + '</div>';
+        }
         info.innerHTML = ''
           + 'Você tem <b style="color:var(--verde)">' + saldoStr + '</b> em pontos pra usar! 🎉'
           + '<div style="margin-top:6px">'
           +   '👉 Nessa compra pode abater até '
           +   '<b id="pontos-limite-ui" style="color:var(--verde)">R$ 0,00</b> '
           +   '<span style="font-size:11px;color:var(--mut)">(25% do valor após outros descontos)</span>'
-          + '</div>';
+          + '</div>'
+          + validadeHtml;
         // Recalcula o teto agora que o saldo mudou
         if(typeof atualizarLimiteUI === 'function') atualizarLimiteUI();
       } else {
