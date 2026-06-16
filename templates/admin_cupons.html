@@ -2,83 +2,147 @@
 {% set pagina = 'cupons' %}
 {% block titulo %}Cupons — LuquiShop{% endblock %}
 {% block conteudo %}
-<h2>🎟️ Cupons de desconto</h2>
+<style>
+  .head-cup{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:14px}
+  .head-cup h2{margin:0}
+  .head-cup .total{background:#FFC700;color:#082B7A;padding:5px 14px;border-radius:20px;font-size:13px;font-weight:800}
+  .form-card{background:#fff;border-radius:14px;padding:24px;margin-bottom:18px;box-shadow:0 1px 3px rgba(0,0,0,.04);
+    {% if request.args.get('edit') %}border-left:4px solid #FFC700;{% else %}border-left:4px solid #16A34A;{% endif %}}
+  .form-card h3{font-size:16px;margin-bottom:18px;font-weight:800;color:#0F172A}
+  .form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .form-field label{display:block;font-size:11px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+  .form-field input, .form-field select{width:100%;padding:11px 13px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:14px;font-family:inherit;outline:none;transition:border-color .15s, box-shadow .15s}
+  .form-field input:focus, .form-field select:focus{border-color:#1652C7;box-shadow:0 0 0 3px rgba(22,82,199,.1)}
+  .form-field input[name=codigo]{text-transform:uppercase;font-weight:800;font-family:monospace}
+  .check-wrap{display:flex;align-items:center;gap:10px;grid-column:1/-1;padding:12px;background:#F8FAFC;border-radius:10px;cursor:pointer}
+  .check-wrap input{width:20px;height:20px;cursor:pointer}
+  .check-wrap label{cursor:pointer;font-weight:600;color:#0F172A}
+  .btn-acoes{display:flex;gap:10px;justify-content:flex-end;grid-column:1/-1;margin-top:6px}
+  .btn-criar{background:#16A34A;color:#fff;border:0;padding:13px 28px;border-radius:10px;font-weight:800;cursor:pointer;font-size:14px;
+    box-shadow:0 3px 0 #15803D;transition:transform .12s;display:inline-flex;align-items:center;gap:6px}
+  .btn-criar:hover{transform:translateY(-1px);box-shadow:0 4px 0 #15803D}
+  .btn-salvar{background:#1652C7;color:#fff;border:0;padding:13px 28px;border-radius:10px;font-weight:800;cursor:pointer;font-size:14px;
+    box-shadow:0 3px 0 #0E3A8F;display:inline-flex;align-items:center;gap:6px}
+  .btn-cancelar{background:#E2E8F0;color:#475569;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:700;font-size:13px}
+  .btn-cancelar:hover{background:#CBD5E1}
+  /* tabela cupons */
+  .tab-cup{width:100%;border-collapse:separate;border-spacing:0 8px;font-size:13px}
+  .tab-cup thead th{text-align:left;font-size:10px;text-transform:uppercase;color:#64748B;letter-spacing:.5px;font-weight:800;padding:0 14px 6px}
+  .tab-cup tbody tr{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04);transition:transform .12s}
+  .tab-cup tbody tr:hover{transform:translateX(2px);box-shadow:0 2px 6px rgba(22,82,199,.08)}
+  .tab-cup td{padding:14px;vertical-align:middle;border:none}
+  .tab-cup td:first-child{border-radius:10px 0 0 10px}
+  .tab-cup td:last-child{border-radius:0 10px 10px 0}
+  .cod-cup{background:linear-gradient(135deg,#FEF3C7,#FFC700);color:#082B7A;padding:6px 12px;border-radius:6px;font-weight:900;
+    font-family:monospace;font-size:13px;letter-spacing:.5px;display:inline-block}
+  .desc-val{font-weight:900;color:#1652C7;font-size:15px}
+  .pill-st{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.3px}
+  .pill-st.ativo{background:#D1FAE5;color:#065F46}
+  .pill-st.inativo{background:#E2E8F0;color:#475569}
+  .btn-mini{padding:6px 12px;border-radius:6px;font-size:11px;font-weight:700;text-decoration:none;cursor:pointer;border:0;display:inline-block;margin-right:4px}
+  .btn-mini.editar{background:#DBEAFE;color:#1E40AF}
+  .btn-mini.editar:hover{background:#BFDBFE}
+  .btn-mini.excluir{background:#FEE2E2;color:#991B1B}
+  .btn-mini.excluir:hover{background:#FECACA}
+  .vazio{text-align:center;padding:50px 20px;color:#94A3B8;background:#fff;border-radius:14px}
+  .vazio .emoji{font-size:48px;margin-bottom:14px}
+  .section-titulo{font-size:15px;font-weight:800;color:#0F172A;margin:18px 0 12px;display:flex;align-items:center;gap:6px}
+</style>
 
-<div class="card">
-  <h3 style="margin-bottom:14px">{{ '✏️ Editar cupom' if request.args.get('edit') else '➕ Novo cupom' }}</h3>
-  {% set ed = (cupons|selectattr('id','equalto',request.args.get('edit',0)|int)|list|first) if request.args.get('edit') else None %}
-  <form method="post" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+{% set ed = (cupons|selectattr('id','equalto',request.args.get('edit',0)|int)|list|first) if request.args.get('edit') else None %}
+
+<div class="head-cup">
+  <h2>🎟️ Cupons de desconto</h2>
+  {% if cupons %}<span class="total">{{ cupons|length }} cadastrado{{ 's' if cupons|length != 1 else '' }}</span>{% endif %}
+</div>
+
+<div class="form-card">
+  <h3>{{ '✏️ Editando: ' ~ ed.codigo if ed else '➕ Criar novo cupom' }}</h3>
+  <form method="post">
     {% if ed %}<input type="hidden" name="id" value="{{ ed.id }}">{% endif %}
-    <div>
-      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Código *</label>
-      <input name="codigo" required value="{{ ed.codigo if ed else '' }}" placeholder="PRIMEIRO10"
-             style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px;text-transform:uppercase">
-    </div>
-    <div>
-      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Tipo *</label>
-      <select name="tipo" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
-        <option value="pct" {% if ed and ed.tipo=='pct' %}selected{% endif %}>Percentual (%)</option>
-        <option value="rs" {% if ed and ed.tipo=='rs' %}selected{% endif %}>Valor fixo (R$)</option>
-      </select>
-    </div>
-    <div>
-      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Valor *</label>
-      <input name="valor" type="number" step="0.01" required value="{{ ed.valor if ed else '' }}" placeholder="10"
-             style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
-    </div>
-    <div>
-      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Compra mínima (R$)</label>
-      <input name="valor_min" type="number" step="0.01" value="{{ ed.valor_min if ed else '0' }}"
-             style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
-    </div>
-    <div>
-      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Máx. de usos (vazio = ilimitado)</label>
-      <input name="usos_max" type="number" value="{{ ed.usos_max if ed and ed.usos_max else '' }}"
-             style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
-    </div>
-    <div>
-      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Válido até</label>
-      <input name="valido_ate" type="date" value="{{ ed.valido_ate if ed and ed.valido_ate else '' }}"
-             style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
-    </div>
-    <div style="display:flex;align-items:center;gap:8px;grid-column:1/-1">
-      <label><input type="checkbox" name="ativo" {% if (ed and ed.ativo) or not ed %}checked{% endif %}> Cupom ativo</label>
-    </div>
-    <div style="grid-column:1/-1;display:flex;gap:10px;justify-content:flex-end">
-      {% if ed %}<a href="/admin/cupons" class="pill cinza" style="padding:10px 18px;text-decoration:none">Cancelar</a>{% endif %}
-      <button type="submit" style="background:#16A34A;color:#fff;border:0;padding:12px 24px;border-radius:8px;font-weight:700;cursor:pointer">
-        {{ 'Salvar' if ed else '➕ Criar cupom' }}
-      </button>
+    <div class="form-grid">
+      <div class="form-field">
+        <label>Código *</label>
+        <input name="codigo" required value="{{ ed.codigo if ed else '' }}" placeholder="PRIMEIRO10">
+      </div>
+      <div class="form-field">
+        <label>Tipo *</label>
+        <select name="tipo">
+          <option value="pct" {% if ed and ed.tipo=='pct' %}selected{% endif %}>Percentual (%)</option>
+          <option value="rs" {% if ed and ed.tipo=='rs' %}selected{% endif %}>Valor fixo (R$)</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label>Valor *</label>
+        <input name="valor" type="number" step="0.01" required value="{{ ed.valor if ed else '' }}" placeholder="10">
+      </div>
+      <div class="form-field">
+        <label>Compra mínima (R$)</label>
+        <input name="valor_min" type="number" step="0.01" value="{{ ed.valor_min if ed else '0' }}">
+      </div>
+      <div class="form-field">
+        <label>Máx. de usos <small style="text-transform:none;font-weight:500">(vazio = ilimitado)</small></label>
+        <input name="usos_max" type="number" value="{{ ed.usos_max if ed and ed.usos_max else '' }}">
+      </div>
+      <div class="form-field">
+        <label>Válido até</label>
+        <input name="valido_ate" type="date" value="{{ ed.valido_ate if ed and ed.valido_ate else '' }}">
+      </div>
+      <label class="check-wrap">
+        <input type="checkbox" name="ativo" {% if (ed and ed.ativo) or not ed %}checked{% endif %}>
+        <span>Cupom ativo (clientes conseguem usar)</span>
+      </label>
+      <div class="btn-acoes">
+        {% if ed %}<a href="/admin/cupons" class="btn-cancelar">Cancelar</a>{% endif %}
+        <button type="submit" class="{{ 'btn-salvar' if ed else 'btn-criar' }}">
+          {{ '💾 Salvar alterações' if ed else '➕ Criar cupom' }}
+        </button>
+      </div>
     </div>
   </form>
 </div>
 
-<div class="card">
-  <h3 style="margin-bottom:14px">Cupons cadastrados</h3>
-  {% if cupons %}
-  <table>
-    <thead><tr><th>Código</th><th>Desconto</th><th>Compra mín.</th><th>Usos</th><th>Validade</th><th>Status</th><th></th></tr></thead>
+{% if cupons %}
+  <div class="section-titulo">📋 Cupons cadastrados</div>
+  <table class="tab-cup">
+    <thead>
+      <tr>
+        <th>Código</th>
+        <th>Desconto</th>
+        <th>Compra mín.</th>
+        <th>Usos</th>
+        <th>Validade</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
     <tbody>
       {% for c in cupons %}
       <tr>
-        <td><code style="background:#FEF3C7;padding:3px 8px;border-radius:4px;font-weight:700">{{ c.codigo }}</code></td>
-        <td><b>{{ c.valor }}{{ '%' if c.tipo == 'pct' else ' R$' }}</b></td>
+        <td><span class="cod-cup">{{ c.codigo }}</span></td>
+        <td><span class="desc-val">{{ c.valor }}{{ '%' if c.tipo == 'pct' else ' R$' }}</span></td>
         <td>{{ rs(c.valor_min) if c.valor_min and c.valor_min|float > 0 else '—' }}</td>
-        <td>{{ c.usos }}{% if c.usos_max %} / {{ c.usos_max }}{% endif %}</td>
-        <td>{{ c.valido_ate.strftime('%d/%m/%Y') if c.valido_ate else 'Sem prazo' }}</td>
-        <td><span class="pill {{ 'verde' if c.ativo else 'cinza' }}">{{ 'ativo' if c.ativo else 'inativo' }}</span></td>
         <td>
-          <a href="/admin/cupons?edit={{ c.id }}" class="pill azul" style="text-decoration:none">Editar</a>
-          <form method="post" action="/admin/cupons/{{ c.id }}/excluir" style="display:inline" onsubmit="return confirm('Excluir esse cupom?')">
-            <button class="pill" style="background:#FEE2E2;color:#991B1B;border:0;cursor:pointer">Excluir</button>
+          <b>{{ c.usos }}</b>
+          {% if c.usos_max %}<span style="color:#64748B"> / {{ c.usos_max }}</span>{% endif %}
+        </td>
+        <td style="font-size:12px;color:#475569">{{ c.valido_ate.strftime('%d/%m/%Y') if c.valido_ate else 'Sem prazo' }}</td>
+        <td><span class="pill-st {{ 'ativo' if c.ativo else 'inativo' }}">{{ '✓ Ativo' if c.ativo else '○ Inativo' }}</span></td>
+        <td>
+          <a href="/admin/cupons?edit={{ c.id }}" class="btn-mini editar">✏️ Editar</a>
+          <form method="post" action="/admin/cupons/{{ c.id }}/excluir" style="display:inline" onsubmit="return confirm('Excluir o cupom {{ c.codigo }}?')">
+            <button class="btn-mini excluir">🗑️ Excluir</button>
           </form>
         </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
-  {% else %}
-  <p style="color:#64748B">Nenhum cupom criado ainda. Crie acima — ex.: PRIMEIRO10 com 10% off pra primeira compra.</p>
-  {% endif %}
-</div>
+{% else %}
+  <div class="vazio">
+    <div class="emoji">🎟️</div>
+    <h3 style="color:#475569;margin-bottom:8px">Nenhum cupom criado ainda</h3>
+    <p>Cria um aí em cima — ex: <code style="background:#FEF3C7;padding:2px 6px;border-radius:4px;font-weight:700">PRIMEIRO10</code> com 10% off pra primeira compra.</p>
+  </div>
+{% endif %}
 {% endblock %}

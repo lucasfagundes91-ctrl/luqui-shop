@@ -1,19 +1,40 @@
 {% extends "admin_base.html" %}
-{% set pagina = 'assinantes' %}
+{% set pagina = 'envio_mensal' %}
 {% block titulo %}Envio Mensal — Clube Luqui{% endblock %}
 {% block conteudo %}
-<h2>🎁 Caixa Misteriosa — Envio Mensal</h2>
+<style>
+  .hero-envio{background:linear-gradient(135deg,#FFC700 0%,#E0A800 100%);color:#082B7A;padding:22px 26px;border-radius:14px;margin-bottom:18px;
+    box-shadow:0 4px 14px rgba(255,199,0,.3);display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+  .hero-envio h2{margin:0;font-size:22px}
+  .hero-envio p{margin:4px 0 0;font-size:13px;color:#1652C7}
+  .ctrl-mes{background:#fff;padding:14px 18px;border-radius:12px;margin-bottom:18px;box-shadow:0 1px 3px rgba(0,0,0,.04);
+    display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px}
+  .ctrl-mes label{font-size:11px;color:#64748B;font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-right:8px}
+  .ctrl-mes input{padding:10px 14px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:14px;cursor:pointer;outline:none}
+  .ctrl-mes input:focus{border-color:#1652C7;box-shadow:0 0 0 3px rgba(22,82,199,.1)}
+  .ctrl-mes .resumo{font-size:13px;font-weight:600;color:#475569;display:flex;gap:14px;flex-wrap:wrap}
+  .ctrl-mes .resumo b{color:#16A34A}
+  /* Assinante card */
+  .ass-card{background:#fff;border-radius:14px;padding:22px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.04);border-left:6px solid #FFC700}
+  .ass-card.enviado{border-left-color:#16A34A;background:linear-gradient(90deg,#F0FDF4 0%,#fff 30%)}
+</style>
 
-<div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px">
+<div class="hero-envio">
   <div>
-    <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Mês de referência</label>
-    <input type="month" value="{{ referencia }}"
-           onchange="location.href='/admin/clube/envio-mensal?mes='+this.value"
-           style="padding:8px;border:1px solid #E2E8F0;border-radius:8px;margin-left:10px">
+    <h2>🎁 Caixa Misteriosa</h2>
+    <p>Mês a mês envia a caixa pros assinantes ativos do Clube Luqui</p>
   </div>
-  <div style="font-size:13px;color:#64748B">
-    {{ assinantes|length }} assinante(s) ativo(s) ·
-    {{ assinantes|selectattr('ja_enviou')|list|length }} já enviado(s) neste mês
+</div>
+
+<div class="ctrl-mes">
+  <div>
+    <label>📅 Mês de referência</label>
+    <input type="month" value="{{ referencia }}"
+           onchange="location.href='/admin/clube/envio-mensal?mes='+this.value">
+  </div>
+  <div class="resumo">
+    🎁 {{ assinantes|length }} assinante{{ 's' if assinantes|length != 1 else '' }} ativo{{ 's' if assinantes|length != 1 else '' }}
+    · <b>{{ assinantes|selectattr('ja_enviou')|list|length }} já enviado{{ 's' if assinantes|selectattr('ja_enviou')|list|length != 1 else '' }}</b>
   </div>
 </div>
 
@@ -23,7 +44,7 @@
   </div>
 {% else %}
   {% for a in assinantes %}
-  <div class="card" id="ass-{{ a.assinatura_id }}" style="border-left:6px solid {{ '#16A34A' if a.ja_enviou else '#FFC700' }}">
+  <div class="ass-card {{ 'enviado' if a.ja_enviou }}" id="ass-{{ a.assinatura_id }}">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px;margin-bottom:14px">
       <div>
         <h3 style="color:#1652C7">{{ a.cliente_nome }}

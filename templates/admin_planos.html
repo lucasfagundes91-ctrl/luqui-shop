@@ -1,25 +1,67 @@
 {% extends "admin_base.html" %}
 {% set pagina = 'planos' %}
 {% block conteudo %}
-<h2>📋 Planos do Clube</h2>
-<div class="card">
-  <table>
-    <thead><tr><th>Slug</th><th>Nome</th><th>Modalidade</th><th>Preço mensal</th><th>Benefícios</th><th>Ativo</th></tr></thead>
-    <tbody>
-      {% for p in planos %}
-        <tr>
-          <td><code style="font-size:11px">{{ p.slug }}</code></td>
-          <td><b>{{ p.nome }}</b></td>
-          <td><span class="pill {{ 'azul' if p.modalidade == 'mensal' else 'verde' }}">{{ p.modalidade }}</span></td>
-          <td><b>{{ rs(p.preco_mensal) }}</b></td>
-          <td><small>{{ p.beneficios_json|length }} item(ns)</small></td>
-          <td><span class="pill {{ 'verde' if p.ativo else 'cinza' }}">{{ 'Sim' if p.ativo else 'Não' }}</span></td>
-        </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  <p style="color:#64748B;margin-top:14px;font-size:12px">
-    Edição de planos via banco — em breve interface aqui no admin.
-  </p>
+<style>
+  .head-pl{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:14px}
+  .head-pl h2{margin:0}
+  .head-pl .total{background:#FFC700;color:#082B7A;padding:5px 14px;border-radius:20px;font-size:13px;font-weight:800}
+  .lista-pl{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+  .pl-card{background:#fff;border-radius:14px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,.04);transition:transform .12s;border-top:4px solid #1652C7;position:relative}
+  .pl-card:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.08)}
+  .pl-card.inativo{opacity:.55;border-top-color:#94A3B8}
+  .pl-card.inativo::after{content:'INATIVO';position:absolute;top:14px;right:14px;background:#E2E8F0;color:#475569;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:800;letter-spacing:.5px}
+  .pl-modalidade{display:inline-block;font-size:10px;text-transform:uppercase;font-weight:800;letter-spacing:.5px;padding:3px 8px;border-radius:5px;margin-bottom:8px}
+  .pl-modalidade.mensal{background:#DBEAFE;color:#1E40AF}
+  .pl-modalidade.anual{background:#D1FAE5;color:#065F46}
+  .pl-nome{font-size:18px;font-weight:900;color:#0F172A;margin-bottom:8px}
+  .pl-slug{font-family:monospace;font-size:11px;color:#94A3B8;margin-bottom:18px}
+  .pl-preco{font-size:30px;font-weight:900;color:#16A34A;line-height:1}
+  .pl-preco-sub{font-size:12px;color:#64748B;font-weight:600;margin-top:2px}
+  .pl-beneficios{margin-top:18px;padding-top:18px;border-top:1px solid #F1F5F9;font-size:13px;color:#475569}
+  .pl-beneficios b{color:#0F172A;font-size:12px;display:block;margin-bottom:6px}
+  .footer-msg{text-align:center;color:#64748B;font-size:13px;margin-top:24px;padding:18px;background:#F8FAFC;border-radius:10px}
+  .footer-msg b{color:#92400E}
+  .vazio{text-align:center;padding:60px 20px;color:#94A3B8;background:#fff;border-radius:14px}
+  .vazio .emoji{font-size:48px;margin-bottom:14px}
+</style>
+
+<div class="head-pl">
+  <h2>📋 Planos do Clube</h2>
+  {% if planos %}<span class="total">{{ planos|length }} plano{{ 's' if planos|length != 1 else '' }}</span>{% endif %}
 </div>
+
+{% if planos %}
+  <div class="lista-pl">
+    {% for p in planos %}
+    <div class="pl-card {{ 'inativo' if not p.ativo }}">
+      <span class="pl-modalidade {{ p.modalidade }}">{{ p.modalidade }}</span>
+      <div class="pl-nome">🎁 {{ p.nome }}</div>
+      <div class="pl-slug">/{{ p.slug }}</div>
+      <div class="pl-preco">{{ rs(p.preco_mensal) }}</div>
+      <div class="pl-preco-sub">por mês</div>
+      {% if p.beneficios_json %}
+      <div class="pl-beneficios">
+        <b>Inclui {{ p.beneficios_json|length }} benefício{{ 's' if p.beneficios_json|length != 1 else '' }}</b>
+        {% for b in p.beneficios_json[:3] %}
+          ✓ {{ b.titulo if b.titulo is defined else b }}<br>
+        {% endfor %}
+        {% if p.beneficios_json|length > 3 %}
+          <span style="color:#94A3B8">… +{{ p.beneficios_json|length - 3 }} outros</span>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="footer-msg">
+    ⚙️ Edição de planos via banco no momento. <b>Interface aqui no admin em breve.</b>
+  </div>
+{% else %}
+  <div class="vazio">
+    <div class="emoji">📋</div>
+    <h3 style="color:#475569;margin-bottom:8px">Nenhum plano cadastrado</h3>
+    <p>Planos do clube estão configurados via banco enquanto a interface aqui não fica pronta.</p>
+  </div>
+{% endif %}
 {% endblock %}

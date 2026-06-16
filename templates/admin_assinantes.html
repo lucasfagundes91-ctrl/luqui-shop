@@ -1,26 +1,82 @@
 {% extends "admin_base.html" %}
 {% set pagina = 'assinantes' %}
 {% block conteudo %}
-<h2>🎁 Assinantes do Clube</h2>
-<div class="card">
+<style>
+  .head-asn{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:14px}
+  .head-asn h2{margin:0}
+  .head-asn .badges{display:flex;gap:8px;flex-wrap:wrap}
+  .head-asn .badge{padding:5px 14px;border-radius:20px;font-size:13px;font-weight:800}
+  .head-asn .badge.ativa{background:#D1FAE5;color:#065F46}
+  .head-asn .badge.aguardando{background:#FEF3C7;color:#92400E}
+  .head-asn .badge.receita{background:#FFC700;color:#082B7A}
+  /* Tabela cards */
+  .tab-asn{width:100%;border-collapse:separate;border-spacing:0 8px;font-size:13px}
+  .tab-asn thead th{text-align:left;font-size:10px;text-transform:uppercase;color:#64748B;letter-spacing:.5px;font-weight:800;padding:0 14px 6px}
+  .tab-asn tbody tr{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04);transition:transform .12s}
+  .tab-asn tbody tr:hover{transform:translateX(2px);box-shadow:0 2px 6px rgba(22,82,199,.08)}
+  .tab-asn td{padding:14px;vertical-align:middle;border:none}
+  .tab-asn td:first-child{border-radius:10px 0 0 10px}
+  .tab-asn td:last-child{border-radius:0 10px 10px 0}
+  .nome-cli{font-weight:700;color:#0F172A}
+  .email-cli{font-size:11px;color:#64748B;margin-top:2px}
+  .plano-bd{background:#FEF3C7;color:#92400E;padding:5px 10px;border-radius:6px;font-size:12px;font-weight:800;display:inline-block}
+  .preco{font-weight:900;color:#16A34A;font-size:14px}
+  .pill-st{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.3px}
+  .pill-st.verde{background:#D1FAE5;color:#065F46}
+  .pill-st.amarelo{background:#FEF3C7;color:#92400E}
+  .pill-st.cinza{background:#E2E8F0;color:#475569}
+  .vazio{text-align:center;padding:60px 20px;color:#94A3B8;background:#fff;border-radius:14px}
+  .vazio .emoji{font-size:48px;margin-bottom:14px}
+</style>
+
+{% set ativas = assinaturas|selectattr('status','equalto','ativa')|list|length if assinaturas else 0 %}
+{% set aguardando = assinaturas|selectattr('status','equalto','aguardando_pagto')|list|length if assinaturas else 0 %}
+{% set receita_mensal = (assinaturas|selectattr('status','equalto','ativa')|sum(attribute='preco_mensal')) if assinaturas else 0 %}
+
+<div class="head-asn">
+  <h2>🎁 Assinantes do Clube</h2>
   {% if assinaturas %}
-    <table>
-      <thead><tr><th>Cliente</th><th>E-mail</th><th>Plano</th><th>Mensal</th><th>Próximo envio</th><th>Status</th></tr></thead>
-      <tbody>
-        {% for a in assinaturas %}
-          <tr>
-            <td><b>{{ a.cliente_nome }}</b></td>
-            <td><small>{{ a.cliente_email }}</small></td>
-            <td>{{ a.plano_nome }}</td>
-            <td><b>{{ rs(a.preco_mensal) }}</b></td>
-            <td>{{ a.proximo_envio.strftime('%d/%m/%Y') if a.proximo_envio else '—' }}</td>
-            <td><span class="pill {{ 'verde' if a.status == 'ativa' else 'amarelo' if a.status == 'aguardando_pagto' else 'cinza' }}">{{ a.status }}</span></td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <p style="color:#64748B">Nenhum assinante ainda. Quando alguém assinar pelo site, aparece aqui.</p>
+    <div class="badges">
+      {% if ativas %}<span class="badge ativa">✓ {{ ativas }} ativa{{ 's' if ativas != 1 else '' }}</span>{% endif %}
+      {% if aguardando %}<span class="badge aguardando">⏳ {{ aguardando }} aguardando</span>{% endif %}
+      {% if receita_mensal %}<span class="badge receita">💰 {{ rs(receita_mensal) }}/mês</span>{% endif %}
+    </div>
   {% endif %}
 </div>
+
+{% if assinaturas %}
+  <table class="tab-asn">
+    <thead>
+      <tr><th>Cliente</th><th>Plano</th><th>Mensal</th><th>Próximo envio</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      {% for a in assinaturas %}
+      <tr>
+        <td>
+          <div class="nome-cli">{{ a.cliente_nome }}</div>
+          <div class="email-cli">📧 {{ a.cliente_email }}</div>
+        </td>
+        <td><span class="plano-bd">🎁 {{ a.plano_nome }}</span></td>
+        <td><span class="preco">{{ rs(a.preco_mensal) }}</span></td>
+        <td style="font-size:12px;color:#475569">{{ a.proximo_envio.strftime('%d/%m/%Y') if a.proximo_envio else '—' }}</td>
+        <td>
+          {% if a.status == 'ativa' %}
+            <span class="pill-st verde">✓ Ativa</span>
+          {% elif a.status == 'aguardando_pagto' %}
+            <span class="pill-st amarelo">⏳ Aguardando pagto</span>
+          {% else %}
+            <span class="pill-st cinza">{{ a.status }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <div class="vazio">
+    <div class="emoji">🎁</div>
+    <h3 style="color:#475569;margin-bottom:8px">Nenhum assinante ainda</h3>
+    <p>Quando alguém assinar pelo site, aparece aqui. Configure os planos em <a href="/admin/planos" style="color:#1652C7;font-weight:700">Planos do clube</a>.</p>
+  </div>
+{% endif %}
 {% endblock %}

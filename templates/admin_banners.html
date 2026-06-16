@@ -2,103 +2,162 @@
 {% set pagina = 'banners' %}
 {% block titulo %}Banners — LuquiShop{% endblock %}
 {% block conteudo %}
-<h2>🎨 Banners do hero (página inicial)</h2>
+<style>
+  .head-bn{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:14px}
+  .head-bn h2{margin:0}
+  .head-bn .total{background:#FFC700;color:#082B7A;padding:5px 14px;border-radius:20px;font-size:13px;font-weight:800}
+  .seed-card{background:linear-gradient(135deg,#FEF3C7 0%,#fff 70%);border:1px dashed #F59E0B;border-radius:14px;padding:18px 22px;margin-bottom:18px;
+    display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px}
+  .seed-card .info{flex:1;min-width:240px}
+  .seed-card .info h3{font-size:14px;color:#92400E;margin:0 0 4px}
+  .seed-card .info p{font-size:12.5px;color:#78350F;margin:0;line-height:1.5}
+  .seed-card button{background:#FFC700;color:#082B7A;border:0;padding:11px 22px;border-radius:10px;font-weight:800;cursor:pointer;
+    box-shadow:0 3px 0 #E0A800;transition:transform .12s;font-size:13px;display:inline-flex;align-items:center;gap:6px}
+  .seed-card button:hover{transform:translateY(-1px);box-shadow:0 4px 0 #E0A800}
+  /* Form */
+  .form-card{background:#fff;border-radius:14px;padding:24px;margin-bottom:18px;box-shadow:0 1px 3px rgba(0,0,0,.04);
+    {% if request.args.get('edit') %}border-left:4px solid #FFC700;{% else %}border-left:4px solid #16A34A;{% endif %}}
+  .form-card h3{font-size:16px;margin-bottom:18px;font-weight:800;color:#0F172A}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .form-field label{display:block;font-size:11px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+  .form-field input{width:100%;padding:11px 13px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:14px;font-family:inherit;outline:none;transition:border-color .15s, box-shadow .15s}
+  .form-field input:focus{border-color:#1652C7;box-shadow:0 0 0 3px rgba(22,82,199,.1)}
+  .form-field input[type=color]{padding:6px;height:48px;cursor:pointer}
+  .full-width{grid-column:1/-1}
+  .check-wrap{display:flex;align-items:center;gap:10px;padding:12px;background:#F8FAFC;border-radius:10px;cursor:pointer}
+  .check-wrap input{width:20px;height:20px;cursor:pointer}
+  .check-wrap label{cursor:pointer;font-weight:600;color:#0F172A}
+  .btn-acoes{display:flex;gap:10px;justify-content:flex-end;grid-column:1/-1;margin-top:6px}
+  .btn-criar{background:#16A34A;color:#fff;border:0;padding:13px 28px;border-radius:10px;font-weight:800;cursor:pointer;font-size:14px;
+    box-shadow:0 3px 0 #15803D;transition:transform .12s;display:inline-flex;align-items:center;gap:6px}
+  .btn-criar:hover{transform:translateY(-1px);box-shadow:0 4px 0 #15803D}
+  .btn-salvar{background:#1652C7;color:#fff;border:0;padding:13px 28px;border-radius:10px;font-weight:800;cursor:pointer;font-size:14px;
+    box-shadow:0 3px 0 #0E3A8F;display:inline-flex;align-items:center;gap:6px}
+  .btn-cancelar{background:#E2E8F0;color:#475569;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:700;font-size:13px}
+  /* Cards de banner */
+  .lista-bn{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px}
+  .bn-card{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.05);transition:transform .12s}
+  .bn-card:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.08)}
+  .bn-preview{height:120px;display:flex;align-items:center;justify-content:center;padding:18px;text-align:center;position:relative}
+  .bn-preview .ordem{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.5);color:#fff;padding:3px 9px;border-radius:6px;font-size:10px;font-weight:800}
+  .bn-preview h4{color:#fff;font-size:22px;font-weight:900;letter-spacing:1px;text-transform:uppercase;text-shadow:2px 2px 0 rgba(0,0,0,.2)}
+  .bn-body{padding:14px 18px}
+  .bn-body .ttl{font-weight:800;color:#0F172A;font-size:14px}
+  .bn-body .sub{font-size:12px;color:#64748B;margin-top:4px;line-height:1.4}
+  .bn-body .link{font-size:11px;color:#1652C7;margin-top:6px;font-family:monospace}
+  .bn-footer{display:flex;justify-content:space-between;align-items:center;padding:10px 18px;background:#F8FAFC;border-top:1px solid #E2E8F0}
+  .pill-st{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.3px}
+  .pill-st.ativo{background:#D1FAE5;color:#065F46}
+  .pill-st.inativo{background:#E2E8F0;color:#475569}
+  .btn-mini{padding:6px 12px;border-radius:6px;font-size:11px;font-weight:700;text-decoration:none;cursor:pointer;border:0;display:inline-block;margin-left:4px}
+  .btn-mini.editar{background:#DBEAFE;color:#1E40AF}
+  .btn-mini.editar:hover{background:#BFDBFE}
+  .btn-mini.excluir{background:#FEE2E2;color:#991B1B}
+  .btn-mini.excluir:hover{background:#FECACA}
+  .vazio{text-align:center;padding:50px 20px;color:#94A3B8;background:#fff;border-radius:14px}
+  .vazio .emoji{font-size:48px;margin-bottom:14px}
+  .section-titulo{font-size:15px;font-weight:800;color:#0F172A;margin:18px 0 12px;display:flex;align-items:center;gap:6px}
+</style>
+
+{% set ed = (banners|selectattr('id','equalto',request.args.get('edit',0)|int)|list|first) if request.args.get('edit') else None %}
+
+<div class="head-bn">
+  <h2>🎨 Banners do hero (página inicial)</h2>
+  {% if banners %}<span class="total">{{ banners|length }} cadastrado{{ 's' if banners|length != 1 else '' }}</span>{% endif %}
+</div>
 
 {% if banners|length < 5 %}
-  <form method="post" action="/admin/banners/seed" style="margin:10px 0 16px">
-    <button type="submit"
-            style="background:#FFC700;color:#1652C7;border:0;padding:10px 18px;border-radius:8px;font-weight:700;cursor:pointer">
-      ✨ Inserir banners default ({{ 5 - banners|length }} faltando)
-    </button>
-    <span style="font-size:12px;color:#64748B;margin-left:8px">PIX 3%, parcele em 12x, Retire na loja, Clube Luqui, Novidades.</span>
-  </form>
+  <div class="seed-card">
+    <div class="info">
+      <h3>✨ Banners padrão disponíveis</h3>
+      <p>Faltam <b>{{ 5 - banners|length }}</b> banner{{ 's' if (5 - banners|length) != 1 else '' }} pra completar o set padrão (PIX 3%, parcele 12x, Retire na loja, Clube Luqui, Novidades).</p>
+    </div>
+    <form method="post" action="/admin/banners/seed">
+      <button type="submit">✨ Inserir banners padrão</button>
+    </form>
+  </div>
 {% endif %}
 
-<div class="card">
-  <h3 style="margin-bottom:14px">{{ '✏️ Editar banner' if request.args.get('edit') else '➕ Novo banner' }}</h3>
-  {% set ed = (banners|selectattr('id','equalto',request.args.get('edit',0)|int)|list|first) if request.args.get('edit') else None %}
-  <form method="post" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+<div class="form-card">
+  <h3>{{ '✏️ Editando: ' ~ ed.titulo if ed else '➕ Criar novo banner' }}</h3>
+  <form method="post">
     {% if ed %}<input type="hidden" name="id" value="{{ ed.id }}">{% endif %}
-    <div style="grid-column:1/-1">
-      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Título *</label>
-      <input name="titulo" required value="{{ ed.titulo if ed else '' }}" placeholder="Ex: BICICLETAS"
-             style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
-    </div>
-    <div style="grid-column:1/-1">
-      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Subtítulo (aceita HTML)</label>
-      <input name="subtitulo" value="{{ ed.subtitulo if ed else '' }}"
-             placeholder="parcele em até <b>12x</b><br>ou 3% off no PIX"
-             style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
-    </div>
-    <div>
-      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">URL da imagem (opcional)</label>
-      <input name="imagem_url" value="{{ ed.imagem_url if ed else '' }}" placeholder="https://..."
-             style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
-    </div>
-    <div>
-      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Link de destino</label>
-      <input name="link" value="{{ ed.link if ed else '' }}" placeholder="/buscar?q=bicicleta"
-             style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
-    </div>
-    <div>
-      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Texto do botão</label>
-      <input name="cta_texto" value="{{ ed.cta_texto if ed else 'Ver agora' }}"
-             style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
-    </div>
-    <div>
-      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Cor de fundo</label>
-      <input name="cor_fundo" type="color" value="{{ ed.cor_fundo if ed else '#4FB8FF' }}"
-             style="width:100%;padding:6px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px;height:44px">
-    </div>
-    <div>
-      <label style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:1px">Ordem</label>
-      <input name="ordem" type="number" value="{{ ed.ordem if ed else 0 }}"
-             style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px">
-    </div>
-    <div style="display:flex;align-items:center;gap:8px">
-      <label><input type="checkbox" name="ativo" {% if (ed and ed.ativo) or not ed %}checked{% endif %}> Ativo (aparece no site)</label>
-    </div>
-    <div style="grid-column:1/-1;display:flex;gap:10px;justify-content:flex-end">
-      {% if ed %}<a href="/admin/banners" class="pill cinza" style="padding:10px 18px;text-decoration:none">Cancelar</a>{% endif %}
-      <button type="submit" style="background:#16A34A;color:#fff;border:0;padding:12px 24px;border-radius:8px;font-weight:700;cursor:pointer">
-        {{ 'Salvar alterações' if ed else '➕ Adicionar banner' }}
-      </button>
+    <div class="form-grid">
+      <div class="form-field full-width">
+        <label>Título *</label>
+        <input name="titulo" required value="{{ ed.titulo if ed else '' }}" placeholder="Ex: BICICLETAS">
+      </div>
+      <div class="form-field full-width">
+        <label>Subtítulo <small style="text-transform:none;font-weight:500">(aceita HTML)</small></label>
+        <input name="subtitulo" value="{{ ed.subtitulo if ed else '' }}" placeholder="parcele em até <b>12x</b><br>ou 3% off no PIX">
+      </div>
+      <div class="form-field">
+        <label>URL da imagem (opcional)</label>
+        <input name="imagem_url" value="{{ ed.imagem_url if ed else '' }}" placeholder="https://...">
+      </div>
+      <div class="form-field">
+        <label>Link de destino</label>
+        <input name="link" value="{{ ed.link if ed else '' }}" placeholder="/buscar?q=bicicleta">
+      </div>
+      <div class="form-field">
+        <label>Texto do botão</label>
+        <input name="cta_texto" value="{{ ed.cta_texto if ed else 'Ver agora' }}">
+      </div>
+      <div class="form-field">
+        <label>Cor de fundo</label>
+        <input name="cor_fundo" type="color" value="{{ ed.cor_fundo if ed else '#4FB8FF' }}">
+      </div>
+      <div class="form-field">
+        <label>Ordem (menor = primeiro)</label>
+        <input name="ordem" type="number" value="{{ ed.ordem if ed else 0 }}">
+      </div>
+      <div class="form-field">
+        <label class="check-wrap">
+          <input type="checkbox" name="ativo" {% if (ed and ed.ativo) or not ed %}checked{% endif %}>
+          <span>Aparece no site</span>
+        </label>
+      </div>
+      <div class="btn-acoes">
+        {% if ed %}<a href="/admin/banners" class="btn-cancelar">Cancelar</a>{% endif %}
+        <button type="submit" class="{{ 'btn-salvar' if ed else 'btn-criar' }}">
+          {{ '💾 Salvar alterações' if ed else '➕ Adicionar banner' }}
+        </button>
+      </div>
     </div>
   </form>
 </div>
 
-<div class="card">
-  <h3 style="margin-bottom:14px">Banners cadastrados</h3>
-  {% if banners %}
-  <table>
-    <thead><tr><th>Ordem</th><th>Banner</th><th>Status</th><th></th></tr></thead>
-    <tbody>
-      {% for b in banners %}
-      <tr>
-        <td><b>{{ b.ordem }}</b></td>
-        <td>
-          <div style="display:flex;gap:12px;align-items:center">
-            <div style="width:120px;height:60px;background:{{ b.cor_fundo or '#4FB8FF' }};border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:11px;text-align:center;padding:6px">{{ b.titulo[:20] }}</div>
-            <div>
-              <b>{{ b.titulo }}</b>
-              <div style="font-size:11px;color:#64748B">{{ b.subtitulo|safe if b.subtitulo else '—' }}</div>
-              {% if b.link %}<div style="font-size:11px;color:#1652C7">→ {{ b.link }}</div>{% endif %}
-            </div>
-          </div>
-        </td>
-        <td><span class="pill {{ 'verde' if b.ativo else 'cinza' }}">{{ 'ativo' if b.ativo else 'inativo' }}</span></td>
-        <td>
-          <a href="/admin/banners?edit={{ b.id }}" class="pill azul" style="text-decoration:none">Editar</a>
-          <form method="post" action="/admin/banners/{{ b.id }}/excluir" style="display:inline" onsubmit="return confirm('Excluir esse banner?')">
-            <button class="pill" style="background:#FEE2E2;color:#991B1B;border:0;cursor:pointer">Excluir</button>
+{% if banners %}
+  <div class="section-titulo">📋 Banners cadastrados</div>
+  <div class="lista-bn">
+    {% for b in banners %}
+    <div class="bn-card">
+      <div class="bn-preview" style="background:{{ b.cor_fundo or '#4FB8FF' }}">
+        <span class="ordem">#{{ b.ordem }}</span>
+        <h4>{{ b.titulo[:24] }}</h4>
+      </div>
+      <div class="bn-body">
+        <div class="ttl">{{ b.titulo }}</div>
+        {% if b.subtitulo %}<div class="sub">{{ b.subtitulo|safe }}</div>{% endif %}
+        {% if b.link %}<div class="link">→ {{ b.link }}</div>{% endif %}
+      </div>
+      <div class="bn-footer">
+        <span class="pill-st {{ 'ativo' if b.ativo else 'inativo' }}">{{ '✓ Ativo' if b.ativo else '○ Inativo' }}</span>
+        <div>
+          <a href="/admin/banners?edit={{ b.id }}" class="btn-mini editar">✏️ Editar</a>
+          <form method="post" action="/admin/banners/{{ b.id }}/excluir" style="display:inline" onsubmit="return confirm('Excluir o banner &quot;{{ b.titulo }}&quot;?')">
+            <button class="btn-mini excluir">🗑️</button>
           </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p style="color:#64748B">Nenhum banner cadastrado. O site usa o banner padrão "BICICLETAS" enquanto não tem nada aqui.</p>
-  {% endif %}
-</div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="vazio">
+    <div class="emoji">🎨</div>
+    <h3 style="color:#475569;margin-bottom:8px">Nenhum banner cadastrado</h3>
+    <p>O site usa o banner "BICICLETAS" padrão enquanto não tem nada aqui. Use o botão acima pra inserir o set padrão de 5 banners ou cria um do zero no formulário.</p>
+  </div>
+{% endif %}
 {% endblock %}

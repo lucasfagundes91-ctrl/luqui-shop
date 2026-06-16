@@ -2,36 +2,94 @@
 {% set pagina = 'avaliacoes' %}
 {% block titulo %}Avaliações — LuquiShop{% endblock %}
 {% block conteudo %}
-<h2>⭐ Avaliações</h2>
-<div class="card">
+<style>
+  .head-av{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:14px}
+  .head-av h2{margin:0}
+  .head-av .badges{display:flex;gap:8px;flex-wrap:wrap}
+  .head-av .badge{padding:5px 14px;border-radius:20px;font-size:13px;font-weight:800}
+  .head-av .badge.aprov{background:#D1FAE5;color:#065F46}
+  .head-av .badge.aguard{background:#FEF3C7;color:#92400E}
+  .head-av .badge.media{background:#FFC700;color:#082B7A}
+  /* Cards de avaliação */
+  .lista-av{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:14px}
+  .av-card{background:#fff;border-radius:12px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.04);position:relative;border-left:4px solid #E2E8F0}
+  .av-card.aprovada{border-left-color:#16A34A}
+  .av-card.aguardando{border-left-color:#F59E0B}
+  .av-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;gap:10px}
+  .av-info{flex:1}
+  .av-estrelas{font-size:18px;color:#FBBF24;letter-spacing:1px;line-height:1}
+  .av-estrelas .vazia{opacity:.25}
+  .av-cliente{font-size:13px;font-weight:700;color:#0F172A;margin-top:6px}
+  .av-data{font-size:11px;color:#64748B;margin-top:2px}
+  .av-prod{background:#DBEAFE;color:#1E40AF;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800;text-decoration:none;display:inline-block;font-family:monospace}
+  .av-prod:hover{background:#BFDBFE}
+  .av-titulo{font-weight:800;font-size:14px;color:#0F172A;margin:8px 0 4px}
+  .av-comentario{font-size:13px;color:#475569;line-height:1.5;background:#F8FAFC;padding:12px;border-radius:8px;margin-top:6px}
+  .av-acoes{display:flex;gap:6px;justify-content:space-between;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid #F1F5F9}
+  .pill-st{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.3px}
+  .pill-st.aprov{background:#D1FAE5;color:#065F46}
+  .pill-st.aguard{background:#FEF3C7;color:#92400E}
+  .btn-mini{padding:6px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:0;display:inline-flex;align-items:center;gap:4px}
+  .btn-aprovar{background:#16A34A;color:#fff;box-shadow:0 2px 0 #15803D}
+  .btn-aprovar:hover{transform:translateY(-1px);box-shadow:0 3px 0 #15803D}
+  .btn-excluir{background:#FEE2E2;color:#991B1B}
+  .btn-excluir:hover{background:#FECACA}
+  .vazio{text-align:center;padding:60px 20px;color:#94A3B8;background:#fff;border-radius:14px}
+  .vazio .emoji{font-size:48px;margin-bottom:14px}
+</style>
+
+{% set aprovadas = avaliacoes|selectattr('aprovado')|list|length if avaliacoes else 0 %}
+{% set aguardando = avaliacoes|rejectattr('aprovado')|list|length if avaliacoes else 0 %}
+{% set media = ((avaliacoes|sum(attribute='estrelas')) / (avaliacoes|length))|round(1) if avaliacoes else 0 %}
+
+<div class="head-av">
+  <h2>⭐ Avaliações</h2>
   {% if avaliacoes %}
-  <table>
-    <thead><tr><th>Produto</th><th>Cliente</th><th>Nota</th><th>Comentário</th><th>Data</th><th>Status</th><th></th></tr></thead>
-    <tbody>
-      {% for a in avaliacoes %}
-      <tr>
-        <td><a href="/produto/{{ a.produto_pdv_id }}" target="_blank" style="color:#1652C7;font-weight:700">#{{ a.produto_pdv_id }}</a></td>
-        <td>{{ a.cliente_nome or '—' }}</td>
-        <td style="color:#F59E0B;font-size:16px">{{ '★' * a.estrelas }}<span style="opacity:.3">{{ '★' * (5 - a.estrelas) }}</span></td>
-        <td style="max-width:300px">{% if a.titulo %}<b>{{ a.titulo }}</b><br>{% endif %}<small>{{ a.comentario[:200] }}{% if a.comentario|length > 200 %}...{% endif %}</small></td>
-        <td><small>{{ a.criado_em.strftime('%d/%m %H:%M') if a.criado_em else '—' }}</small></td>
-        <td><span class="pill {{ 'verde' if a.aprovado else 'amarelo' }}">{{ 'aprovada' if a.aprovado else 'aguardando' }}</span></td>
-        <td>
-          {% if not a.aprovado %}
-          <form method="post" action="/admin/avaliacoes/{{ a.id }}/aprovar" style="display:inline">
-            <button class="pill verde" style="border:0;cursor:pointer">✓ Aprovar</button>
-          </form>
-          {% endif %}
-          <form method="post" action="/admin/avaliacoes/{{ a.id }}/excluir" style="display:inline" onsubmit="return confirm('Excluir essa avaliação?')">
-            <button class="pill" style="background:#FEE2E2;color:#991B1B;border:0;cursor:pointer">×</button>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p style="color:#64748B">Sem avaliações ainda.</p>
+    <div class="badges">
+      {% if aprovadas %}<span class="badge aprov">✓ {{ aprovadas }} aprovada{{ 's' if aprovadas != 1 else '' }}</span>{% endif %}
+      {% if aguardando %}<span class="badge aguard">⏳ {{ aguardando }} aguardando</span>{% endif %}
+      <span class="badge media">⭐ {{ media }} média</span>
+    </div>
   {% endif %}
 </div>
+
+{% if avaliacoes %}
+  <div class="lista-av">
+    {% for a in avaliacoes %}
+    <div class="av-card {{ 'aprovada' if a.aprovado else 'aguardando' }}">
+      <div class="av-header">
+        <div class="av-info">
+          <div class="av-estrelas">
+            {{ '★' * a.estrelas }}<span class="vazia">{{ '★' * (5 - a.estrelas) }}</span>
+          </div>
+          <div class="av-cliente">👤 {{ a.cliente_nome or 'Anônimo' }}</div>
+          <div class="av-data">{{ a.criado_em.strftime('%d/%m/%Y %H:%M') if a.criado_em else '—' }}</div>
+        </div>
+        <a href="/produto/{{ a.produto_pdv_id }}" target="_blank" class="av-prod">#{{ a.produto_pdv_id }}</a>
+      </div>
+      {% if a.titulo %}<div class="av-titulo">"{{ a.titulo }}"</div>{% endif %}
+      {% if a.comentario %}<div class="av-comentario">{{ a.comentario[:300] }}{% if a.comentario|length > 300 %}…{% endif %}</div>{% endif %}
+      <div class="av-acoes">
+        <span class="pill-st {{ 'aprov' if a.aprovado else 'aguard' }}">{{ '✓ Aprovada' if a.aprovado else '⏳ Aguardando' }}</span>
+        <div style="display:flex;gap:6px">
+          {% if not a.aprovado %}
+            <form method="post" action="/admin/avaliacoes/{{ a.id }}/aprovar" style="display:inline">
+              <button class="btn-mini btn-aprovar">✓ Aprovar</button>
+            </form>
+          {% endif %}
+          <form method="post" action="/admin/avaliacoes/{{ a.id }}/excluir" style="display:inline" onsubmit="return confirm('Excluir essa avaliação?')">
+            <button class="btn-mini btn-excluir">🗑️ Excluir</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="vazio">
+    <div class="emoji">⭐</div>
+    <h3 style="color:#475569;margin-bottom:8px">Sem avaliações ainda</h3>
+    <p>Quando clientes avaliarem produtos comprados, aparecem aqui pra você aprovar antes de mostrarem no site.</p>
+  </div>
+{% endif %}
 {% endblock %}

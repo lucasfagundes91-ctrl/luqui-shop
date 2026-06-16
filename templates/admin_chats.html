@@ -2,59 +2,113 @@
 {% set pagina = 'chats' %}
 {% block titulo %}Chats Luquizinha — LuquiShop{% endblock %}
 {% block conteudo %}
-<h2>🧸 Conversas da Luquizinha (site)</h2>
-<p style="color:#64748B;font-size:13px;margin-bottom:14px">
-  Toda conversa do chatbot do site fica aqui. Use pra ver o que clientes estão pedindo + acompanhar leads marcados.
+<style>
+  .head-ch{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:14px}
+  .head-ch h2{margin:0}
+  .head-ch .badges{display:flex;gap:8px;flex-wrap:wrap}
+  .head-ch .badge{padding:5px 14px;border-radius:20px;font-size:13px;font-weight:800}
+  .head-ch .badge.azul{background:#DBEAFE;color:#1E40AF}
+  .head-ch .badge.lead{background:#D1FAE5;color:#065F46}
+  .sub-info{color:#64748B;font-size:13px;margin-bottom:18px;line-height:1.5}
+  .tab-ch{width:100%;border-collapse:separate;border-spacing:0 8px;font-size:13px}
+  .tab-ch thead th{text-align:left;font-size:10px;text-transform:uppercase;color:#64748B;letter-spacing:.5px;font-weight:800;padding:0 14px 6px}
+  .tab-ch tbody tr{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04);transition:transform .12s}
+  .tab-ch tbody tr:hover{transform:translateX(2px);box-shadow:0 2px 6px rgba(22,82,199,.08)}
+  .tab-ch td{padding:14px;vertical-align:middle;border:none}
+  .tab-ch td:first-child{border-radius:10px 0 0 10px}
+  .tab-ch td:last-child{border-radius:0 10px 10px 0}
+  .nome-cli{font-weight:700;color:#0F172A;font-size:13px}
+  .crianca-bd{display:inline-flex;align-items:center;gap:4px;background:#FEF3C7;color:#92400E;padding:4px 8px;border-radius:6px;font-size:11px;font-weight:700}
+  .primeira-msg{font-size:12px;color:#475569;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-style:italic}
+  .num-msgs{display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:28px;
+    background:#DBEAFE;color:#1E40AF;border-radius:6px;font-size:12px;font-weight:800;padding:0 8px}
+  .num-buscas{font-size:12px;color:#64748B}
+  .num-buscas.tem{color:#16A34A;font-weight:800}
+  .lead-pill{display:inline-flex;align-items:center;gap:4px;background:#D1FAE5;color:#15803D;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800;letter-spacing:.3px}
+  .data-msg{font-size:11px;color:#475569}
+  .btn-ver{background:linear-gradient(135deg,#1652C7,#0E3A8F);color:#fff;text-decoration:none;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:5px;box-shadow:0 2px 4px rgba(22,82,199,.25)}
+  .btn-ver:hover{box-shadow:0 4px 8px rgba(22,82,199,.35)}
+  .vazio{text-align:center;padding:60px 20px;color:#94A3B8;background:#fff;border-radius:14px}
+  .vazio .emoji{font-size:48px;margin-bottom:14px}
+</style>
+
+{% set leads = conversas|selectattr('lead_marcado')|list|length if conversas else 0 %}
+
+<div class="head-ch">
+  <h2>🧸 Conversas da Luquizinha (site)</h2>
+  {% if conversas %}
+    <div class="badges">
+      <span class="badge azul">💬 {{ conversas|length }} conversa{{ 's' if conversas|length != 1 else '' }}</span>
+      {% if leads %}<span class="badge lead">✓ {{ leads }} lead{{ 's' if leads != 1 else '' }}</span>{% endif %}
+    </div>
+  {% endif %}
+</div>
+
+<p class="sub-info">
+  💡 Toda conversa do chatbot do site fica aqui. Veja o que os clientes estão pedindo e acompanhe leads marcados pela IA.
 </p>
 
-<div class="card" style="padding:0">
-  <table style="width:100%;border-collapse:collapse">
+{% if conversas %}
+  <table class="tab-ch">
     <thead>
-      <tr style="background:#F8FAFC;font-size:12px;color:#64748B;text-transform:uppercase">
-        <th style="padding:12px;text-align:left">Cliente</th>
-        <th style="padding:12px;text-align:left">Criança</th>
-        <th style="padding:12px;text-align:left">Procurando</th>
-        <th style="padding:12px;text-align:center" title="Mensagens do cliente">Msgs</th>
-        <th style="padding:12px;text-align:center" title="Vezes que a IA buscou produto">🔍</th>
-        <th style="padding:12px;text-align:center">Lead</th>
-        <th style="padding:12px;text-align:left">Última msg</th>
-        <th style="padding:12px"></th>
+      <tr>
+        <th>Cliente</th>
+        <th>Criança</th>
+        <th>Procurando</th>
+        <th title="Mensagens do cliente">Msgs</th>
+        <th title="Vezes que a IA buscou produto">🔍 Buscas</th>
+        <th>Lead</th>
+        <th>Última msg</th>
+        <th></th>
       </tr>
     </thead>
     <tbody>
       {% for c in conversas %}
-      <tr style="border-top:1px solid #E2E8F0">
-        <td style="padding:12px">{{ c.nome or '(sem nome)' }}</td>
-        <td style="padding:12px;font-size:13px">
-          {% if c.sexo_crianca %}{{ c.sexo_crianca }}{% endif %}
-          {% if c.idade_crianca %} · {{ c.idade_crianca }}a{% endif %}
-          {% if not c.sexo_crianca and not c.idade_crianca %}<span style="color:#94A3B8">—</span>{% endif %}
+      <tr>
+        <td>
+          <div class="nome-cli">{{ c.nome or '(sem nome)' }}</div>
         </td>
-        <td style="padding:12px;font-size:13px;color:#475569;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ c.primeira_msg or '' }}">
-          {{ (c.primeira_msg or '')[:60] }}{% if c.primeira_msg and c.primeira_msg|length > 60 %}…{% endif %}
-        </td>
-        <td style="padding:12px;text-align:center"><b>{{ c.msgs_user or 0 }}</b></td>
-        <td style="padding:12px;text-align:center;font-size:12px">
-          {% if c.buscas_feitas %}{{ c.buscas_feitas }}{% else %}<span style="color:#94A3B8">—</span>{% endif %}
-        </td>
-        <td style="padding:12px;text-align:center">
-          {% if c.lead_marcado %}
-            <span style="background:#DCFCE7;color:#15803D;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700">✓ LEAD</span>
+        <td>
+          {% if c.sexo_crianca or c.idade_crianca %}
+            <span class="crianca-bd">
+              {% if c.sexo_crianca == 'menino' %}👦{% elif c.sexo_crianca == 'menina' %}👧{% else %}👶{% endif %}
+              {{ c.sexo_crianca or '?' }}{% if c.idade_crianca %} · {{ c.idade_crianca }}a{% endif %}
+            </span>
           {% else %}
-            <span style="color:#94A3B8">—</span>
+            <span style="color:#94A3B8;font-size:12px">—</span>
           {% endif %}
         </td>
-        <td style="padding:12px;font-size:12px;color:#64748B">
-          {{ c.ultimo_msg_em.strftime('%d/%m %H:%M') if c.ultimo_msg_em else '—' }}
+        <td>
+          <span class="primeira-msg" title="{{ c.primeira_msg or '' }}">
+            {% if c.primeira_msg %}"{{ c.primeira_msg[:60] }}{% if c.primeira_msg|length > 60 %}…{% endif %}"{% else %}—{% endif %}
+          </span>
         </td>
-        <td style="padding:12px;text-align:right">
-          <a href="/admin/chats/{{ c.id }}" style="background:#1652C7;color:#fff;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;text-decoration:none">Ver conversa</a>
+        <td><span class="num-msgs">{{ c.msgs_user or 0 }}</span></td>
+        <td>
+          {% if c.buscas_feitas %}
+            <span class="num-buscas tem">🔍 {{ c.buscas_feitas }}</span>
+          {% else %}
+            <span class="num-buscas">—</span>
+          {% endif %}
         </td>
+        <td>
+          {% if c.lead_marcado %}
+            <span class="lead-pill">✓ LEAD</span>
+          {% else %}
+            <span style="color:#94A3B8;font-size:12px">—</span>
+          {% endif %}
+        </td>
+        <td><span class="data-msg">{{ c.ultimo_msg_em.strftime('%d/%m %H:%M') if c.ultimo_msg_em else '—' }}</span></td>
+        <td><a href="/admin/chats/{{ c.id }}" class="btn-ver">💬 Ver conversa</a></td>
       </tr>
-      {% else %}
-      <tr><td colspan="8" style="padding:40px;text-align:center;color:#94A3B8">Nenhuma conversa ainda.</td></tr>
       {% endfor %}
     </tbody>
   </table>
-</div>
+{% else %}
+  <div class="vazio">
+    <div class="emoji">🧸</div>
+    <h3 style="color:#475569;margin-bottom:8px">Nenhuma conversa ainda</h3>
+    <p>Quando alguém usar o chatbot Luquizinha no site, as conversas aparecem aqui.</p>
+  </div>
+{% endif %}
 {% endblock %}
