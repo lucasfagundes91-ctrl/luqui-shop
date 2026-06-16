@@ -675,7 +675,11 @@ document.getElementById('form-checkout').addEventListener('submit', async (e)=>{
   const f = new FormData(e.target);
   const dados = Object.fromEntries(f.entries());
   dados.frete_valor = frete;
-  dados.frete_servico = document.querySelector('input[name="frete_servico"]:checked')?.value || '';
+  const radioFrete = document.querySelector('input[name="frete_servico"]:checked');
+  dados.frete_servico = radioFrete?.value || '';
+  // ID do servico Melhor Envio (numerico) — usado pra gerar etiqueta auto
+  // apos pagamento. 'LOCAL' (entrega Luqui) e 'RETIRA' nao precisam etiqueta.
+  dados.frete_servico_id = radioFrete?.dataset?.id || '';
   dados.embrulho_presente = document.getElementById('embrulho-check').checked;
   const {pontos: pontosFinal} = pontosEmReais();
   dados.pontos_usar = pontosFinal;

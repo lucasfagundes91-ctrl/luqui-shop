@@ -1125,25 +1125,22 @@ def _admin_ou_api_key():
     return _verifica_api_key_pdv()
 
 
-@app.route('/api/admin/pedidos/<int:pid>/etiqueta', methods=['POST'])
-def admin_pedido_gerar_etiqueta(pid):
-    """Fluxo completo Melhor Envio: cart → checkout → generate → print.
-    Aceita admin logado OU X-API-Key do PDV Pro (integracao reversa)."""
-    if not _admin_ou_api_key():
-        return jsonify({'erro': 'unauthorized'}), 401
-    d = request.get_json() or {}
-    service_id = d.get('service_id')
+def _gerar_etiqueta_me(pid, service_id, servico_nome=''):
+    """Cart → checkout → generate → print no Melhor Envio. Retorna
+    (ok, dict_resultado_ou_erro). Reutilizado pela rota admin E pelo
+    webhook Asaas (gera etiqueta automatica apos pagamento)."""
     if not service_id:
-        return jsonify({'erro': 'service_id obrigatório'}), 400
+        return False, {'erro': 'service_id obrigatorio'}
     ped = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one')
     if not ped:
-        return jsonify({'erro': 'pedido não encontrado'}), 404
+        return False, {'erro': 'pedido nao encontrado'}
     if ped.get('melhorenvio_etiqueta_id'):
-        return jsonify({'erro': 'pedido já tem etiqueta gerada'}), 400
+        return False, {'erro': 'pedido ja tem etiqueta gerada',
+                       'etiqueta_id': ped.get('melhorenvio_etiqueta_id')}
     itens = db_execute(
         "SELECT * FROM pedido_itens WHERE pedido_id=%s", [pid], fetch='all') or []
     if not itens:
-        return jsonify({'erro': 'pedido sem itens'}), 400
+        return False, {'erro': 'pedido sem itens'}
     for it in itens:
         try:
             it['produto'] = buscar_produto(it['produto_pdv_id']) or {}
@@ -1171,7 +1168,7 @@ def admin_pedido_gerar_etiqueta(pid):
             'email':       ped.get('email') or '',
             'document':    ''.join(c for c in (ped.get('cpf') or '')
                                    if c.isdigit()),
-            'address':     ped.get('logradouro') or '',
+            'address':     ped.get('endereco') or '',
             'complement':  ped.get('complemento') or '',
             'number':      ped.get('numero') or '',
             'district':    ped.get('bairro') or '',
@@ -1191,21 +1188,20 @@ def admin_pedido_gerar_etiqueta(pid):
     try:
         r = me_request('POST', '/api/v2/me/cart', json_body=body)
         if not r.ok:
-            return jsonify({'erro': 'cart falhou', 'detalhe': r.text[:500]}), 502
+            return False, {'erro': 'cart falhou', 'detalhe': r.text[:500]}
         cart = r.json()
         order_id = cart.get('id')
         if not order_id:
-            return jsonify({'erro': 'sem id do envio', 'detalhe': cart}), 502
+            return False, {'erro': 'sem id do envio', 'detalhe': cart}
         r2 = me_request('POST', '/api/v2/me/shipment/checkout',
                         json_body={'orders': [order_id]})
         if not r2.ok:
-            return jsonify({'erro': 'checkout falhou — confira saldo',
-                            'detalhe': r2.text[:500]}), 502
+            return False, {'erro': 'checkout ME falhou — confira saldo',
+                           'detalhe': r2.text[:500]}
         r3 = me_request('POST', '/api/v2/me/shipment/generate',
                         json_body={'orders': [order_id]})
         if not r3.ok:
-            return jsonify({'erro': 'generate falhou',
-                            'detalhe': r3.text[:500]}), 502
+            return False, {'erro': 'generate falhou', 'detalhe': r3.text[:500]}
         url_pdf = None
         r4 = me_request('POST', '/api/v2/me/shipment/print',
                         json_body={'mode': 'private', 'orders': [order_id]})
@@ -1232,12 +1228,23 @@ def admin_pedido_gerar_etiqueta(pid):
                         atualizado_em            = NOW()
                        WHERE id=%s""",
                    [order_id, url_pdf, rastreio, str(service_id),
-                    (d.get('servico_nome') or '')[:80], pid])
+                    (servico_nome or '')[:80], pid])
+        return True, {'ok': True, 'etiqueta_id': order_id,
+                      'rastreio': rastreio, 'pdf_url': url_pdf}
     except Exception as e:
         log.exception("ME etiqueta")
-        return jsonify({'erro': str(e)}), 500
-    return jsonify({'ok': True, 'etiqueta_id': order_id,
-                    'rastreio': rastreio, 'pdf_url': url_pdf})
+        return False, {'erro': str(e)}
+
+
+@app.route('/api/admin/pedidos/<int:pid>/etiqueta', methods=['POST'])
+def admin_pedido_gerar_etiqueta(pid):
+    """Rota admin — wrapper sobre _gerar_etiqueta_me."""
+    if not _admin_ou_api_key():
+        return jsonify({'erro': 'unauthorized'}), 401
+    d = request.get_json() or {}
+    ok, res = _gerar_etiqueta_me(pid, d.get('service_id'),
+                                  servico_nome=d.get('servico_nome', ''))
+    return jsonify(res), (200 if ok else 400)
 
 
 # ─── Cliente API PDV Pro (cache 60s) ──────────────────────────────────────────
@@ -5229,6 +5236,11 @@ def checkout_finalizar():
     embrulho_tipo_raw = (d.get('embrulho_tipo') or '').strip().lower()
     embrulho_tipo = embrulho_tipo_raw if (embrulho and embrulho_tipo_raw in ('menino', 'menina')) else None
     entrega_agendada = ((d.get('entrega_agendada') or '').strip()[:40]) or None
+    # frete_servico_id: ID numerico do Melhor Envio (PAC, SEDEX, etc) que vai
+    # ser usado pra gerar etiqueta automatica apos pagamento. LOCAL/RETIRA
+    # nao tem etiqueta.
+    fsid = (d.get('frete_servico_id') or '').strip()
+    if fsid in ('LOCAL', 'RETIRA'): fsid = ''
     ped = db_execute("""
         INSERT INTO pedidos
           (cliente_id, email, nome, telefone, cpf, cep, endereco, numero,
@@ -5236,8 +5248,8 @@ def checkout_finalizar():
            forma_pagto, parcelas, frete_servico, frete_prazo, observacao,
            cupom_codigo, cupom_desconto, embrulho_presente, embrulho_mensagem,
            embrulho_tipo, juros_valor, entrega_agendada,
-           pontos_resgatados, desconto_pontos)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+           pontos_resgatados, desconto_pontos, melhorenvio_servico_id)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         RETURNING id""",
         [cli['id'] if cli else None,
          d['email'].strip().lower(), d['nome'].strip(), d['telefone'].strip(),
@@ -5255,7 +5267,8 @@ def checkout_finalizar():
          d.get('frete_prazo') or '', d.get('observacao') or None,
          cupom_codigo or None, cupom_desconto,
          embrulho, embrulho_msg, embrulho_tipo, juros_valor, entrega_agendada,
-         pontos_resgatados, desconto_pontos],
+         pontos_resgatados, desconto_pontos,
+         fsid or None],
         fetch='one')
     pid = ped['id']
     # Atualiza dados do cliente_site logado pra auto-preencher no proximo
@@ -5717,6 +5730,31 @@ Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp
                 log.error("PDV /pedido %s: %s", r.status_code, r.text[:300])
         except Exception as e:
             log.error("falha ao enviar pedido pro PDV Pro: %s", e)
+        # ─ Gera etiqueta Melhor Envio AUTOMATICAMENTE (se nao for retirada)
+        # Pre-condicoes: tem service_id (cliente escolheu PAC/SEDEX/etc no
+        # checkout) e nao tem etiqueta ainda. Tudo em try/except — falha aqui
+        # nao bloqueia o resto (cliente ja recebe email/WhatsApp do pedido).
+        try:
+            fsid = (p.get('melhorenvio_servico_id') or '').strip()
+            etiq_ja = (p.get('melhorenvio_etiqueta_id') or '').strip()
+            if fsid and not etiq_ja and me_configurado() and me_token_atual():
+                ok_et, res_et = _gerar_etiqueta_me(
+                    pid, fsid, servico_nome=(p.get('frete_servico') or '')[:80])
+                if ok_et:
+                    log.info("etiqueta ME gerada auto pra pedido %s "
+                             "(envio=%s rastreio=%s)", pid,
+                             res_et.get('etiqueta_id'), res_et.get('rastreio'))
+                else:
+                    # Avisa admin via WhatsApp pra ele gerar manual
+                    try:
+                        enviar_whatsapp(ADMIN_WHATSAPP,
+                            f"⚠️ *Etiqueta ME falhou — pedido #{pid}*\n\n"
+                            f"Motivo: {(res_et.get('erro') or 'erro') [:200]}\n\n"
+                            f"Gera manual: /admin/pedidos")
+                    except Exception: pass
+                    log.warning("etiqueta ME falhou pedido %s: %s", pid, res_et)
+        except Exception as e:
+            log.error("etiqueta auto pedido %s: %s", pid, e)
         # Email de confirmação
         try:
             enviar_email(p['email'],
