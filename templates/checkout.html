@@ -639,6 +639,27 @@ function recalcular(){
     document.getElementById('resumo-juros').textContent = '+R$ '+juros.toFixed(2).replace('.',',');
   }
   document.getElementById('resumo-total').textContent = 'R$ '+total.toFixed(2).replace('.',',');
+  // Asaas exige R$ 5,00 minimo — desabilita botao + mostra aviso quando
+  // descontos derrubam o total abaixo disso. Sem aviso, cliente clica e
+  // recebe erro feio. Com aviso, ele entende que tem que ajustar.
+  const ASAAS_MIN = 5;
+  const btnPagar = document.querySelector('button[type=submit]');
+  let alertaMin = document.getElementById('alerta-min-asaas');
+  if(total > 0 && total < ASAAS_MIN){
+    if(!alertaMin){
+      alertaMin = document.createElement('div');
+      alertaMin.id = 'alerta-min-asaas';
+      alertaMin.style.cssText = 'background:#FEF3C7;border:1px solid #F59E0B;border-radius:8px;padding:10px 12px;margin:10px 0;font-size:13px;color:#92400E;line-height:1.4';
+      const resumo = document.getElementById('resumo-total')?.closest('div');
+      if(resumo && resumo.parentNode) resumo.parentNode.insertBefore(alertaMin, btnPagar);
+    }
+    const falta = (ASAAS_MIN - total).toFixed(2).replace('.',',');
+    alertaMin.innerHTML = '⚠️ <b>Valor mínimo R$ 5,00.</b> Faltam R$ ' + falta + ' — adicione mais um item ou use menos pontos do Clube.';
+    if(btnPagar){ btnPagar.disabled = true; btnPagar.style.opacity = '0.6'; btnPagar.style.cursor = 'not-allowed'; }
+  } else {
+    if(alertaMin) alertaMin.remove();
+    if(btnPagar){ btnPagar.disabled = false; btnPagar.style.opacity = ''; btnPagar.style.cursor = ''; }
+  }
 }
 
 document.getElementById('form-checkout').addEventListener('submit', async (e)=>{

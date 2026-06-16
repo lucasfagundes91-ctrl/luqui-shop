@@ -3890,6 +3890,37 @@ def _fallback_termos_por_sexo(sexo):
     return ['kit', 'jogo', 'pelúcia']
 
 
+# Cliente fala "boneca que fala" mas descrições usam "frases/papo/interativa".
+# Sinônimos casam o vocabulário coloquial com o que de fato está no catálogo.
+_SINONIMOS_BUSCA = {
+    'fala': ['frases', 'papo', 'interativa'],
+    'falar': ['frases', 'papo', 'interativa'],
+    'falando': ['frases', 'papo', 'interativa'],
+    'conversa': ['frases', 'papo', 'interativa'],
+    'conversar': ['frases', 'papo', 'interativa'],
+    'canta': ['música', 'musica', 'som', 'cantando'],
+    'cantar': ['música', 'musica', 'som'],
+    'dança': ['música', 'musica', 'som'],
+    'dançar': ['música', 'musica', 'som'],
+    'anda': ['caminha', 'movimento'],
+    'andar': ['caminha', 'movimento'],
+}
+
+
+def _expandir_sinonimos(termo):
+    """Pra termo do cliente com palavra coloquial, devolve termos alternativos
+    que existem no catálogo. Ex: 'boneca que fala' → ['frases', 'papo']."""
+    if not termo:
+        return []
+    palavras = [w.lower().strip('.,!?;:') for w in termo.split()]
+    out = []
+    for p in palavras:
+        for syn in _SINONIMOS_BUSCA.get(p, []):
+            if syn not in out:
+                out.append(syn)
+    return out
+
+
 def _formatar_produtos(rows, preco_max=None):
     out = []
     for p in rows[:8]:
@@ -3922,6 +3953,18 @@ def _luq_tool_buscar_produtos(args):
         palavras = [w for w in termo.split() if w.lower() not in _STOPWORDS_BUSCA]
         if palavras and palavras[0].lower() != termo.lower():
             tentativas.append(palavras[0])
+        # Sinônimos: "fala" → tenta "frases/papo/interativa" antes do
+        # fallback por sexo (cliente fala coloquial, catálogo usa outro
+        # vocabulário). Combina com primeira palavra significativa: ex
+        # "boneca que fala" → tenta "boneca frases", "boneca papo".
+        sinonimos = _expandir_sinonimos(termo)
+        base = palavras[0] if palavras else ''
+        for s in sinonimos:
+            cand = f"{base} {s}".strip() if base else s
+            if cand not in tentativas:
+                tentativas.append(cand)
+            if s not in tentativas:
+                tentativas.append(s)
     # Fallback por sexo (boneca/carrinho/pelúcia/lego)
     for t in _fallback_termos_por_sexo(sexo):
         if t not in tentativas:
@@ -5169,6 +5212,16 @@ def checkout_finalizar():
         parcela_valor = round(base * fator, 2)
         total = round(parcela_valor * parcelas, 2)
         juros_valor = round(total - base, 2)
+    # Asaas exige R$ 5,00 minimo por cobranca. Se desconto (PIX/cupom/pontos)
+    # derruba abaixo disso, recusa o checkout ANTES de criar pedido com
+    # mensagem clara sugerindo aumentar carrinho ou reduzir desconto.
+    ASAAS_MINIMO = 5.0
+    if total < ASAAS_MINIMO:
+        falta = round(ASAAS_MINIMO - total, 2)
+        msg = (f'Valor mínimo de R$ {ASAAS_MINIMO:.2f} pra fechar a compra. '
+               f'Faltam R$ {falta:.2f} — adicione mais um item ou use menos pontos '
+               f'do Clube.').replace('.', ',')
+        return jsonify({'erro': msg}), 400
     # Cria pedido no banco (status aguardando_pagto)
     cli = cliente_logado()
     embrulho = bool(d.get('embrulho_presente'))
