@@ -832,7 +832,12 @@ def me_volume_dos_itens(itens):
 
 
 def me_cotar(cep_destino, itens):
-    """Retorna lista de opções de frete (servico, valor, prazo, id)."""
+    """Retorna lista de opções de frete (servico, valor, prazo, id).
+    Força lista de services pra API retornar TODAS as transportadoras
+    disponíveis na conta — sem isso o ME só devolve Correios por padrão.
+    Os 15 IDs cobrem Correios, Jadlog, LATAM, Azul, Buslog, Loggi, J&T,
+    Total Express (que estiverem habilitadas — as outras vêm com erro
+    que a gente filtra em opt.get('error'))."""
     cep_destino = ''.join(c for c in (cep_destino or '') if c.isdigit())
     if len(cep_destino) != 8:
         return []
@@ -841,6 +846,8 @@ def me_cotar(cep_destino, itens):
                                             if c.isdigit())},
         'to':       {'postal_code': cep_destino},
         'products': me_volume_dos_itens(itens),
+        # Forca cotacao em todos os services habilitados (sem isso so vem Correios)
+        'services': '1,2,3,4,12,15,16,17,22,27,31,32,33,34,35',
     }
     r = me_request('POST', '/api/v2/me/shipment/calculate', json_body=body)
     if not r.ok:
