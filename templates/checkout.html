@@ -771,11 +771,25 @@ async function aoTabularCpf(cpfRaw, silent){
   }
   const ult = d.ultima_compra;
   const ultTxt = ult && ult.data ? ' · última compra ' + new Date(ult.data).toLocaleDateString('pt-BR') : '';
-  av.innerHTML = '<div>👋 Achamos seu cadastro na loja física, <b>' + (d.nome||'').split(' ')[0] + '</b>!'
-    + ultTxt
-    + '<br><span style="font-size:12.5px;color:#92400E">Quer preencher os dados automaticamente?</span></div>'
-    + '<button type="button" class="btn" style="background:#16a34a;color:#fff;border:none;padding:8px 14px;border-radius:6px;font-weight:600;cursor:pointer" '
-    + 'onclick="prePreencherDadosPdv(' + JSON.stringify(JSON.stringify(d)).replace(/"/g,'&quot;') + ')">✓ Preencher</button>';
+  // Se os campos principais ja estao preenchidos (cliente logado, server-side),
+  // nao pede pra preencher — so confirma. Caso contrario, mostra o botao
+  // pra pre-preencher (cliente nao logado, digitou CPF que reconhecemos).
+  const nomeAtual = (document.querySelector('input[name="nome"]')?.value || '').trim();
+  const emailAtual = (document.querySelector('input[name="email"]')?.value || '').trim();
+  const jaPreenchido = !!(nomeAtual && emailAtual);
+  if(jaPreenchido){
+    av.style.background = '#ECFDF5';
+    av.style.borderColor = '#10B981';
+    av.innerHTML = '<div style="color:#065f46">✓ <b>Bem-vinda de volta, ' + (d.nome||'').split(' ')[0] + '!</b>'
+      + ultTxt
+      + '<br><span style="font-size:12.5px;color:#047857">Seus dados já estão preenchidos — confira antes de finalizar.</span></div>';
+  } else {
+    av.innerHTML = '<div>👋 Achamos seu cadastro na loja física, <b>' + (d.nome||'').split(' ')[0] + '</b>!'
+      + ultTxt
+      + '<br><span style="font-size:12.5px;color:#92400E">Quer preencher os dados automaticamente?</span></div>'
+      + '<button type="button" class="btn" style="background:#16a34a;color:#fff;border:none;padding:8px 14px;border-radius:6px;font-weight:600;cursor:pointer" '
+      + 'onclick="prePreencherDadosPdv(' + JSON.stringify(JSON.stringify(d)).replace(/"/g,'&quot;') + ')">✓ Preencher</button>';
+  }
 }
 
 function prePreencherDadosPdv(dStr){
