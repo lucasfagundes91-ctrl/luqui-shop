@@ -169,14 +169,47 @@
 
     <!-- ─── COLUNA 2: FRETE + ENDEREÇO + PRESENTE ─── -->
     <div>
-      <!-- FRETE -->
-      <div id="bloco-frete" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px">
-        <h3 style="margin-bottom:16px">🚚 Entrega ou retirada</h3>
-        <div id="opcoes-frete"><div class="sub" style="font-size:13px;padding:8px 0">Carregando opções...</div></div>
+      <!-- ESCOLHA MACRO: RETIRAR ou RECEBER EM CASA -->
+      <div id="bloco-escolha-frete" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px">
+        <h3 style="margin-bottom:16px">🚚 Como você quer receber?</h3>
+        <div id="escolha-cards" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <label class="card-frete-macro" data-modo="retirar"
+                 style="border:2px solid var(--linha);padding:18px;border-radius:12px;cursor:pointer;text-align:center;transition:all .15s">
+            <input type="radio" name="modo_entrega" value="retirar" style="display:none">
+            <div style="font-size:32px;margin-bottom:6px">🏪</div>
+            <b style="display:block;font-size:15px;color:var(--azul)">Retirar na loja</b>
+            <div style="font-size:12px;color:var(--mut);margin-top:4px">Grátis · pronto em até 30 min</div>
+          </label>
+          <label class="card-frete-macro" data-modo="entrega"
+                 style="border:2px solid var(--linha);padding:18px;border-radius:12px;cursor:pointer;text-align:center;transition:all .15s">
+            <input type="radio" name="modo_entrega" value="entrega" style="display:none">
+            <div style="font-size:32px;margin-bottom:6px">📦</div>
+            <b style="display:block;font-size:15px;color:var(--azul)">Receber em casa</b>
+            <div style="font-size:12px;color:var(--mut);margin-top:4px">Calcula o frete pelo CEP</div>
+          </label>
+        </div>
+        <!-- Bloco mostrado quando escolhe RETIRAR -->
+        <div id="bloco-retirar-info" style="display:none;margin-top:14px;padding:14px;background:#ecfdf5;border-radius:8px;border-left:3px solid #16a34a">
+          <div style="font-weight:700;color:#15803d;margin-bottom:6px">✅ Em até <span id="ri-tempo">30</span> minutos seu pedido está pronto pra retirar!</div>
+          <div style="font-size:13px;line-height:1.6;color:#1e293b">
+            <div>📍 <b>Endereço:</b> <span id="ri-end"></span></div>
+            <div>🕐 <b>Horário:</b> <span id="ri-hor"></span></div>
+            <div style="margin-top:6px;font-size:12px;color:#475569">
+              💬 Te avisamos no WhatsApp <b>o quanto antes</b> — geralmente bem antes desse prazo. Leve um documento com foto na hora de retirar.
+            </div>
+            <a id="ri-maps" target="_blank" rel="noopener"
+               style="display:inline-block;margin-top:8px;padding:6px 12px;background:#16a34a;color:#fff;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600">🗺️ Ver no Google Maps</a>
+          </div>
+        </div>
+      </div>
+      <!-- FRETE — só aparece se modo_entrega=entrega + CEP preenchido -->
+      <div id="bloco-frete" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px;display:none">
+        <h3 style="margin-bottom:16px">📦 Escolha o serviço de entrega</h3>
+        <div id="opcoes-frete"><div class="sub" style="font-size:13px;padding:8px 0">Preencha seu endereço pra calcular o frete...</div></div>
       </div>
 
-      <!-- ENDEREÇO (visivel só se NÃO for retirar na loja — controlado por aoTrocarFrete) -->
-      <div id="bloco-endereco" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px">
+      <!-- ENDEREÇO — só aparece quando cliente escolhe Receber em casa -->
+      <div id="bloco-endereco" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px;display:none">
         <h3 style="margin-bottom:16px">📍 Endereço de entrega</h3>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <input name="cep" id="cep" placeholder="CEP *" required
@@ -414,33 +447,123 @@ async function buscarCep(cep){
   buscarFrete();
 }
 let SLOTS_LOCAL = [];
+let MODO_ENTREGA = '';  // 'retirar' | 'entrega' | ''
+// 1a chamada: descobre dados da loja (endereco/horario) e pre-popula card
+// 'Retirar na loja'. Frete real só busca depois que o cliente preencher CEP.
+async function carregarInfoRetirada(){
+  try {
+    const r = await fetch('/api/checkout/frete?cidade=&uf=&cep=');
+    const d = await r.json();
+    const ret = (d.opcoes||[]).find(o=>o.id==='RETIRA');
+    if(ret){
+      const ri_end = document.getElementById('ri-end');
+      const ri_hor = document.getElementById('ri-hor');
+      const ri_tempo = document.getElementById('ri-tempo');
+      const ri_maps = document.getElementById('ri-maps');
+      if(ri_end) ri_end.textContent = ret.endereco || '';
+      if(ri_hor) ri_hor.textContent = ret.horario || '';
+      if(ri_tempo) ri_tempo.textContent = ret.tempo_min || '30';
+      if(ri_maps) ri_maps.href = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(ret.endereco||'');
+    }
+  } catch(e){}
+}
+carregarInfoRetirada();
+
+// Click nos cards macro (Retirar vs Receber em casa)
+document.querySelectorAll('.card-frete-macro').forEach(card=>{
+  card.addEventListener('click', ()=>{
+    const modo = card.dataset.modo;
+    MODO_ENTREGA = modo;
+    // visual cards
+    document.querySelectorAll('.card-frete-macro').forEach(c=>{
+      const sel = c.dataset.modo === modo;
+      c.style.borderColor = sel ? 'var(--azul)' : 'var(--linha)';
+      c.style.background = sel ? '#EFF6FF' : '#fff';
+      const inp = c.querySelector('input[type="radio"]');
+      if(inp) inp.checked = sel;
+    });
+    // info de retirada
+    document.getElementById('bloco-retirar-info').style.display = (modo==='retirar') ? 'block' : 'none';
+    // endereco
+    const blocoEnd = document.getElementById('bloco-endereco');
+    if(blocoEnd) blocoEnd.style.display = (modo==='entrega') ? 'block' : 'none';
+    ['cep','endereco','numero','bairro','cidade','uf'].forEach(name => {
+      const el = document.querySelector('input[name="'+name+'"]');
+      if(el) el.required = (modo==='entrega');
+    });
+    // frete
+    const blocoFrete = document.getElementById('bloco-frete');
+    if(modo==='retirar'){
+      // seta uma opcao virtual de retirada com valor 0 pra o submit
+      frete = 0;
+      freteCalculado = true;
+      _setFreteVirtualRetira();
+      if(blocoFrete) blocoFrete.style.display = 'none';
+      recalcular();
+    } else if(modo==='entrega'){
+      // se ja tem CEP, busca frete; senao espera o cliente preencher
+      const cep = (document.getElementById('cep').value||'').replace(/\D/g,'');
+      if(cep.length===8){
+        if(blocoFrete) blocoFrete.style.display = 'block';
+        buscarFrete();
+      } else {
+        if(blocoFrete) blocoFrete.style.display = 'none';
+        freteCalculado = false;
+      }
+    }
+  });
+});
+
+// Cria um radio escondido com a opcao Retira pra o submit funcionar igual
+function _setFreteVirtualRetira(){
+  let h = document.getElementById('frete-virtual-retira');
+  if(!h){
+    h = document.createElement('input');
+    h.type = 'hidden'; h.id = 'frete-virtual-retira';
+    h.name = 'frete_servico';
+    document.getElementById('form-checkout').appendChild(h);
+  }
+  h.value = 'Retirar na loja';
+  // remove qualquer radio anterior selecionado
+  document.querySelectorAll('input[name="frete_servico"][type="radio"]').forEach(r=>r.checked=false);
+  // limpa data-id atualizando hidden
+  h.dataset.id = 'RETIRA';
+  h.dataset.valor = '0';
+}
+
 async function buscarFrete(){
+  if(MODO_ENTREGA !== 'entrega') return;
   const cidade = document.getElementById('cidade').value;
   const uf = document.getElementById('uf').value;
   const cep = (document.getElementById('cep').value || '').replace(/\D/g,'');
-  // Mesmo sem CEP/cidade roda — backend devolve pelo menos a opção "Retirar na loja"
+  if(cep.length !== 8) return;
+  // Remove hidden de retirada (se voltou pra modo entrega depois)
+  const h = document.getElementById('frete-virtual-retira'); if(h) h.remove();
+  const box = document.getElementById('opcoes-frete');
+  box.innerHTML = '<div class="sub" style="font-size:13px;padding:8px 0">Calculando frete pelo Melhor Envio…</div>';
   const r = await fetch(`/api/checkout/frete?cidade=${encodeURIComponent(cidade)}&uf=${uf}&cep=${cep}`);
   const d = await r.json();
-  const box = document.getElementById('opcoes-frete');
-  // Guarda dados da opção RETIRA pra renderizar painel quando selecionada
-  let dadosRetira = null;
-  box.innerHTML = d.opcoes.map((o,i)=>{
+  // Filtra opcoes: nao queremos RETIRA aqui (cliente ja escolheu Receber em casa)
+  const ops = (d.opcoes||[]).filter(o=>o.id !== 'RETIRA');
+  if(!ops.length){
+    box.innerHTML = '<div style="background:#FEE2E2;color:#991B1B;padding:12px;border-radius:8px;font-size:13px">Nenhuma opção de entrega disponível pra esse CEP. Tente conferir o CEP ou fale com a loja no WhatsApp.</div>';
+    freteCalculado = false;
+    return;
+  }
+  box.innerHTML = ops.map((o,i)=>{
     const isLocal = o.id === 'LOCAL';
-    const isRetira = o.id === 'RETIRA';
     if(isLocal) SLOTS_LOCAL = o.agendamento || [];
-    if(isRetira) dadosRetira = o;
     const prazoTexto = isLocal && SLOTS_LOCAL.length ? '📅 Agendar entrega' : o.prazo;
-    const icone = isRetira ? '🏪 ' : '';
     return `
     <label style="display:flex;justify-content:space-between;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-bottom:8px;cursor:pointer">
       <span>
         <input type="radio" name="frete_servico" value="${o.servico}" data-valor="${o.valor}" data-id="${o.id||''}" ${i===0?'checked':''} onchange="aoTrocarFrete()" style="margin-right:8px">
-        <b>${icone}${o.servico}</b><br><span style="font-size:12px;color:var(--mut);margin-left:24px">${prazoTexto}</span>
+        <b>${o.servico}</b><br><span style="font-size:12px;color:var(--mut);margin-left:24px">${prazoTexto}</span>
       </span>
       <b style="color:${o.valor===0?'var(--verde)':'var(--txt)'}">${o.valor===0?'GRÁTIS':'R$ '+o.valor.toFixed(2).replace('.',',')}</b>
     </label>`;
   }).join('');
-  // Bloco do select de horario (so aparece quando a opcao LOCAL ta marcada)
+  // Bloco do select de horario (LOCAL = entrega Luqui na cidade)
   box.innerHTML += `<div id="bloco-agendamento" style="display:none;margin:-4px 0 12px 24px;padding:12px;background:#F8FAFC;border-radius:8px">
     <label style="font-size:12px;color:var(--mut);font-weight:700;display:block;margin-bottom:6px">⏰ ESCOLHA O HORÁRIO DE ENTREGA</label>
     <select name="entrega_agendada" id="entrega-agendada" required style="width:100%;padding:10px;border:1px solid var(--linha);border-radius:8px;font-size:14px">
@@ -449,51 +572,21 @@ async function buscarFrete(){
     </select>
     <p style="font-size:11px;color:var(--mut);margin-top:6px">A entrega chega dentro da janela escolhida. Pedidos feitos até meio-dia podem ser entregues no mesmo dia.</p>
   </div>`;
-  // Bloco da retirada na loja (endereço + horário + tempo)
-  if(dadosRetira){
-    const enderecoEnc = encodeURIComponent(dadosRetira.endereco || '');
-    box.innerHTML += `<div id="bloco-retirada" style="display:none;margin:-4px 0 12px 24px;padding:14px;background:#ecfdf5;border-radius:8px;border-left:3px solid #16a34a">
-      <div style="font-weight:700;color:#15803d;margin-bottom:6px">✅ Em até ${dadosRetira.tempo_min || 30} minutos seu pedido está pronto pra retirar!</div>
-      <div style="font-size:13px;line-height:1.6;color:#1e293b">
-        <div>📍 <b>Endereço:</b> ${dadosRetira.endereco || ''}</div>
-        <div>🕐 <b>Horário:</b> ${dadosRetira.horario || ''}</div>
-        <div style="margin-top:6px;font-size:12px;color:#475569">
-          💬 Te avisamos no WhatsApp <b>o quanto antes</b> — geralmente bem antes desse prazo.
-          Leve um documento com foto na hora de retirar.
-        </div>
-        <a href="https://www.google.com/maps/search/?api=1&query=${enderecoEnc}" target="_blank" rel="noopener"
-           style="display:inline-block;margin-top:8px;padding:6px 12px;background:#16a34a;color:#fff;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600">
-          🗺️ Ver no Google Maps
-        </a>
-      </div>
-    </div>`;
-  }
-  document.getElementById('bloco-frete').style.display='block';
-  frete = d.opcoes[0].valor;
+  frete = ops[0].valor;
   freteCalculado = true;
   aoTrocarFrete();
   recalcular();
 }
+
 function aoTrocarFrete(){
   const r = document.querySelector('input[name="frete_servico"]:checked');
   if(r){
     frete = parseFloat(r.dataset.valor);
     const isLocal = r.dataset.id === 'LOCAL';
-    const isRetira = r.dataset.id === 'RETIRA';
     const bloco = document.getElementById('bloco-agendamento');
     if(bloco) bloco.style.display = isLocal ? 'block' : 'none';
     const sel = document.getElementById('entrega-agendada');
     if(sel) sel.required = isLocal;
-    const blocoRet = document.getElementById('bloco-retirada');
-    if(blocoRet) blocoRet.style.display = isRetira ? 'block' : 'none';
-    // Se retirar na loja, esconde bloco de endereço inteiro (cliente
-    // nao precisa informar endereço pra retirar pessoalmente)
-    const blocoEnd = document.getElementById('bloco-endereco');
-    if(blocoEnd) blocoEnd.style.display = isRetira ? 'none' : 'block';
-    ['cep','endereco','numero','bairro','cidade','uf'].forEach(name => {
-      const el = document.querySelector('input[name="'+name+'"]');
-      if(el) el.required = !isRetira;
-    });
     recalcular();
   }
 }
@@ -666,20 +759,29 @@ document.getElementById('form-checkout').addEventListener('submit', async (e)=>{
   e.preventDefault();
   const btn = e.target.querySelector('button[type=submit]');
   btn.disabled = true; btn.textContent = 'Processando...';
-  if(!freteCalculado){
+  if(!MODO_ENTREGA){
+    toast('Escolha entre Retirar na loja ou Receber em casa', 'err');
+    btn.disabled=false; btn.textContent='Pagar e finalizar →';
+    return;
+  }
+  if(MODO_ENTREGA==='entrega' && !freteCalculado){
     toast('Preencha o CEP pra calcular o frete antes de finalizar', 'err');
-    const btn2 = document.querySelector('button[type=submit]');
-    if(btn2){ btn2.disabled=false; btn2.textContent='Pagar e finalizar →'; }
+    btn.disabled=false; btn.textContent='Pagar e finalizar →';
     return;
   }
   const f = new FormData(e.target);
   const dados = Object.fromEntries(f.entries());
   dados.frete_valor = frete;
+  // Pra retirar: usa hidden #frete-virtual-retira; pra entrega: usa radio checked
+  const hiddenRetira = document.getElementById('frete-virtual-retira');
   const radioFrete = document.querySelector('input[name="frete_servico"]:checked');
-  dados.frete_servico = radioFrete?.value || '';
-  // ID do servico Melhor Envio (numerico) — usado pra gerar etiqueta auto
-  // apos pagamento. 'LOCAL' (entrega Luqui) e 'RETIRA' nao precisam etiqueta.
-  dados.frete_servico_id = radioFrete?.dataset?.id || '';
+  if(MODO_ENTREGA==='retirar' && hiddenRetira){
+    dados.frete_servico = 'Retirar na loja';
+    dados.frete_servico_id = 'RETIRA';
+  } else {
+    dados.frete_servico = radioFrete?.value || '';
+    dados.frete_servico_id = radioFrete?.dataset?.id || '';
+  }
   dados.embrulho_presente = document.getElementById('embrulho-check').checked;
   const {pontos: pontosFinal} = pontosEmReais();
   dados.pontos_usar = pontosFinal;
