@@ -1,56 +1,209 @@
 {% extends "admin_base.html" %}
 {% set pagina = 'pedidos' %}
 {% block conteudo %}
-<h2>🛒 Pedidos</h2>
-<div class="card">
-  {% if pedidos %}
-    <table>
-      <thead><tr><th>#</th><th>Cliente</th><th>Cidade</th><th>Data</th><th>Total</th><th>Status</th><th>Etiqueta ME</th><th>Atualizar</th></tr></thead>
-      <tbody>
-        {% for p in pedidos %}
-          <tr>
-            <td><b>#{{ p.id }}</b><br><a href="/pedido/{{ p.id }}/tracking" target="_blank" style="font-size:11px;color:#1652C7">tracking</a></td>
-            <td>{{ p.nome or '—' }}<br><small style="color:#64748B">{{ p.email }} · {{ p.telefone or '—' }}</small></td>
-            <td>{{ p.cidade or '—' }}/{{ p.uf or '' }}</td>
-            <td>{{ p.criado_em.strftime('%d/%m %H:%M') if p.criado_em else '—' }}</td>
-            <td><b>{{ rs(p.total) }}</b><br><span style="font-size:11px;color:#64748B">{{ p.forma_pagto }}</span></td>
-            <td><span class="pill {{ 'verde' if p.status in ('pago','entregue') else 'amarelo' if p.status == 'aguardando_pagto' else 'azul' }}">{{ p.status }}</span></td>
-            <td>
-              {% set is_retira = (p.frete_servico or '').lower().startswith('retirar') %}
-              {% if is_retira %}
-                <span style="color:#16a34a;font-size:12px;font-weight:600">🏪 Retirada na loja</span>
-              {% elif p.melhorenvio_etiqueta_url %}
-                <a href="{{ p.melhorenvio_etiqueta_url }}" target="_blank"
-                   style="background:#0E3D9E;color:#fff;padding:5px 10px;border-radius:6px;text-decoration:none;font-size:12px">📄 PDF</a>
-                {% if p.melhorenvio_rastreio %}
-                  <br><small style="color:#64748B">{{ p.melhorenvio_rastreio }}</small>
-                {% endif %}
-              {% elif p.status in ('pago','preparando') and p.cep %}
-                <button onclick="cotarEEtiqueta({{ p.id }})"
-                        style="background:#FFC700;color:#082B7A;border:0;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700">
-                  Cotar + emitir
-                </button>
-              {% else %}
-                <span style="color:#94a3b8;font-size:12px">—</span>
-              {% endif %}
-            </td>
-            <td>
-              <select onchange="atualizarStatus({{ p.id }}, this.value, this)" style="font-size:12px;padding:4px;border:1px solid #E2E8F0;border-radius:4px">
-                <option value="">Mudar pra...</option>
-                <option value="preparando">📦 Preparando</option>
-                <option value="enviado">🚚 Enviado</option>
-                <option value="entregue">✓ Entregue</option>
-                <option value="cancelado">❌ Cancelar</option>
-              </select>
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <p style="color:#64748B">Nenhum pedido cadastrado ainda.</p>
-  {% endif %}
+<style>
+  .header-pedidos{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:14px}
+  .header-pedidos h2{margin:0}
+  .stat-pedidos{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px}
+  .stat-pedidos .c{background:#fff;padding:16px 18px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);position:relative;overflow:hidden}
+  .stat-pedidos .c::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:#1652C7}
+  .stat-pedidos .c.aguardando::before{background:#F59E0B}
+  .stat-pedidos .c.pendente::before{background:#DC2626}
+  .stat-pedidos .c.expedidos::before{background:#16A34A}
+  .stat-pedidos .c.receita::before{background:#FFC700}
+  .stat-pedidos .lbl{font-size:11px;text-transform:uppercase;color:#64748B;letter-spacing:.5px;font-weight:700}
+  .stat-pedidos .val{font-size:24px;font-weight:900;margin-top:4px;color:#0F172A}
+  .stat-pedidos .c.receita .val{color:#16A34A;font-size:20px}
+  .stat-pedidos .c.pendente .val{color:#DC2626}
+  .stat-pedidos .c.aguardando .val{color:#F59E0B}
+  /* Filtros */
+  .filtros{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+  .filtros .chip{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #E2E8F0;color:#475569;
+    padding:8px 14px;border-radius:20px;font-size:13px;font-weight:600;text-decoration:none;transition:all .15s}
+  .filtros .chip:hover{border-color:#1652C7;color:#1652C7}
+  .filtros .chip.on{background:#1652C7;border-color:#1652C7;color:#fff}
+  .filtros .chip.on:hover{background:#0E3A8F}
+  .filtros .busca{flex:1;min-width:200px;display:flex;gap:6px;align-items:center}
+  .filtros .busca input{flex:1;padding:8px 14px;border:1px solid #E2E8F0;border-radius:20px;font-size:13px;outline:none}
+  .filtros .busca input:focus{border-color:#1652C7}
+  .filtros .busca button{background:#1652C7;color:#fff;border:0;padding:8px 16px;border-radius:20px;font-size:13px;font-weight:700;cursor:pointer}
+  /* Tabela melhorada */
+  .tab-pedidos{width:100%;border-collapse:separate;border-spacing:0 8px;font-size:13px}
+  .tab-pedidos thead th{text-align:left;font-size:10px;text-transform:uppercase;color:#64748B;letter-spacing:.5px;font-weight:700;padding:0 14px 6px}
+  .tab-pedidos tbody tr{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04);transition:transform .12s}
+  .tab-pedidos tbody tr:hover{transform:translateX(2px);box-shadow:0 2px 6px rgba(22,82,199,.08)}
+  .tab-pedidos td{padding:14px;vertical-align:middle;border-top:none;border-bottom:none}
+  .tab-pedidos td:first-child{border-radius:10px 0 0 10px}
+  .tab-pedidos td:last-child{border-radius:0 10px 10px 0}
+  .num-ped{font-weight:900;color:#1652C7;font-size:14px}
+  .num-ped .tracking{display:block;font-weight:600;font-size:10px;color:#3B82F6;margin-top:2px}
+  .nome-cli{font-weight:700;color:#0F172A}
+  .sub-cli{font-size:11px;color:#64748B;margin-top:2px}
+  .valor-bold{font-weight:800;color:#0F172A;font-size:14px}
+  .forma-pgto{font-size:10px;text-transform:uppercase;color:#64748B;font-weight:700;letter-spacing:.5px;margin-top:2px}
+  /* Botões redondinhos */
+  .btn-acao{background:#FFC700;color:#082B7A;border:0;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:800;
+    box-shadow:0 2px 0 #E0A800;transition:all .12s;display:inline-flex;align-items:center;gap:5px}
+  .btn-acao:hover{transform:translateY(-1px);box-shadow:0 3px 0 #E0A800}
+  .btn-acao:active{transform:translateY(1px);box-shadow:0 1px 0 #E0A800}
+  .btn-pdf{background:linear-gradient(135deg,#1652C7,#0E3A8F);color:#fff;padding:7px 12px;border-radius:8px;
+    text-decoration:none;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:5px;
+    box-shadow:0 2px 4px rgba(22,82,199,.25)}
+  .btn-pdf:hover{box-shadow:0 4px 8px rgba(22,82,199,.35)}
+  .badge-retirada{display:inline-flex;align-items:center;gap:5px;background:#D1FAE5;color:#065F46;
+    padding:6px 10px;border-radius:8px;font-size:11px;font-weight:700}
+  .sel-status{font-size:12px;padding:7px 12px;border:1px solid #E2E8F0;border-radius:8px;background:#fff;cursor:pointer;font-weight:600;color:#475569}
+  .sel-status:hover{border-color:#1652C7}
+  .vazio{text-align:center;padding:60px 20px;color:#94A3B8}
+  .vazio .emoji{font-size:48px;margin-bottom:14px}
+  /* Status pill melhorada */
+  .pill{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px}
+  .pill.amarelo{background:#FEF3C7;color:#92400E}
+  .pill.verde{background:#D1FAE5;color:#065F46}
+  .pill.azul{background:#DBEAFE;color:#1E40AF}
+  .pill.cinza{background:#E2E8F0;color:#475569}
+  .pill.vermelho{background:#FEE2E2;color:#991B1B}
+</style>
+
+<div class="header-pedidos">
+  <h2>🛒 Pedidos</h2>
+  <button onclick="location.reload()" class="btn-acao" style="background:#fff;color:#1652C7;border:1px solid #1652C7;box-shadow:none">🔄 Atualizar</button>
 </div>
+
+<!-- Stats -->
+<div class="stat-pedidos">
+  <div class="c">
+    <div class="lbl">Total ativos</div>
+    <div class="val">{{ stats.total or 0 }}</div>
+  </div>
+  <div class="c aguardando">
+    <div class="lbl">Aguardando pgto</div>
+    <div class="val">{{ stats.aguardando or 0 }}</div>
+  </div>
+  {% if stats.pagos_pendentes %}
+  <div class="c pendente">
+    <div class="lbl">⚠️ Pagos s/ PDV</div>
+    <div class="val">{{ stats.pagos_pendentes }}</div>
+  </div>
+  {% endif %}
+  <div class="c expedidos">
+    <div class="lbl">Expedidos</div>
+    <div class="val">{{ stats.expedidos or 0 }}</div>
+  </div>
+  <div class="c receita">
+    <div class="lbl">Receita confirmada</div>
+    <div class="val">{{ rs(stats.receita or 0) }}</div>
+  </div>
+</div>
+
+<!-- Filtros -->
+<form class="filtros" method="get">
+  <a href="/admin/pedidos" class="chip {% if not filtro_status %}on{% endif %}">📋 Todos</a>
+  <a href="/admin/pedidos?status=aguardando_pagto" class="chip {% if filtro_status=='aguardando_pagto' %}on{% endif %}">⏳ Aguardando</a>
+  <a href="/admin/pedidos?status=pago" class="chip {% if filtro_status=='pago' %}on{% endif %}">💰 Pago</a>
+  <a href="/admin/pedidos?status=preparando" class="chip {% if filtro_status=='preparando' %}on{% endif %}">📦 Preparando</a>
+  <a href="/admin/pedidos?status=enviado" class="chip {% if filtro_status=='enviado' %}on{% endif %}">🚚 Enviado</a>
+  <a href="/admin/pedidos?status=entregue" class="chip {% if filtro_status=='entregue' %}on{% endif %}">✓ Entregue</a>
+  <a href="/admin/pedidos?status=cancelado" class="chip {% if filtro_status=='cancelado' %}on{% endif %}">❌ Cancelado</a>
+  <div class="busca">
+    <input name="q" placeholder="🔎 Buscar nome, e-mail, telefone ou #pedido" value="{{ busca }}">
+    <button type="submit">Buscar</button>
+    {% if busca %}<a href="/admin/pedidos" class="chip" style="padding:8px 14px">Limpar</a>{% endif %}
+  </div>
+</form>
+
+{% if pedidos %}
+<table class="tab-pedidos">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Cliente</th>
+      <th>Destino</th>
+      <th>Data</th>
+      <th>Total</th>
+      <th>Status</th>
+      <th>Etiqueta ME</th>
+      <th>Mudar status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in pedidos %}
+      <tr>
+        <td>
+          <span class="num-ped">#{{ p.id }}</span>
+          <a href="/pedido/{{ p.id }}/tracking" target="_blank" class="tracking">↗ tracking</a>
+        </td>
+        <td>
+          <div class="nome-cli">{{ p.nome or '—' }}</div>
+          <div class="sub-cli">{{ p.email }}{% if p.telefone %} · {{ p.telefone }}{% endif %}</div>
+        </td>
+        <td>{{ p.cidade or '—' }}{% if p.uf %}/{{ p.uf }}{% endif %}</td>
+        <td style="font-size:12px;color:#475569">{{ p.criado_em.strftime('%d/%m %H:%M') if p.criado_em else '—' }}</td>
+        <td>
+          <div class="valor-bold">{{ rs(p.total) }}</div>
+          <div class="forma-pgto">{{ p.forma_pagto or '—' }}</div>
+        </td>
+        <td>
+          {% if p.status == 'pago' %}
+            <span class="pill verde">💰 Pago</span>
+          {% elif p.status == 'aguardando_pagto' %}
+            <span class="pill amarelo">⏳ Aguardando</span>
+          {% elif p.status == 'preparando' %}
+            <span class="pill azul">📦 Preparando</span>
+          {% elif p.status == 'enviado' %}
+            <span class="pill azul">🚚 Enviado</span>
+          {% elif p.status == 'entregue' %}
+            <span class="pill verde">✓ Entregue</span>
+          {% elif p.status == 'cancelado' %}
+            <span class="pill vermelho">❌ Cancelado</span>
+          {% else %}
+            <span class="pill cinza">{{ p.status }}</span>
+          {% endif %}
+        </td>
+        <td>
+          {% set is_retira = (p.frete_servico or '').lower().startswith('retirar') %}
+          {% if is_retira %}
+            <span class="badge-retirada">🏪 Retirada</span>
+          {% elif p.melhorenvio_etiqueta_url %}
+            <a href="{{ p.melhorenvio_etiqueta_url }}" target="_blank" class="btn-pdf">📄 PDF</a>
+            {% if p.melhorenvio_rastreio %}
+              <div style="font-size:10px;color:#64748B;margin-top:4px;font-family:monospace">{{ p.melhorenvio_rastreio }}</div>
+            {% endif %}
+          {% elif p.status in ('pago','preparando') and p.cep %}
+            <button onclick="cotarEEtiqueta({{ p.id }})" class="btn-acao">📮 Cotar + emitir</button>
+          {% else %}
+            <span style="color:#94a3b8;font-size:12px">—</span>
+          {% endif %}
+        </td>
+        <td>
+          <select onchange="atualizarStatus({{ p.id }}, this.value, this)" class="sel-status">
+            <option value="">Mudar pra…</option>
+            <option value="preparando">📦 Preparando</option>
+            <option value="enviado">🚚 Enviado</option>
+            <option value="entregue">✓ Entregue</option>
+            <option value="cancelado">❌ Cancelar</option>
+          </select>
+        </td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="card">
+  <div class="vazio">
+    <div class="emoji">📭</div>
+    <h3 style="color:#475569;margin-bottom:8px">Nenhum pedido encontrado</h3>
+    <p>
+      {% if busca or filtro_status %}
+        Não achei pedidos com esse filtro. <a href="/admin/pedidos" style="color:#1652C7">Limpar filtros</a>
+      {% else %}
+        Os pedidos do site vão aparecer aqui assim que chegarem.
+      {% endif %}
+    </p>
+  </div>
+</div>
+{% endif %}
+
 <script>
 async function cotarEEtiqueta(pid){
   try {
@@ -58,7 +211,6 @@ async function cotarEEtiqueta(pid){
     const d = await r.json();
     if(d.erro){ alert('Erro cotando: '+d.erro); return; }
     if(!d.opcoes || !d.opcoes.length){ alert('Nenhuma opção de frete disponível.'); return; }
-    // Pergunta qual serviço
     let lista = 'Escolha o serviço (digite o número):\n\n';
     d.opcoes.forEach((o,i)=>{
       lista += (i+1)+') '+o.servico+' — R$ '+(o.valor||0).toFixed(2)+' · '+o.prazo+'\n';

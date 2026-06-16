@@ -4503,10 +4503,32 @@ def admin_analytics():
 @app.route('/admin/pedidos')
 @requer_admin
 def admin_pedidos():
+    filtro_status = (request.args.get('status') or '').strip()
+    busca = (request.args.get('q') or '').strip()
+    where, params = ["1=1"], []
+    if filtro_status:
+        where.append("status = %s")
+        params.append(filtro_status)
+    if busca:
+        where.append("(nome ILIKE %s OR email ILIKE %s OR CAST(id AS TEXT) = %s OR telefone ILIKE %s)")
+        like = f"%{busca}%"
+        params.extend([like, like, busca, like])
     pedidos = db_execute(
-        "SELECT * FROM pedidos ORDER BY criado_em DESC LIMIT 200",
-        fetch='all') or []
-    return render_template('admin_pedidos.html', pedidos=pedidos)
+        f"SELECT * FROM pedidos WHERE {' AND '.join(where)} ORDER BY criado_em DESC LIMIT 200",
+        params, fetch='all') or []
+    # Stats (sempre considera TODOS os pedidos, ignora filtro)
+    stats = db_execute("""
+        SELECT
+          COUNT(*) FILTER (WHERE status NOT IN ('cancelado')) AS total,
+          COUNT(*) FILTER (WHERE status='aguardando_pagto') AS aguardando,
+          COUNT(*) FILTER (WHERE status='pago' AND pdv_venda_id IS NOT NULL) AS pagos_processados,
+          COUNT(*) FILTER (WHERE status='pago' AND pdv_venda_id IS NULL) AS pagos_pendentes,
+          COUNT(*) FILTER (WHERE status IN ('enviado','entregue')) AS expedidos,
+          COALESCE(SUM(total) FILTER (WHERE status NOT IN ('cancelado','aguardando_pagto')), 0) AS receita
+        FROM pedidos
+    """, fetch='one') or {}
+    return render_template('admin_pedidos.html', pedidos=pedidos, stats=stats,
+                           filtro_status=filtro_status, busca=busca)
 
 
 STATUS_TIMELINE = ['aguardando_pagto', 'pago', 'preparando', 'enviado', 'entregue']
