@@ -93,6 +93,10 @@
       {% else %}
         <div class="preco-big" style="color:var(--verde);font-weight:900;font-size:42px;line-height:1">{{ rs(p.preco_venda) }}</div>
       {% endif %}
+      <div style="margin-top:8px;font-size:12.5px;color:var(--mut);display:flex;align-items:center;gap:6px">
+        <span style="background:#FEF3C7;color:#92400E;padding:2px 8px;border-radius:6px;font-weight:800;font-size:11px">15% OFF</span>
+        em relação ao preço da loja física
+      </div>
 
       {% set preco_final = p.preco_promo or p.preco_venda %}
       <div style="margin:18px 0;padding:14px;background:#F1F5F9;border-radius:12px">
