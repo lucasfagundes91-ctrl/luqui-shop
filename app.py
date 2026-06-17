@@ -1521,6 +1521,50 @@ def integracao_cotar_me(pid):
         return jsonify({'erro': str(e)}), 502
 
 
+@app.route('/api/integracao/calcular-frete', methods=['POST'])
+def integracao_calcular_frete():
+    """Cotação avulsa Melhor Envio pra calculadora do PDV Pro.
+    Body: { cep_destino, itens:[{produto_id, qtd, preco?}, ...] }
+    Itens podem alternativamente trazer dimensões diretas
+    (peso_kg/largura_cm/altura_cm/comprimento_cm) pra cota sem produto
+    cadastrado. Retorna {opcoes:[{id, servico, valor, prazo, company}]}."""
+    if not _verifica_api_key_pdv():
+        return jsonify({'erro': 'unauthorized'}), 401
+    d = request.get_json(silent=True) or {}
+    cep = ''.join(c for c in (d.get('cep_destino') or '') if c.isdigit())
+    if len(cep) != 8:
+        return jsonify({'erro': 'cep_destino invalido'}), 400
+    itens_in = d.get('itens') or []
+    if not itens_in:
+        return jsonify({'erro': 'itens vazio'}), 400
+    itens_full = []
+    for it in itens_in:
+        pid = it.get('produto_id')
+        prod = {}
+        if pid:
+            try:
+                prod = buscar_produto(pid) or {}
+            except Exception:
+                prod = {}
+        # Override: se body trouxe dimensões/peso direto, usa esses.
+        for k_in, k_out in (('peso_kg', 'peso_bruto'),
+                            ('largura_cm', 'largura_cm'),
+                            ('altura_cm', 'altura_cm'),
+                            ('comprimento_cm', 'comprimento_cm')):
+            if it.get(k_in) not in (None, '', 0, '0'):
+                prod[k_out] = it[k_in]
+        itens_full.append({
+            'produto': prod,
+            'qtd':   float(it.get('qtd') or 1),
+            'preco': float(it.get('preco') or prod.get('preco') or 0),
+        })
+    try:
+        ops = me_cotar(cep, itens_full)
+        return jsonify({'opcoes': ops, 'cep_destino': cep})
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 502
+
+
 def pdv_buscar_cliente_cpf(cpf):
     """Busca cliente completo no PDV pelo CPF — endereço, contato, pontos.
     Usado no checkout pra oferecer pré-preenchimento quando cliente já
