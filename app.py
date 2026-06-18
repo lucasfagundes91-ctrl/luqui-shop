@@ -449,6 +449,34 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_site_visitas_ts ON site_visitas(ts DESC)",
         "CREATE INDEX IF NOT EXISTS idx_site_visitas_path ON site_visitas(path, ts DESC)",
         "CREATE INDEX IF NOT EXISTS idx_site_visitas_ip ON site_visitas(ip_hash, ts DESC)",
+        # Etiquetas Melhor Envio emitidas avulsas pela calculadora do PDV Pro
+        # (sem vinculo com pedido do site). Guarda rastreio + PDF + dados do
+        # destinatario pra auditoria e reenvio do link pelo WhatsApp.
+        """CREATE TABLE IF NOT EXISTS etiquetas_avulsas (
+            id SERIAL PRIMARY KEY,
+            criado_em TIMESTAMPTZ DEFAULT NOW(),
+            origem VARCHAR(20) DEFAULT 'pdv-calc',
+            cep_destino VARCHAR(10),
+            destinatario_nome  VARCHAR(120),
+            destinatario_doc   VARCHAR(20),
+            destinatario_fone  VARCHAR(30),
+            destinatario_email VARCHAR(120),
+            endereco VARCHAR(200),
+            numero VARCHAR(20),
+            complemento VARCHAR(100),
+            bairro VARCHAR(100),
+            cidade VARCHAR(100),
+            uf VARCHAR(2),
+            servico_id  VARCHAR(20),
+            servico_nome VARCHAR(80),
+            valor_frete NUMERIC(12,2),
+            valor_seguro NUMERIC(12,2),
+            itens_json TEXT,
+            me_etiqueta_id VARCHAR(60),
+            me_etiqueta_url TEXT,
+            me_rastreio VARCHAR(60)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_etiq_avulsa_dt ON etiquetas_avulsas(criado_em DESC)",
     ]
     for ddl in ddls:
         try:
@@ -1519,6 +1547,175 @@ def integracao_cotar_me(pid):
         return jsonify({'opcoes': ops})
     except Exception as e:
         return jsonify({'erro': str(e)}), 502
+
+
+def _gerar_etiqueta_avulsa(service_id, cep_destino, destinatario, itens_full,
+                            valor_seguro=0.0, servico_nome=''):
+    """Cart→checkout→generate→print no Melhor Envio pra destinatario
+    avulso (sem vinculo com pedido do site). Salva em etiquetas_avulsas.
+    Retorna (ok, dict)."""
+    if not service_id:
+        return False, {'erro': 'service_id obrigatorio'}
+    if not itens_full:
+        return False, {'erro': 'sem itens'}
+    cep_destino = ''.join(c for c in (cep_destino or '') if c.isdigit())
+    if len(cep_destino) != 8:
+        return False, {'erro': 'cep_destino invalido'}
+    obrig = ['nome', 'doc', 'endereco', 'numero', 'bairro', 'cidade', 'uf']
+    faltam = [k for k in obrig if not (destinatario or {}).get(k)]
+    if faltam:
+        return False, {'erro': 'destinatario incompleto: ' + ', '.join(faltam)}
+
+    vol = me_volume_dos_itens(itens_full)
+    vol_resumo = [{'height': v['height'], 'width': v['width'],
+                   'length': v['length'], 'weight': v['weight']} for v in vol]
+    produtos_carrinho = [
+        {'name': ((it.get('produto') or {}).get('descricao')
+                  or it.get('descricao') or 'Produto')[:80],
+         'quantity': int(float(it.get('qtd') or 1)),
+         'unitary_value': float(it.get('preco') or 0)}
+        for it in itens_full
+    ]
+    body = {
+        'service': service_id,
+        'from':    me_remetente_dict(),
+        'to': {
+            'name':        destinatario.get('nome') or '',
+            'phone':       ''.join(c for c in (destinatario.get('fone') or '')
+                                   if c.isdigit()),
+            'email':       destinatario.get('email') or '',
+            'document':    ''.join(c for c in (destinatario.get('doc') or '')
+                                   if c.isdigit()),
+            'address':     destinatario.get('endereco') or '',
+            'complement':  destinatario.get('complemento') or '',
+            'number':      destinatario.get('numero') or '',
+            'district':    destinatario.get('bairro') or '',
+            'city':        destinatario.get('cidade') or '',
+            'state_abbr':  destinatario.get('uf') or '',
+            'country_id':  'BR',
+            'postal_code': cep_destino,
+        },
+        'products': produtos_carrinho,
+        'volumes':  vol_resumo,
+        'options': {
+            'insurance_value': float(valor_seguro or 0),
+            'receipt': False, 'own_hand': False,
+            'reverse': False, 'non_commercial': False,
+        },
+    }
+    try:
+        r = me_request('POST', '/api/v2/me/cart', json_body=body)
+        if not r.ok:
+            return False, {'erro': 'cart falhou', 'detalhe': r.text[:500]}
+        order_id = (r.json() or {}).get('id')
+        if not order_id:
+            return False, {'erro': 'sem id do envio'}
+        r2 = me_request('POST', '/api/v2/me/shipment/checkout',
+                        json_body={'orders': [order_id]})
+        if not r2.ok:
+            return False, {'erro': 'checkout ME falhou — confira saldo',
+                           'detalhe': r2.text[:500]}
+        r3 = me_request('POST', '/api/v2/me/shipment/generate',
+                        json_body={'orders': [order_id]})
+        if not r3.ok:
+            return False, {'erro': 'generate falhou', 'detalhe': r3.text[:500]}
+        url_pdf = None
+        r4 = me_request('POST', '/api/v2/me/shipment/print',
+                        json_body={'mode': 'private', 'orders': [order_id]})
+        if r4.ok:
+            try: url_pdf = (r4.json() or {}).get('url')
+            except Exception: pass
+        rastreio = None
+        try:
+            r5 = me_request('POST', '/api/v2/me/shipment/tracking',
+                            json_body={'orders': [order_id]})
+            if r5.ok:
+                t = r5.json()
+                if isinstance(t, dict) and t.get(order_id):
+                    rastreio = t[order_id].get('tracking')
+        except Exception:
+            pass
+        try:
+            db_execute("""INSERT INTO etiquetas_avulsas
+                (origem, cep_destino, destinatario_nome, destinatario_doc,
+                 destinatario_fone, destinatario_email,
+                 endereco, numero, complemento, bairro, cidade, uf,
+                 servico_id, servico_nome, valor_frete, valor_seguro,
+                 itens_json, me_etiqueta_id, me_etiqueta_url, me_rastreio)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                        %s,%s,%s,%s)""",
+                [
+                    'pdv-calc', cep_destino,
+                    (destinatario.get('nome') or '')[:120],
+                    ''.join(c for c in (destinatario.get('doc') or '') if c.isdigit())[:20],
+                    (destinatario.get('fone') or '')[:30],
+                    (destinatario.get('email') or '')[:120],
+                    (destinatario.get('endereco') or '')[:200],
+                    (destinatario.get('numero') or '')[:20],
+                    (destinatario.get('complemento') or '')[:100],
+                    (destinatario.get('bairro') or '')[:100],
+                    (destinatario.get('cidade') or '')[:100],
+                    (destinatario.get('uf') or '')[:2],
+                    str(service_id)[:20],
+                    (servico_nome or '')[:80],
+                    float(destinatario.get('valor_frete') or 0),
+                    float(valor_seguro or 0),
+                    json.dumps([{'nome': p['name'], 'qtd': p['quantity'],
+                                 'valor': p['unitary_value']} for p in produtos_carrinho])[:8000],
+                    str(order_id), url_pdf, rastreio,
+                ])
+        except Exception as e:
+            log.warning("etiquetas_avulsas insert falhou: %s", e)
+        return True, {'ok': True, 'etiqueta_id': order_id,
+                      'rastreio': rastreio, 'pdf_url': url_pdf}
+    except Exception as e:
+        log.exception("ME etiqueta avulsa")
+        return False, {'erro': str(e)}
+
+
+@app.route('/api/integracao/emitir-etiqueta-avulsa', methods=['POST'])
+def integracao_emitir_etiqueta_avulsa():
+    """Emite etiqueta ME a partir da calculadora do PDV Pro (sem pedido)."""
+    if not _verifica_api_key_pdv():
+        return jsonify({'erro': 'unauthorized'}), 401
+    d = request.get_json(silent=True) or {}
+    cep = d.get('cep_destino') or ''
+    sid = d.get('service_id')
+    dest = d.get('destinatario') or {}
+    itens_in = d.get('itens') or []
+    # Reaproveita lógica de calcular-frete pra resolver dimensões a partir
+    # de produto_id, OU usar dimensões diretas se vierem
+    itens_full = []
+    for it in itens_in:
+        pid = it.get('produto_id')
+        prod = {}
+        if pid:
+            try:
+                prod = buscar_produto(pid) or {}
+            except Exception:
+                prod = {}
+        for k_in, k_out in (('peso_kg', 'peso_bruto'),
+                            ('largura_cm', 'largura_cm'),
+                            ('altura_cm', 'altura_cm'),
+                            ('comprimento_cm', 'comprimento_cm')):
+            if it.get(k_in) not in (None, '', 0, '0'):
+                prod[k_out] = it[k_in]
+        # Descrição: vinda do PDV (it.descricao) ou do produto (prod.descricao)
+        if it.get('descricao') and not prod.get('descricao'):
+            prod['descricao'] = it.get('descricao')
+        itens_full.append({
+            'produto': prod,
+            'qtd':   float(it.get('qtd') or 1),
+            'preco': float(it.get('preco') or prod.get('preco') or 0),
+            'descricao': prod.get('descricao') or it.get('descricao') or '',
+        })
+    valor_seguro = sum((it['preco'] or 0) * (it['qtd'] or 1) for it in itens_full)
+    ok, res = _gerar_etiqueta_avulsa(
+        sid, cep, dest, itens_full,
+        valor_seguro=valor_seguro,
+        servico_nome=d.get('servico_nome') or '',
+    )
+    return jsonify(res), (200 if ok else 400)
 
 
 @app.route('/api/integracao/calcular-frete', methods=['POST'])
