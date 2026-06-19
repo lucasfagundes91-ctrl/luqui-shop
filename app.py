@@ -1762,6 +1762,23 @@ def integracao_calcular_frete():
         return jsonify({'erro': str(e)}), 502
 
 
+@app.route('/api/integracao/me-saldo')
+def integracao_me_saldo():
+    """Saldo do Melhor Envio pra calculadora do PDV Pro mostrar quanto
+    tem em conta antes de emitir etiqueta."""
+    if not _verifica_api_key_pdv():
+        return jsonify({'erro': 'unauthorized'}), 401
+    try:
+        r = me_request('GET', '/api/v2/me/balance')
+        if not r.ok:
+            return jsonify({'erro': f'ME respondeu {r.status_code}'}), 502
+        d = r.json() or {}
+        return jsonify({'saldo': float(d.get('balance') or 0),
+                        'moeda': d.get('currency') or 'BRL'})
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 502
+
+
 def pdv_buscar_cliente_cpf(cpf):
     """Busca cliente completo no PDV pelo CPF — endereço, contato, pontos.
     Usado no checkout pra oferecer pré-preenchimento quando cliente já
