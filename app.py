@@ -704,7 +704,7 @@ ME_REDIRECT_URI  = os.environ.get('MELHOR_ENVIO_REDIRECT_URI', '')
 ME_SCOPES = (
     'cart-read cart-write shipping-calculate shipping-checkout '
     'shipping-generate shipping-print shipping-tracking shipping-cancel '
-    'shipping-companies')
+    'shipping-companies users-read purchases-read')
 
 
 def me_base():
