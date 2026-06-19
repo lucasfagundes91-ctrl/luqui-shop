@@ -4933,10 +4933,10 @@ def admin_chats():
                                   ORDER BY m.id ASC LIMIT 1) AS primeira_msg,
                                  (SELECT COUNT(*) FROM site_chat_mensagens m
                                   WHERE m.conversa_id=c.id AND m.role='assistant'
-                                    AND m.blocks::text LIKE '%buscar_produtos%') AS buscas_feitas
+                                    AND m.blocks::text LIKE %s) AS buscas_feitas
                           FROM site_chat_conversas c
                           ORDER BY ultimo_msg_em DESC NULLS LAST LIMIT 200""",
-                       fetch='all') or []
+                       ['%buscar_produtos%'], fetch='all') or []
     return render_template('admin_chats.html', conversas=convs)
 
 
