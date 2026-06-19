@@ -1765,17 +1765,33 @@ def integracao_calcular_frete():
 @app.route('/api/integracao/me-saldo')
 def integracao_me_saldo():
     """Saldo do Melhor Envio pra calculadora do PDV Pro mostrar quanto
-    tem em conta antes de emitir etiqueta."""
+    tem em conta antes de emitir etiqueta. Tenta /me/balance primeiro
+    (escopo users-read) e cai pra /me (devolve balance também) se 403."""
     if not _verifica_api_key_pdv():
         return jsonify({'erro': 'unauthorized'}), 401
     try:
         r = me_request('GET', '/api/v2/me/balance')
+        if r.status_code == 403:
+            # Token sem escopo users-read → tenta /me que costuma vir junto
+            r2 = me_request('GET', '/api/v2/me')
+            if r2.ok:
+                d = r2.json() or {}
+                saldo = float(d.get('balance') or 0)
+                return jsonify({'saldo': saldo, 'moeda': 'BRL',
+                                'origem': '/me'})
+            log.warning("ME saldo /me/balance 403 e /me %s: %s",
+                        r2.status_code, (r2.text or '')[:200])
+            return jsonify({'erro': 'Token Melhor Envio sem permissão pra ler '
+                                    'saldo. Reconecte em /admin/melhorenvio.'}), 502
         if not r.ok:
+            log.warning("ME saldo /me/balance %s: %s", r.status_code,
+                        (r.text or '')[:200])
             return jsonify({'erro': f'ME respondeu {r.status_code}'}), 502
         d = r.json() or {}
         return jsonify({'saldo': float(d.get('balance') or 0),
                         'moeda': d.get('currency') or 'BRL'})
     except Exception as e:
+        log.exception("integracao_me_saldo: %s", e)
         return jsonify({'erro': str(e)}), 502
 
 
