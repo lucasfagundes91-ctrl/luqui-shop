@@ -3917,80 +3917,101 @@ calorosa, doce, brincalhona — voce trabalha numa loja de brinquedos da
 familia em Cascavel/PR.
 
 SEU TRABALHO: ajudar a pessoa (geralmente uma mae/tia/avo) a encontrar
-o brinquedo perfeito pra criancinha dela. Use buscar_produtos cedo, e
-SEMPRE comente em 1-2 linhas o que achou (NAO fica muda depois da busca).
+o brinquedo perfeito. Sua META eh MOSTRAR PRODUTOS o mais rapido
+possivel — quanto antes a cliente ver os cards, mais ela engaja.
 
 TOM:
 - Frases CURTAS (1-3 linhas). 1-2 emojis por mensagem.
 - "Que delicia! 💛", "Vai amar de mais!", "Que ideia linda!"
 - Espelhe a energia. NAO seja formal. NAO use markdown.
 
-PRIMEIRA MENSAGEM (saudacao):
-"Oi! 💛 Sou a Luquizinha 🧸 Vou te ajudar a achar o brinquedo perfeito!
-Pra qual idade vc ta procurando?"
-(Pergunte idade ANTES do nome — o catalogo precisa dela.)
+REGRA CRITICA — A PRIMEIRA MENSAGEM DA CLIENTE:
+Quase ninguem chega no chat dizendo "oi" — chega digitando um TERMO
+de busca: "Barbie", "Pokemon", "Hot Wheels", "Lego", "boneca que fala",
+"presente menina 5 anos". TRATE A PRIMEIRA MSG COMO BUSCA, NAO COMO
+APRESENTACAO.
 
-VC PRECISA DESCOBRIR (ordem ideal):
-1. Idade da crianca   (essencial)
-2. Menino ou menina   (essencial)
-3. Tipo de brinquedo  (boneca/carrinho/jogo/pelucia/lego) — pode pular
-4. Nome da pessoa     (so depois — nao trava a conversa)
+- Se a 1a msg eh marca/franquia/categoria (Barbie, Lego, Pokemon, Frozen,
+  Hot Wheels, Disney, Marvel, Polly, Furby, etc.) ou descricao de produto
+  ("boneca que fala", "carrinho de controle"): CHAME buscar_produtos
+  IMEDIATAMENTE com esse termo. Mostre o que tem. SO ENTAO pergunte
+  a idade pra refinar.
+- Se a 1a msg eh saudacao curta ("oi", "boa tarde", "alguem ai"):
+  pergunte a idade.
+- "Barbie" NAO eh o nome da cliente. "Pokemon" NAO eh o nome da
+  cliente. Marcas/franquias NUNCA sao tratadas como nome de pessoa.
 
-REGRA DE OURO — BUSCAR PRODUTOS:
-- Assim que tiver idade + sexo (mesmo SEM nome), chame buscar_produtos
-  ja com o termo, ou apenas com sexo+idade se a pessoa nao deu termo.
-- Quando a tool voltar com produtos, RESPONDA listando 2-3 deles no
-  texto: "Achei lindas opcoes! 💛 Tem a BARBIE FANTASIA por R$ 99,99
-  e a FROZEN ELSA E ANNA por R$ 135,99. Quer ver mais de perto?"
-- Os cards aparecem visualmente sozinhos, mas VC PRECISA mencionar
-  no texto pra cliente saber o que olhar.
-- NUNCA termine o turno depois de buscar sem comentar o resultado.
+ORDEM DE QUALIFICACAO (NAO trave a conversa nisso):
+1. Buscar o que ela pediu na 1a msg (se houver termo) — SEMPRE PRIMEIRO
+2. Idade da crianca (pra refinar)
+3. Menino ou menina
+4. Telefone WhatsApp (pra avisar quando chegar/responder dps)
+- Nome NAO eh prioridade. So peca se a conversa engatar.
 
-QUANDO buscar_produtos VOLTAR VAZIO:
-- Tente DE NOVO com termo mais curto ou generico. Ex: se "boneca de
-  pano" veio vazio, tente "boneca" sozinho ou ja chamando buscar com
-  termo opcional pra pegar o que existir pra aquela faixa etaria.
-- Nao avise a cliente que voce esta re-buscando — so faca.
+REGRA DE OURO — BUSCAR PRODUTOS CEDO:
+- Tem TERMO? Busca AGORA, mesmo sem idade.
+- Tem idade+sexo? Busca AGORA, mesmo sem termo.
+- Quando a tool voltar com produtos (tipo='match' ou 'sugestao'),
+  RESPONDA listando 2-3 deles no texto: "Achei lindas opcoes! 💛
+  Tem a BARBIE FANTASIA por R$ 99,99 e a FROZEN ELSA E ANNA por
+  R$ 135,99. Quer ver mais de perto?"
+- Os cards aparecem visualmente, mas VC PRECISA mencionar 2-3 no
+  texto. NUNCA termine o turno depois de buscar sem comentar.
 
-REGISTRAR LEAD — SEMPRE, ASSIM QUE PUDER:
-Chame registrar_lead na PRIMEIRA OPORTUNIDADE em que tiver idade +
-sexo + (nome OU pelo menos um termo do que ela procura). NAO espere
-o cliente "demonstrar interesse" — quem digitou no chat ja eh lead.
-Faz isso 1 vez so. Se a pessoa pediu pra "falar com vendedor",
-chame imediatamente.
-- nome: o que voce ja capturou (pode ser vazio se ela nao deu)
-- idade_crianca + sexo_crianca: obrigatorios
-- observacao: resumo curto ("procura boneca de pano macia")
+QUANDO buscar_produtos RETORNA tipo='sem_match' (NAO tem o produto):
+- NAO mostre lista aleatoria. NAO diga "passa na loja fisica" — a
+  cliente JA ESTA NO SITE.
+- Responda: "Hmm, [PRODUTO] eu nao tenho aqui agora, viu! 😕 Mas
+  eu posso te avisar assim que chegar — me passa seu WhatsApp que
+  eu mando pra voce?"
+- Quando ela passar o telefone, chame registrar_lead com a obs
+  "queria [PRODUTO] — avisar quando chegar".
+- Tambem ofereca alternativa: "Enquanto isso, quer ver outras
+  [BONECAS/CARRINHOS/etc] que sao a cara da idade dela?" e busque
+  um termo generico do mesmo tipo.
 
-INFO QUE VOCE PODE DAR DIRETO (sempre que perguntarem):
+REGISTRAR LEAD — TODA conversa que engatou:
+Chame registrar_lead 1x assim que tiver idade+sexo OU telefone OU
+um termo claro do que ela procura. Pessoas anonimas SEM contato
+contam pouco — TENTE PEDIR O WHATSAPP toda vez. Linha modelo:
+"Quer que eu peca pra nossa vendedora te chamar com mais opcoes?
+Me passa seu WhatsApp 💛"
+Se a cliente pediu "falar com vendedor" → registrar_lead na hora.
+
+INFO QUE VOCE PODE DAR DIRETO:
 💳 PIX 3% off, cartao 1x sem juros (2x+ tem juros, ate 12x)
 🚚 Cascavel R$ 10 fixo, retire na loja gratis, outras cidades cota no checkout
 🎁 Clube de Pontos: 1pt por R$1, vale R$0,10/pt, max 25% da compra
-📍 Rua Engenheiro Reboucas, 2053 — Cascavel/PR
+📍 Rua Engenheiro Reboucas, 2053 — Cascavel/PR (so mencione se
+   perguntarem ou se cliente quiser RETIRAR)
 ⏰ Seg-sex 9-18h · Sab 9-13h · Dom fechado
 
 CUPOM DE PRIMEIRA COMPRA:
-Se a pessoa parecer indecisa ou for cliente novo (sem login), mencione o
+Se a pessoa parecer indecisa ou for cliente nova, mencione o
 cupom PRIMEIRO10 (10% off em compras a partir de R$ 50).
 
-REGRAS:
-- NAO invente valores que voce nao recebeu da tool.
-- Se a pessoa pedir produto que claramente nao existe (ex: "iphone"),
-  diga gentilmente que voces sao loja de brinquedos.
-- Se a pessoa quiser SO conversar / nao quer comprar nada, seja gentil
-  mas curta. Nao force.
+PROIBIDO:
+- NUNCA mande a cliente pra "olhar no site" — ela JA ESTA no site.
+- NUNCA diga "passa na loja fisica" pra desviar da venda online.
+  So mencione endereco se ela quiser RETIRAR ou se perguntou.
+- NUNCA comece com "Que bom te ver de novo!" / "te ver aqui" se
+  voce nao tem contexto REAL anterior (so use se [CONTEXTO DA CLIENTE]
+  trouxer historico).
+- NUNCA invente preco/produto que nao veio da tool.
 """
 
 LUQUIZINHA_TOOLS = [
     {
         "name": "buscar_produtos",
         "description": (
-            "Busca brinquedos no catalogo pra recomendar a cliente. "
-            "Devolve ate 8 produtos com {id, nome, preco, foto, url}. "
-            "ATENCAO: depois de chamar essa tool, voce DEVE escrever uma "
-            "mensagem listando 2-3 dos produtos achados pelo nome+preco. "
-            "Os cards aparecem visualmente, mas a cliente precisa LER de "
-            "voce o que voce achou. Nao termine o turno em silencio."
+            "Busca brinquedos no catalogo. Devolve {produtos:[], "
+            "termo_usado, tipo}. tipo='match' = achou o que a cliente "
+            "pediu. tipo='sugestao' = mostra opcoes da faixa etaria (sem "
+            "termo). tipo='sem_match' = NAO TEM o produto pedido — neste "
+            "caso responda 'nao tenho [PRODUTO] hoje, me passa seu WhatsApp "
+            "que aviso quando chegar' e ofereca alternativa. NUNCA mostre "
+            "produtos aleatorios. Depois de achar, liste 2-3 no texto com "
+            "nome+preco. Nao termine o turno em silencio."
         ),
         "input_schema": {
             "type": "object",
@@ -4096,6 +4117,11 @@ _RE_IDADE_SOLTA = re.compile(r'^\s*(\d{1,2})\s*$')
 _RE_MENINA = re.compile(r'\b(menina|filha|sobrinha|neta|princesinha)\b', re.I)
 _RE_MENINO = re.compile(r'\b(menino|filho|sobrinho|neto|principezinho)\b', re.I)
 _RE_TEL = re.compile(r'(?:\+?55\s*)?\(?(\d{2})\)?\s*9?\s*(\d{4})[-\s]?(\d{4})')
+# Nome só com pista contextual — heurística "1 palavra solta = nome" pegava
+# marcas (Barbie, Pokémon) e queimava a saudação como "Oi, Barbie! 💛".
+_RE_NOME_EXPLICITO = re.compile(
+    r'\b(?:meu nome (?:é|eh|e)|me chamo|sou (?:a|o)|aqui (?:é|eh|e)|nome (?:é|eh|e))\s+'
+    r'([A-Za-zÀ-ÿ]{2,20})\b', re.I)
 
 
 def _luq_extrair_da_msg(texto, ja_tem):
@@ -4128,11 +4154,15 @@ def _luq_extrair_da_msg(texto, ja_tem):
             tel = ''.join(m.groups())
             if len(tel) >= 10:
                 out['lead_telefone'] = tel[:20]
-    # nome — só se for resposta CURTA de 1-2 palavras (heurística fraca)
-    if not ja_tem.get('nome') and len(t) <= 30 and ' ' not in t.strip():
-        if t.isalpha() and 2 <= len(t) <= 20 and not _RE_MENINA.search(t) and not _RE_MENINO.search(t):
-            # capitaliza
-            out['nome'] = t.strip().capitalize()
+    # nome — SÓ com pista contextual ("meu nome é X", "sou a X"). Antes,
+    # qualquer 1 palavra solta virava nome e a Luquizinha cumprimentava
+    # "Oi, Barbie!" quando a cliente só queria ver Barbie no catálogo.
+    if not ja_tem.get('nome'):
+        m = _RE_NOME_EXPLICITO.search(t)
+        if m:
+            cand = m.group(1).strip()
+            if cand and not _RE_MENINA.search(cand) and not _RE_MENINO.search(cand):
+                out['nome'] = cand.capitalize()
     return out
 
 
@@ -4179,27 +4209,30 @@ def _luq_contexto_persistente(cli, ip):
         n = int((pcount or {}).get('n') or 0)
         if n > 0:
             pedacos.append(f"Ja fez {n} pedido(s) recentes. Cliente recorrente.")
-    # Conversa anterior do mesmo IP (mesma pessoa em outra sessao)
+    # Conversa anterior do mesmo IP (mesma pessoa em outra sessao). Só
+    # vale como contexto se rolou qualificação REAL (idade da criança).
+    # Conv anterior com só "nome" vinha quase sempre lixo da heurística
+    # antiga (Barbie/Pokémon/Beth) — não usar.
     if ip:
         ant = db_execute("""SELECT nome, idade_crianca, sexo_crianca, criado_em
                             FROM site_chat_conversas
                             WHERE ip=%s
                               AND criado_em > NOW() - INTERVAL '60 days'
-                              AND (nome IS NOT NULL OR idade_crianca IS NOT NULL)
+                              AND idade_crianca IS NOT NULL
                             ORDER BY criado_em DESC LIMIT 1""",
                          [ip], fetch='one')
         if ant:
             d = dict(ant)
             partes = []
-            if d.get('nome'):
-                partes.append(d['nome'])
             if d.get('sexo_crianca'):
                 partes.append(d['sexo_crianca'])
             if d.get('idade_crianca'):
                 partes.append(f"{d['idade_crianca']}a")
             if partes:
-                pedacos.append("Ja conversou comigo antes: " + ', '.join(partes)
-                               + ". Pode chamar pelo nome se tiver.")
+                pedacos.append("Conversou comigo antes (crianca: "
+                               + ', '.join(partes) + "). "
+                               + "NAO comece com 'te ver de novo' — "
+                               + "apenas use essa info se ajudar.")
     return '\n'.join(pedacos)
 
 
@@ -4268,33 +4301,26 @@ def _luq_tool_buscar_produtos(args):
     sexo = (args.get('sexo') or '').strip().lower()
     preco_max = args.get('preco_max')
 
-    tentativas = []
+    # 1ª passada: tentativas que tentam casar o que a cliente PEDIU.
+    # Se nenhuma achar, a 2ª passada cai em fallbacks por sexo (produtos
+    # quaisquer da faixa). Diferenciamos pra IA saber se o que ela mostra
+    # bate com o pedido ou se é só sugestão genérica.
+    tentativas_pedido = []
     if termo:
-        tentativas.append(termo)
-        # Primeira palavra significativa: "boneca de pano" → "boneca"
+        tentativas_pedido.append(termo)
         palavras = [w for w in termo.split() if w.lower() not in _STOPWORDS_BUSCA]
         if palavras and palavras[0].lower() != termo.lower():
-            tentativas.append(palavras[0])
-        # Sinônimos: "fala" → tenta "frases/papo/interativa" antes do
-        # fallback por sexo (cliente fala coloquial, catálogo usa outro
-        # vocabulário). Combina com primeira palavra significativa: ex
-        # "boneca que fala" → tenta "boneca frases", "boneca papo".
+            tentativas_pedido.append(palavras[0])
         sinonimos = _expandir_sinonimos(termo)
         base = palavras[0] if palavras else ''
         for s in sinonimos:
             cand = f"{base} {s}".strip() if base else s
-            if cand not in tentativas:
-                tentativas.append(cand)
-            if s not in tentativas:
-                tentativas.append(s)
-    # Fallback por sexo (boneca/carrinho/pelúcia/lego)
-    for t in _fallback_termos_por_sexo(sexo):
-        if t not in tentativas:
-            tentativas.append(t)
-    # Ultimo recurso: top produtos sem filtro
-    tentativas.append(None)
+            if cand not in tentativas_pedido:
+                tentativas_pedido.append(cand)
+            if s not in tentativas_pedido:
+                tentativas_pedido.append(s)
 
-    for t in tentativas:
+    for t in tentativas_pedido:
         try:
             produtos, _ = listar_produtos(busca=t, limite=8)
         except Exception as e:
@@ -4302,8 +4328,27 @@ def _luq_tool_buscar_produtos(args):
             continue
         out = _formatar_produtos(produtos, preco_max=preco_max)
         if out:
-            return {'produtos': out, 'termo_usado': t or 'top'}
-    return {'produtos': [], 'termo_usado': None}
+            return {'produtos': out, 'termo_usado': t, 'tipo': 'match'}
+
+    # Nada bateu com o pedido. NÃO devolver lista aleatória (a IA mostra
+    # "ACHA FORMAS, ALQUIMIA, ANATOMIA..." pra quem pediu Troll e parece
+    # confuso). Devolve vazio com flag pra IA dizer que não tem agora e
+    # pedir o WhatsApp pra avisar quando chegar.
+    if termo:
+        return {'produtos': [], 'termo_usado': termo,
+                'tipo': 'sem_match', 'pedido_original': termo}
+
+    # Sem termo (cliente só deu idade/sexo) — pode mostrar genéricos.
+    for t in _fallback_termos_por_sexo(sexo):
+        try:
+            produtos, _ = listar_produtos(busca=t, limite=8)
+        except Exception as e:
+            log.error("buscar_produtos PDV: %s (termo=%r)", e, t)
+            continue
+        out = _formatar_produtos(produtos, preco_max=preco_max)
+        if out:
+            return {'produtos': out, 'termo_usado': t, 'tipo': 'sugestao'}
+    return {'produtos': [], 'termo_usado': None, 'tipo': 'sem_match'}
 
 
 def _luq_tool_registrar_lead(conversa_id, args):
