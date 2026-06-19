@@ -1,6 +1,17 @@
 {% extends "base.html" %}
 {% block conteudo %}
 
+<!-- CUPOM PRIMEIRA COMPRA — primeira coisa que a cliente ve. Antes ficava
+     escondido dentro do checkout, mas 96% das pessoas nem chegavam la. -->
+<section style="margin:0 0 14px">
+  <div style="background:linear-gradient(90deg,#1652C7,#3B82F6);color:#fff;padding:14px 20px;border-radius:14px;text-align:center;font-weight:800;font-size:15px;box-shadow:0 6px 18px rgba(22,82,199,.25);display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap">
+    <span style="font-size:22px">🎁</span>
+    <span>Primeira compra? Use o cupom
+      <code style="background:#FFC700;color:#1652C7;padding:4px 12px;border-radius:6px;letter-spacing:1.5px;font-size:14px;margin:0 4px">PRIMEIRO10</code>
+      e ganhe <b>10% OFF</b> em compras a partir de R$ 50</span>
+  </div>
+</section>
+
 <!-- HERO ROTATIVO -->
 <section class="hero">
   {% if banners %}

@@ -109,6 +109,30 @@
         💰 Ou <b>{{ rs(preco_final|float * (1 - desconto_pix_pct/100)) }}</b> à vista no PIX/Boleto ({{ desconto_pix_pct|int }}% off)
       </div>
 
+      <!-- Cupom 1a compra: aparece SE produto >= R$50 (limite minimo do cupom) -->
+      {% if preco_final|float >= 50 %}
+      <div style="margin:0 0 14px;padding:12px 14px;background:linear-gradient(90deg,#1652C7,#3B82F6);color:#fff;border-radius:10px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:10px">
+        <span style="font-size:18px">🎁</span>
+        <span>
+          1ª compra? Cupom <code style="background:#FFC700;color:#1652C7;padding:2px 8px;border-radius:4px;font-weight:800;letter-spacing:1px">PRIMEIRO10</code>
+          tira <b>10% OFF</b> ({{ rs(preco_final|float * 0.9) }} no PIX no checkout)
+        </span>
+      </div>
+      {% endif %}
+
+      <!-- Prova social: visitantes reais nos ultimos 30 dias. So mostra se
+           >= 3 pra evitar parecer pouco. Pra estoque baixo, urgencia. -->
+      {% if visitas_30d and visitas_30d >= 3 %}
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#92400E;background:#FEF3C7;padding:8px 12px;border-radius:8px;margin-bottom:10px;font-weight:700">
+        👀 {{ visitas_30d }} pessoas viram esse brinquedo nos últimos 30 dias
+      </div>
+      {% endif %}
+      {% if p.estoque_atual and p.estoque_atual|float > 0 and p.estoque_atual|float <= 3 %}
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#991B1B;background:#FEE2E2;padding:8px 12px;border-radius:8px;margin-bottom:10px;font-weight:700">
+        🔥 Últimas {{ p.estoque_atual|int }} unidades em estoque!
+      </div>
+      {% endif %}
+
       {% if p.estoque_atual and p.estoque_atual|float > 0 %}
         <div style="color:var(--verde);font-weight:700;margin-bottom:14px">✓ Em estoque</div>
       {% else %}

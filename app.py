@@ -2830,6 +2830,19 @@ def produto(pid):
         return pv * (i * fator) / (fator - 1)
     parcela_max_valor = _parc_com_juros(preco_final, parc_max, juros_am)
     parcela_sj_valor = preco_final / parc_sj if parc_sj > 0 else preco_final
+    # Prova social baseada em dado REAL: pessoas únicas que viram esse produto
+    # nos últimos 30 dias. Usado pra gerar confiança ("X pessoas viram esse
+    # brinquedo recentemente"). Só mostra se >= 3 pra não parecer pouco.
+    try:
+        row = db_execute("""SELECT COUNT(DISTINCT ip_hash) AS n
+                            FROM site_visitas
+                            WHERE path = %s
+                              AND ts > NOW() - INTERVAL '30 days'
+                              AND NOT COALESCE(is_bot, false)""",
+                         [f'/produto/{pid}'], fetch='one') or {}
+        visitas_30d = int(row.get('n') or 0)
+    except Exception:
+        visitas_30d = 0
     return render_template('produto.html',
                            p=p, avaliacoes=avals, media_estrelas=media,
                            relacionados=relacionados[:4],
@@ -2841,7 +2854,8 @@ def produto(pid):
                            parcelas_sem_juros_max=parc_sj,
                            parcela_sj_valor=parcela_sj_valor,
                            parcela_max_valor=parcela_max_valor,
-                           juros_parcelamento_am=juros_am)
+                           juros_parcelamento_am=juros_am,
+                           visitas_30d=visitas_30d)
 
 
 @app.route('/api/carrinho/add', methods=['POST'])
