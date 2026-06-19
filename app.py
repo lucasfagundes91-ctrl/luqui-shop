@@ -1766,7 +1766,10 @@ def integracao_calcular_frete():
 def integracao_me_saldo():
     """Saldo do Melhor Envio pra calculadora do PDV Pro mostrar quanto
     tem em conta antes de emitir etiqueta. Tenta /me/balance primeiro
-    (escopo users-read) e cai pra /me (devolve balance também) se 403."""
+    (escopo users-read) e cai pra /me (devolve balance também) se 403.
+
+    Sempre retorna HTTP 200 — Cloudflare substitui body 5xx pela própria
+    página de erro, então a gente sinaliza falha via campo `erro` no JSON."""
     if not _verifica_api_key_pdv():
         return jsonify({'erro': 'unauthorized'}), 401
     try:
@@ -1782,17 +1785,17 @@ def integracao_me_saldo():
             log.warning("ME saldo /me/balance 403 e /me %s: %s",
                         r2.status_code, (r2.text or '')[:200])
             return jsonify({'erro': 'Token Melhor Envio sem permissão pra ler '
-                                    'saldo. Reconecte em /admin/melhorenvio.'}), 502
+                                    'saldo. Reconecte em /admin/melhorenvio.'})
         if not r.ok:
             log.warning("ME saldo /me/balance %s: %s", r.status_code,
                         (r.text or '')[:200])
-            return jsonify({'erro': f'ME respondeu {r.status_code}'}), 502
+            return jsonify({'erro': f'ME respondeu {r.status_code}'})
         d = r.json() or {}
         return jsonify({'saldo': float(d.get('balance') or 0),
                         'moeda': d.get('currency') or 'BRL'})
     except Exception as e:
         log.exception("integracao_me_saldo: %s", e)
-        return jsonify({'erro': str(e)}), 502
+        return jsonify({'erro': str(e)})
 
 
 def pdv_buscar_cliente_cpf(cpf):
