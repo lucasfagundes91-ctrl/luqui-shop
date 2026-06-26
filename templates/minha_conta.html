@@ -10,7 +10,7 @@
     <a href="/sair" style="color:var(--vermelho);font-weight:600">Sair</a>
   </div>
 
-  {% if assinatura %}
+  {% if clube_ativo and assinatura %}
     <div style="background:linear-gradient(135deg,#1652C7,#3FA89C);color:#fff;padding:24px;border-radius:18px;margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px">
         <div>
@@ -113,13 +113,13 @@
       }
     }
     </script>
-  {% else %}
+  {% elif clube_ativo %}
     <a href="/clube" style="display:block;background:#fef3c7;color:#92400e;padding:14px;border-radius:10px;margin-bottom:24px;font-weight:600;text-align:center">
       🎁 Você ainda não tem assinatura do Clube Luqui. Conhecer planos →
     </a>
   {% endif %}
 
-  {% if pontos_info and pontos_info.cliente_existe %}
+  {% if clube_ativo and pontos_info and pontos_info.cliente_existe %}
   <div style="background:linear-gradient(135deg,#FFF8E1,#FFE9A8);border:1px solid #FBBF24;padding:20px;border-radius:14px;margin-bottom:24px">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
       <div>

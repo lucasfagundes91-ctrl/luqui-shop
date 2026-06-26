@@ -54,6 +54,27 @@ META_PIXEL_ID = os.environ.get('META_PIXEL_ID', '')
 GOOGLE_TAG_ID = os.environ.get('GOOGLE_TAG_ID', '')
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 
+CLUBE_LUQUI_ATIVO = os.environ.get('CLUBE_LUQUI_ATIVO', '0') == '1'
+CUPOM_ANIVERSARIO_ATIVO = os.environ.get('CUPOM_ANIVERSARIO_ATIVO', '0') == '1'
+
+
+@app.context_processor
+def _ctx_flags():
+    return {'clube_ativo': CLUBE_LUQUI_ATIVO,
+            'cupom_aniversario_ativo': CUPOM_ANIVERSARIO_ATIVO}
+
+
+@app.before_request
+def _bloqueia_clube_se_desligado():
+    if CLUBE_LUQUI_ATIVO:
+        return None
+    p = request.path or ''
+    if p == '/clube' or p.startswith('/clube/') or p.startswith('/api/clube'):
+        if p.startswith('/api/'):
+            return jsonify({'erro': 'Clube Luqui temporariamente indisponível'}), 404
+        abort(404)
+    return None
+
 
 def get_conn():
     """Conexão Postgres por request (autocommit)."""
@@ -2323,6 +2344,8 @@ def cron_aniversariantes():
     """Gera cupom personalizado pros aniversariantes do dia + WA + email."""
     if request.args.get('token') != os.environ.get('CRON_TOKEN', 'troque'):
         return 'unauthorized', 401
+    if not CUPOM_ANIVERSARIO_ATIVO:
+        return jsonify({'ok': True, 'desligado': True, 'gerados': 0})
     rows = db_execute("""
         SELECT * FROM clientes_site
          WHERE data_nascimento IS NOT NULL
@@ -2680,8 +2703,11 @@ def sitemap_xml():
     base = 'https://www.luquibrinquedos.com.br'
     urls = [
         (base + '/', '1.0', 'daily'),
-        (base + '/clube', '0.9', 'weekly'),
         (base + '/sobre', '0.7', 'monthly'),
+    ]
+    if CLUBE_LUQUI_ATIVO:
+        urls.append((base + '/clube', '0.9', 'weekly'))
+    urls += [
         (base + '/trocas-devolucoes', '0.5', 'yearly'),
         (base + '/entregas', '0.5', 'yearly'),
         (base + '/formas-pagamento', '0.5', 'yearly'),
@@ -2744,6 +2770,10 @@ def home():
     categorias = listar_categorias()
     banners = db_execute(
         "SELECT * FROM banners WHERE ativo ORDER BY ordem", fetch='all') or []
+    if not CLUBE_LUQUI_ATIVO:
+        banners = [b for b in banners
+                   if '/clube' not in (b.get('link') or '')
+                   and 'clube' not in (b.get('titulo') or '').lower()]
     return render_template('home.html',
                            produtos=produtos,
                            categorias=categorias,
@@ -5685,7 +5715,7 @@ def checkout_finalizar():
         pontos_pedidos = float(d.get('pontos_usar') or 0)
     except (TypeError, ValueError):
         pontos_pedidos = 0.0
-    if pontos_pedidos > 0:
+    if pontos_pedidos > 0 and CLUBE_LUQUI_ATIVO:
         info_pontos = pdv_consultar_pontos(d.get('cpf'))
         if info_pontos and info_pontos.get('cliente_existe'):
             saldo = float(info_pontos.get('saldo') or 0)

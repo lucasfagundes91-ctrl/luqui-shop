@@ -128,7 +128,7 @@
       </div>
 
       <!-- PONTOS DO CLUBE -->
-      <div id="bloco-pontos" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px;display:{% if pontos_info and pontos_info.cliente_existe %}block{% else %}none{% endif %}">
+      <div id="bloco-pontos" style="background:#fff;padding:24px;border-radius:14px;margin-bottom:18px;display:{% if clube_ativo and pontos_info and pontos_info.cliente_existe %}block{% else %}none{% endif %}">
         <h3 style="margin-bottom:8px">⭐ Clube Luqui</h3>
         <div id="pontos-info" style="background:#FFF8E1;border:1px solid #FBBF24;border-radius:10px;padding:14px;font-size:14px;line-height:1.6">
           {% if pontos_info and pontos_info.saldo > 0 %}
@@ -881,7 +881,7 @@ async function aoTabularCpf(cpfRaw, silent){
   // Recalcula saldo em reais
   SALDO_REAIS = Math.round(PONTOS_SALDO * PONTOS_VPP * 100) / 100;
   const blocoP = document.getElementById('bloco-pontos');
-  if(blocoP){
+  if(blocoP && {{ 'true' if clube_ativo else 'false' }}){
     blocoP.style.display = 'block';
     const info = document.getElementById('pontos-info');
     if(info){

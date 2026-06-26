@@ -72,9 +72,9 @@
 
   <div style="text-align:center;margin:60px 0 40px">
     <h2 style="color:var(--azul);margin-bottom:14px">Bora brincar?</h2>
-    <p style="color:var(--mut);margin-bottom:20px">Conheça nossa loja online e o Clube Caixa Misteriosa</p>
+    <p style="color:var(--mut);margin-bottom:20px">Conheça nossa loja online{% if clube_ativo %} e o Clube Caixa Misteriosa{% endif %}</p>
     <a href="/" class="btn btn-amarelo" style="padding:16px 32px;font-size:15px;margin-right:8px">🛒 Ver brinquedos</a>
-    <a href="/clube" class="btn btn-primario" style="padding:16px 32px;font-size:15px">🎁 Clube Luqui</a>
+    {% if clube_ativo %}<a href="/clube" class="btn btn-primario" style="padding:16px 32px;font-size:15px">🎁 Clube Luqui</a>{% endif %}
   </div>
 </section>
 
