@@ -56,12 +56,14 @@ ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 
 CLUBE_LUQUI_ATIVO = os.environ.get('CLUBE_LUQUI_ATIVO', '0') == '1'
 CUPOM_ANIVERSARIO_ATIVO = os.environ.get('CUPOM_ANIVERSARIO_ATIVO', '0') == '1'
+CUPOM_PRIMEIRA_COMPRA_ATIVO = os.environ.get('CUPOM_PRIMEIRA_COMPRA_ATIVO', '0') == '1'
 
 
 @app.context_processor
 def _ctx_flags():
     return {'clube_ativo': CLUBE_LUQUI_ATIVO,
-            'cupom_aniversario_ativo': CUPOM_ANIVERSARIO_ATIVO}
+            'cupom_aniversario_ativo': CUPOM_ANIVERSARIO_ATIVO,
+            'cupom_primeira_compra_ativo': CUPOM_PRIMEIRA_COMPRA_ATIVO}
 
 
 @app.before_request
@@ -1021,6 +1023,8 @@ def checkout_aplicar_cupom():
     subtotal = float(request.args.get('subtotal') or 0)
     if not codigo:
         return jsonify({'erro': 'Digite o código'}), 400
+    if codigo == 'PRIMEIRO10' and not CUPOM_PRIMEIRA_COMPRA_ATIVO:
+        return jsonify({'erro': 'Cupom inválido ou expirado'}), 404
     c = db_execute("""SELECT * FROM cupons WHERE UPPER(codigo)=%s AND ativo
                       AND (valido_ate IS NULL OR valido_ate >= CURRENT_DATE)
                       AND (usos_max IS NULL OR usos < usos_max)""",
@@ -2383,6 +2387,8 @@ def cron_aniversariantes():
 @app.route('/api/checkout/cupom-primeira', methods=['POST'])
 def cupom_primeira_compra():
     """Pra cliente novo logado que nunca usou cupom de primeira compra."""
+    if not CUPOM_PRIMEIRA_COMPRA_ATIVO:
+        return jsonify({'pode': False})
     c = cliente_logado()
     if not c or c.get('ganhou_primeira'):
         return jsonify({'pode': False})
@@ -4109,14 +4115,9 @@ Se a cliente pediu "falar com vendedor" → registrar_lead na hora.
 INFO QUE VOCE PODE DAR DIRETO:
 💳 PIX 3% off, cartao 1x sem juros (2x+ tem juros, ate 12x)
 🚚 Cascavel R$ 10 fixo, retire na loja gratis, outras cidades cota no checkout
-🎁 Clube de Pontos: 1pt por R$1, vale R$0,10/pt, max 25% da compra
 📍 Rua Engenheiro Reboucas, 2053 — Cascavel/PR (so mencione se
    perguntarem ou se cliente quiser RETIRAR)
 ⏰ Seg-sex 9-18h · Sab 9-13h · Dom fechado
-
-CUPOM DE PRIMEIRA COMPRA:
-Se a pessoa parecer indecisa ou for cliente nova, mencione o
-cupom PRIMEIRO10 (10% off em compras a partir de R$ 50).
 
 PROIBIDO:
 - NUNCA mande a cliente pra "olhar no site" — ela JA ESTA no site.
@@ -5695,6 +5696,8 @@ def checkout_finalizar():
         desconto = round(subtotal * desconto_boleto_pct / 100, 2)
     # Cupom
     cupom_codigo = (d.get('cupom_codigo') or '').strip().upper()
+    if cupom_codigo == 'PRIMEIRO10' and not CUPOM_PRIMEIRA_COMPRA_ATIVO:
+        cupom_codigo = ''
     cupom_desconto = 0.0
     if cupom_codigo:
         c = db_execute("""SELECT * FROM cupons WHERE UPPER(codigo)=%s AND ativo

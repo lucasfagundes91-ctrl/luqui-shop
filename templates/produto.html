@@ -110,7 +110,7 @@
       </div>
 
       <!-- Cupom 1a compra: aparece SE produto >= R$50 (limite minimo do cupom) -->
-      {% if preco_final|float >= 50 %}
+      {% if cupom_primeira_compra_ativo and preco_final|float >= 50 %}
       <div style="margin:0 0 14px;padding:12px 14px;background:linear-gradient(90deg,#1652C7,#3B82F6);color:#fff;border-radius:10px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:10px">
         <span style="font-size:18px">🎁</span>
         <span>

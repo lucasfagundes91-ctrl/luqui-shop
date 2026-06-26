@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block conteudo %}
 
+{% if cupom_primeira_compra_ativo %}
 <!-- CUPOM PRIMEIRA COMPRA — primeira coisa que a cliente ve. Antes ficava
      escondido dentro do checkout, mas 96% das pessoas nem chegavam la. -->
 <section style="margin:0 0 14px">
@@ -11,6 +12,7 @@
       e ganhe <b>10% OFF</b> em compras a partir de R$ 50</span>
   </div>
 </section>
+{% endif %}
 
 <!-- HERO ROTATIVO -->
 <section class="hero">

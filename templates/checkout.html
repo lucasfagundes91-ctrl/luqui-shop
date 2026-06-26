@@ -99,10 +99,12 @@
   </div>
   {% endif %}
 
+  {% if cupom_primeira_compra_ativo %}
   <div id="banner-primeira" style="display:none;background:linear-gradient(90deg,#FFC700,#FFA800);color:#1652C7;padding:14px 20px;border-radius:14px;margin-bottom:20px;font-weight:700;text-align:center">
     🎉 É sua primeira compra! Use o cupom <code style="background:#fff;padding:3px 10px;border-radius:4px;letter-spacing:1px">PRIMEIRO10</code>
     pra ganhar <b>10% OFF</b> em compras a partir de R$ 50.
   </div>
+  {% endif %}
 
   <form id="form-checkout" class="checkout-grid">
     <!-- ─── COLUNA 1: DADOS PESSOAIS + CLUBE LUQUI ─── -->
