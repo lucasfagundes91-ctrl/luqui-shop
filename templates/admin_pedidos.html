@@ -102,6 +102,7 @@
   <a href="/admin/pedidos?status=aguardando_pagto" class="chip {% if filtro_status=='aguardando_pagto' %}on{% endif %}">⏳ Aguardando</a>
   <a href="/admin/pedidos?status=pago" class="chip {% if filtro_status=='pago' %}on{% endif %}">💰 Pago</a>
   <a href="/admin/pedidos?status=preparando" class="chip {% if filtro_status=='preparando' %}on{% endif %}">📦 Preparando</a>
+  <a href="/admin/pedidos?status=pronto_retirada" class="chip {% if filtro_status=='pronto_retirada' %}on{% endif %}">🏪 Pronto pra retirar</a>
   <a href="/admin/pedidos?status=enviado" class="chip {% if filtro_status=='enviado' %}on{% endif %}">🚚 Enviado</a>
   <a href="/admin/pedidos?status=entregue" class="chip {% if filtro_status=='entregue' %}on{% endif %}">✓ Entregue</a>
   <a href="/admin/pedidos?status=cancelado" class="chip {% if filtro_status=='cancelado' %}on{% endif %}">❌ Cancelado</a>
@@ -150,6 +151,8 @@
             <span class="pill amarelo">⏳ Aguardando</span>
           {% elif p.status == 'preparando' %}
             <span class="pill azul">📦 Preparando</span>
+          {% elif p.status == 'pronto_retirada' %}
+            <span class="pill verde">🏪 Pronto pra retirar</span>
           {% elif p.status == 'enviado' %}
             <span class="pill azul">🚚 Enviado</span>
           {% elif p.status == 'entregue' %}
@@ -179,7 +182,11 @@
           <select onchange="atualizarStatus({{ p.id }}, this.value, this)" class="sel-status">
             <option value="">Mudar pra…</option>
             <option value="preparando">📦 Preparando</option>
-            <option value="enviado">🚚 Enviado</option>
+            {% if is_retira %}
+              <option value="pronto_retirada">🏪 Pronto pra retirar</option>
+            {% else %}
+              <option value="enviado">🚚 Enviado</option>
+            {% endif %}
             <option value="entregue">✓ Entregue</option>
             <option value="cancelado">❌ Cancelar</option>
           </select>

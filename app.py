@@ -1426,6 +1426,54 @@ def integracao_pedido_aceitar(pid):
                     'aceito_por': r['aceito_por']})
 
 
+@app.route('/api/integracao/pedidos-site/<int:pid>/mudar-status', methods=['POST'])
+def integracao_pedido_mudar_status(pid):
+    """Atualiza status do pedido a partir do PDV Pro (sem precisar abrir o
+    admin do site). Aceita: preparando, pronto_retirada, enviado, entregue.
+    Dispara WhatsApp pro cliente com a mensagem adequada."""
+    if not _verifica_api_key_pdv():
+        return jsonify({'erro': 'unauthorized'}), 401
+    d = request.get_json() or {}
+    novo = (d.get('status') or '').strip()
+    rastreio = (d.get('rastreio') or '').strip() or None
+    permitidos = {'preparando', 'pronto_retirada', 'enviado', 'entregue'}
+    if novo not in permitidos:
+        return jsonify({'erro': f'status inválido (use {sorted(permitidos)})'}), 400
+    p = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one')
+    if not p:
+        return jsonify({'erro': 'pedido não encontrado'}), 404
+    db_execute("""UPDATE pedidos SET status=%s,
+                  melhorenvio_rastreio=COALESCE(%s, melhorenvio_rastreio),
+                  pronto_em = CASE WHEN %s='pronto_retirada'
+                                   THEN COALESCE(pronto_em, NOW()) ELSE pronto_em END,
+                  atualizado_em=NOW() WHERE id=%s""",
+               [novo, rastreio, novo, pid])
+    try:
+        primeiro = (p.get('nome') or 'amigo(a)').split()[0]
+        msgs = {
+            'preparando': (f"📦 Oi {primeiro}! Seu *Pedido #{pid}* está sendo "
+                           f"preparado com muito carinho 💛"),
+            'pronto_retirada': (
+                f"🏪 Oi {primeiro}! Seu *Pedido #{pid}* já está *pronto pra retirar* "
+                f"na Luqui Brinquedos! 💛\n\n"
+                f"📍 R. Eng. Rebouças, 2053 — Cascavel/PR\n"
+                f"🕐 Seg a Sex: 8h-18h · Sáb: 9h-13h\n\n"
+                f"Leva um documento com foto. Te esperamos! 🧸"),
+            'enviado': (f"🚚 Oi {primeiro}! Seu *Pedido #{pid}* "
+                        f"acabou de sair pra entrega!"
+                        + (f"\n\n*Rastreio:* {rastreio}" if rastreio else "")
+                        + f"\n\nAcompanhe: https://www.luquibrinquedos.com.br/pedido/{pid}/tracking"),
+            'entregue': (f"💛 *Pedido #{pid} entregue!* Esperamos que ame!\n\n"
+                         f"Que tal nos avaliar? "
+                         f"https://www.luquibrinquedos.com.br/pedido/{pid}/tracking"),
+        }
+        if p.get('telefone') and novo in msgs:
+            enviar_whatsapp(p['telefone'], msgs[novo])
+    except Exception as e:
+        log.warning(f"WA mudar-status pedido {pid}: {e}")
+    return jsonify({'ok': True, 'status': novo})
+
+
 @app.route('/api/integracao/pedidos-site/<int:pid>/marcar-pronto', methods=['POST'])
 def integracao_pedido_marcar_pronto(pid):
     """Marca pedido como pronto pra retirar/postar. Dispara WhatsApp pro
@@ -4872,11 +4920,12 @@ def admin_pedidos():
                            filtro_status=filtro_status, busca=busca)
 
 
-STATUS_TIMELINE = ['aguardando_pagto', 'pago', 'preparando', 'enviado', 'entregue']
+STATUS_TIMELINE = ['aguardando_pagto', 'pago', 'preparando', 'pronto_retirada', 'enviado', 'entregue']
 STATUS_LABELS = {
     'aguardando_pagto': 'Aguardando pagamento',
     'pago':             'Pagamento confirmado',
     'preparando':       'Preparando seu pedido',
+    'pronto_retirada':  'Pronto pra retirar na loja',
     'enviado':          'Saiu pra entrega',
     'entregue':         'Entregue ✓',
     'cancelado':        'Cancelado',
@@ -4926,12 +4975,22 @@ def admin_pedido_status(pid):
                 headers={'X-API-Key': PDVPRO_API_KEY}, timeout=30)
         except Exception as e:
             log.error("cancelar NF: %s", e)
+    # Se virou 'pronto_retirada', carimba pronto_em pro contador de fila bater
+    if novo == 'pronto_retirada':
+        db_execute("UPDATE pedidos SET pronto_em=COALESCE(pronto_em, NOW()) WHERE id=%s", [pid])
     # Notifica cliente
     try:
+        primeiro = (p.get('nome') or 'amigo(a)').split()[0]
         msgs = {
-            'preparando': (f"📦 Oi {p['nome'].split()[0]}! Seu *Pedido #{pid}* está sendo "
+            'preparando': (f"📦 Oi {primeiro}! Seu *Pedido #{pid}* está sendo "
                            f"preparado com muito carinho 💛"),
-            'enviado': (f"🚚 Oi {p['nome'].split()[0]}! Seu *Pedido #{pid}* "
+            'pronto_retirada': (
+                f"🏪 Oi {primeiro}! Seu *Pedido #{pid}* já está *pronto pra retirar* "
+                f"na Luqui Brinquedos! 💛\n\n"
+                f"📍 R. Eng. Rebouças, 2053 — Cascavel/PR\n"
+                f"🕐 Seg a Sex: 8h-18h · Sáb: 9h-13h\n\n"
+                f"Leva um documento com foto. Te esperamos! 🧸"),
+            'enviado': (f"🚚 Oi {primeiro}! Seu *Pedido #{pid}* "
                         f"acabou de sair pra entrega!"
                         + (f"\n\n*Rastreio:* {rastreio}" if rastreio else "")
                         + f"\n\nAcompanhe: https://www.luquibrinquedos.com.br/pedido/{pid}/tracking"),
@@ -6271,13 +6330,20 @@ Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp
             log.error("email confirma: %s", e)
         # WhatsApp pro CLIENTE
         try:
+            is_retira_p = (p.get('frete_servico') or '').lower().startswith('retirar')
+            if is_retira_p:
+                linha_entrega = "Retirada: na loja (R. Eng. Rebouças, 2053)"
+                linha_fechamento = "Te aviso aqui quando estiver pronto pra retirar!"
+            else:
+                linha_entrega = f"Entrega: {p.get('cidade') or '—'}/{p.get('uf') or '—'}"
+                linha_fechamento = "Te aviso quando sair pra entrega!"
             enviar_whatsapp(p['telefone'],
                 f"💛 Oi {p['nome'].split()[0]}! Sou a Luqui Brinquedos.\n\n"
                 f"Seu pagamento do *Pedido #{pid}* foi confirmado! 🎉\n"
                 f"Total: *R$ {p['total']}*\n"
-                f"Entrega: {p['cidade']}/{p['uf']}\n\n"
+                f"{linha_entrega}\n\n"
                 f"Já estamos preparando tudo com muito carinho 🧸\n"
-                f"Te aviso quando sair pra entrega!")
+                f"{linha_fechamento}")
         except Exception as e:
             log.error("WA cliente: %s", e)
         # WhatsApp pro ADMIN (você)
