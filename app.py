@@ -1330,7 +1330,7 @@ def pdv_get(path, params=None, ttl=60):
             PDVPRO_URL + path,
             params=params or {},
             headers={'X-API-Key': PDVPRO_API_KEY},
-            timeout=4,
+            timeout=10,
         )
         if r.status_code != 200:
             log.error("PDV Pro %s → %s", path, r.status_code)
