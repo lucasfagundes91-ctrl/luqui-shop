@@ -5359,6 +5359,21 @@ def admin_buscar_produto():
 
 
 # ─── Asaas ────────────────────────────────────────────────────────────────────
+def cpf_valido(cpf):
+    """Valida os dígitos verificadores do CPF (não só o tamanho)."""
+    c = ''.join(ch for ch in (cpf or '') if ch.isdigit())
+    if len(c) != 11 or c == c[0] * 11:
+        return False
+    for pos in (9, 10):
+        soma = sum(int(c[i]) * (pos + 1 - i) for i in range(pos))
+        dig = (soma * 10) % 11
+        if dig == 10:
+            dig = 0
+        if dig != int(c[pos]):
+            return False
+    return True
+
+
 def _asaas_headers():
     return {'access_token': ASAAS_API_KEY,
             'Content-Type': 'application/json',
@@ -5646,10 +5661,13 @@ def checkout_finalizar():
             return jsonify({'erro': f'Campo {c} obrigatório'}), 400
     if d['forma_pagto'] not in ('pix', 'cartao', 'boleto'):
         return jsonify({'erro': 'Forma de pagamento inválida'}), 400
-    # CPF tem que ter 11 digitos exatos (NF-e exige documento valido)
+    # CPF tem que ser VÁLIDO (dígitos verificadores), não só ter 11 dígitos.
+    # Sem isso um CPF digitado errado passa aqui e só é recusado no Asaas com
+    # "CPF/CNPJ inválido" — a cliente trava sem entender e a venda se perde.
     cpf_digs = ''.join(c for c in (d.get('cpf') or '') if c.isdigit())
-    if len(cpf_digs) != 11:
-        return jsonify({'erro': 'CPF inválido — precisa ter 11 dígitos'}), 400
+    if not cpf_valido(cpf_digs):
+        return jsonify({'erro': 'CPF inválido — confira os números digitados '
+                                'e tente de novo.'}), 400
     # CEP 8 digitos (se for entrega)
     if not is_retira:
         cep_digs = ''.join(c for c in (d.get('cep') or '') if c.isdigit())

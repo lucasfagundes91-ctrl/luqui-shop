@@ -797,6 +797,16 @@ document.getElementById('form-checkout').addEventListener('submit', async (e)=>{
     btn.disabled=false; btn.textContent='Pagar e finalizar →';
     return;
   }
+  // Confere o CPF ANTES de mandar pro Asaas — evita o erro feio de "CPF
+  // inválido" que trava a cliente sem explicar. Avisa e foca o campo.
+  const _cpfEl = document.getElementById('cpf');
+  if(!cpfValido(_cpfEl ? _cpfEl.value : '')){
+    avisarCpf(true);
+    toast('CPF inválido — confira os números pra continuar', 'err');
+    if(_cpfEl){ _cpfEl.scrollIntoView({behavior:'smooth', block:'center'}); _cpfEl.focus(); }
+    btn.disabled=false; btn.textContent='Pagar e finalizar →';
+    return;
+  }
   const f = new FormData(e.target);
   const dados = Object.fromEntries(f.entries());
   dados.frete_valor = frete;
@@ -858,10 +868,43 @@ document.getElementById('form-checkout').addEventListener('submit', async (e)=>{
   }
 })();
 
+// Valida os dígitos verificadores do CPF (não só o tamanho). Sem isso, um CPF
+// digitado errado passa no site e só é recusado lá no Asaas com erro feio —
+// cliente trava e não chega no pagamento.
+function cpfValido(cpfRaw){
+  const c = (cpfRaw || '').replace(/\D/g,'');
+  if(c.length !== 11) return false;
+  if(/^(\d)\1{10}$/.test(c)) return false;        // 000..., 111... etc
+  const dv = p => { let s=0; for(let i=0;i<p;i++) s += parseInt(c[i])*(p+1-i);
+                    const r = (s*10)%11; return r===10?0:r; };
+  return dv(9)===parseInt(c[9]) && dv(10)===parseInt(c[10]);
+}
+// Mostra/esconde um aviso vermelho embaixo do campo de CPF
+function avisarCpf(mostrar){
+  let el = document.getElementById('erro-cpf');
+  const campo = document.getElementById('cpf');
+  if(mostrar){
+    if(!el){
+      el = document.createElement('div');
+      el.id = 'erro-cpf';
+      el.style.cssText = 'grid-column:1/-1;background:#FEE2E2;border:1px solid #FCA5A5;color:#991B1B;border-radius:8px;padding:8px 10px;font-size:13px;margin-top:-4px';
+      el.textContent = '⚠️ CPF inválido — confira os números digitados.';
+      if(campo && campo.parentNode) campo.parentNode.appendChild(el);
+    }
+    if(campo) campo.style.borderColor = '#EF4444';
+  } else {
+    if(el) el.remove();
+    if(campo) campo.style.borderColor = 'var(--linha)';
+  }
+}
+
 let _ULTIMO_CPF_CHECADO = '';
 async function aoTabularCpf(cpfRaw, silent){
   const cpf = (cpfRaw || '').replace(/\D/g,'');
-  if(cpf.length !== 11) return;
+  if(cpf.length !== 11){ avisarCpf(false); return; }
+  // Se tem 11 dígitos mas os verificadores não batem, avisa na hora
+  if(!cpfValido(cpf)){ avisarCpf(true); return; }
+  avisarCpf(false);
   if(cpf === _ULTIMO_CPF_CHECADO) return;
   _ULTIMO_CPF_CHECADO = cpf;
   let d;
