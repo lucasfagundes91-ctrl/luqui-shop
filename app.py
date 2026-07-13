@@ -30,14 +30,14 @@ log = logging.getLogger('luquishop')
 SP_TZ = ZoneInfo('America/Sao_Paulo')
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY') or 'troque-em-prod-luqui-shop'
+app.secret_key = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
 DATABASE_URL = os.environ.get('DATABASE_URL') or ''
 PDVPRO_URL = os.environ.get('PDVPRO_URL', 'https://pdvpro.luqsys.com.br')
 PDVPRO_API_KEY = os.environ.get('PDVPRO_API_KEY', '')
 ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'lucasfagundes91@hotmail.com')
-ADMIN_SENHA_PADRAO = os.environ.get('ADMIN_SENHA', 'Lucasf123@')
+ADMIN_SENHA_PADRAO = os.environ.get('ADMIN_SENHA') or secrets.token_urlsafe(16)
 WHATSAPP_LOJA = os.environ.get('WHATSAPP_LOJA', '5545991119800')
 ASAAS_API_KEY = os.environ.get('ASAAS_API_KEY', '')
 ASAAS_WEBHOOK_TOKEN = os.environ.get('ASAAS_WEBHOOK_TOKEN', '')
