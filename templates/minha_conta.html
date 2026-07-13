@@ -177,12 +177,12 @@
         <tbody>
         {% for p in pedidos %}
           <tr style="border-top:1px solid var(--linha);font-size:13px">
-            <td style="padding:12px"><a href="/pedido/{{ p.id }}/tracking" style="color:var(--azul);font-weight:700">#{{ p.id }}</a></td>
+            <td style="padding:12px"><a href="/pedido/{{ p.id }}/tracking?t={{ p.token }}" style="color:var(--azul);font-weight:700">#{{ p.id }}</a></td>
             <td style="padding:12px">{{ p.criado_em.strftime('%d/%m/%Y') if p.criado_em else '—' }}</td>
             <td style="padding:12px;text-align:right;font-weight:700">{{ rs(p.total) }}</td>
             <td style="padding:12px">
               <span style="background:#EFF6FF;color:var(--azul);padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700">{{ p.status }}</span>
-              <a href="/pedido/{{ p.id }}/tracking" style="font-size:11px;color:var(--mut);margin-left:6px">acompanhar →</a>
+              <a href="/pedido/{{ p.id }}/tracking?t={{ p.token }}" style="font-size:11px;color:var(--mut);margin-left:6px">acompanhar →</a>
               {% if p.nfe_ref %}
                 <button onclick="baixarNFe({{ p.id }}, this)"
                         style="background:transparent;color:#15803D;border:1px solid #15803D;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;margin-left:6px">

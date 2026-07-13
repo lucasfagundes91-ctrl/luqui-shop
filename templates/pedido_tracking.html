@@ -22,7 +22,7 @@
     {% elif p.status == 'aguardando_pagto' %}
       <div style="background:#FEF3C7;color:#92400E;padding:14px;border-radius:10px;margin-bottom:20px">
         ⏳ <b>Aguardando pagamento</b> ·
-        <a href="/pedido/{{ p.id }}/pagamento" style="color:#1652C7;font-weight:700">Pagar agora →</a>
+        <a href="/pedido/{{ p.id }}/pagamento?t={{ p.token }}" style="color:#1652C7;font-weight:700">Pagar agora →</a>
       </div>
     {% else %}
     <!-- TIMELINE -->

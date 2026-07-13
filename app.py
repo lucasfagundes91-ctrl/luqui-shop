@@ -106,6 +106,31 @@ def db_execute(sql, params=None, fetch=None):
         cur.close()
 
 
+def _rl_ip():
+    xff = request.headers.get('X-Forwarded-For', '')
+    if xff:
+        return xff.split(',')[-1].strip()
+    return request.remote_addr or '0.0.0.0'
+
+
+def rate_limit_ok(bucket, chave, max_hits, janela_seg):
+    """False se estourou o limite na janela. Falha aberto se o banco oscilar."""
+    try:
+        row = db_execute(
+            "SELECT COUNT(*) AS n FROM rate_limit_hits "
+            "WHERE bucket=%s AND chave=%s "
+            "AND criado_em > NOW() - make_interval(secs => %s)",
+            [bucket, chave, janela_seg], fetch='one')
+        if (row or {}).get('n', 0) >= max_hits:
+            return False
+        db_execute("INSERT INTO rate_limit_hits (bucket, chave) VALUES (%s,%s)",
+                   [bucket, chave])
+        db_execute("DELETE FROM rate_limit_hits WHERE criado_em < NOW() - interval '1 day'")
+        return True
+    except Exception:
+        return True
+
+
 # ─── Tracker de visitas do site (analytics) ───────────────────────────────────
 _BOT_HINTS = ('bot', 'crawler', 'spider', 'curl', 'wget', 'headless',
               'python-', 'go-http', 'http-client', 'facebookexternal',
@@ -396,6 +421,13 @@ def init_db():
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS melhorenvio_servico_id VARCHAR(20)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS melhorenvio_valor NUMERIC(12,2)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS melhorenvio_pago_em TIMESTAMPTZ",
+        # Token imprevisível pra acesso às páginas públicas de pedido (anti-IDOR).
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS token VARCHAR(32)",
+        """CREATE TABLE IF NOT EXISTS rate_limit_hits (
+            id BIGSERIAL PRIMARY KEY, bucket TEXT NOT NULL, chave TEXT NOT NULL,
+            criado_em TIMESTAMPTZ DEFAULT NOW())""",
+        "CREATE INDEX IF NOT EXISTS idx_rl_lookup ON rate_limit_hits (bucket, chave, criado_em)",
+        "UPDATE pedidos SET token = substr(md5(random()::text || id::text || clock_timestamp()::text), 1, 24) WHERE token IS NULL",
         "ALTER TABLE clientes_site ADD COLUMN IF NOT EXISTS data_nascimento DATE",
         "ALTER TABLE clientes_site ADD COLUMN IF NOT EXISTS ganhou_primeira BOOLEAN DEFAULT FALSE",
         "ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS foto_url TEXT",
@@ -1054,6 +1086,20 @@ def admin_logado():
     return session.get('admin_id') is not None
 
 
+def pedido_acesso_ok(p):
+    """As páginas públicas de pedido (pagamento/tracking) exigem prova de posse
+    pra evitar IDOR por id sequencial: admin logado, dono logado, ou ?t=<token>."""
+    if not p:
+        return False
+    if admin_logado():
+        return True
+    cl = cliente_logado()
+    if cl and p.get('cliente_id') and cl.get('id') == p.get('cliente_id'):
+        return True
+    tok = p.get('token') or ''
+    return bool(tok) and secrets.compare_digest(str(request.args.get('t') or ''), str(tok))
+
+
 def requer_admin(f):
     @wraps(f)
     def w(*a, **kw):
@@ -1487,10 +1533,10 @@ def integracao_pedido_mudar_status(pid):
             'enviado': (f"🚚 Oi {primeiro}! Seu *Pedido #{pid}* "
                         f"acabou de sair pra entrega!"
                         + (f"\n\n*Rastreio:* {rastreio}" if rastreio else "")
-                        + f"\n\nAcompanhe: https://www.luquibrinquedos.com.br/pedido/{pid}/tracking"),
+                        + f"\n\nAcompanhe: https://www.luquibrinquedos.com.br/pedido/{pid}/tracking?t={p.get('token','')}"),
             'entregue': (f"💛 *Pedido #{pid} entregue!* Esperamos que ame!\n\n"
                          f"Que tal nos avaliar? "
-                         f"https://www.luquibrinquedos.com.br/pedido/{pid}/tracking"),
+                         f"https://www.luquibrinquedos.com.br/pedido/{pid}/tracking?t={p.get('token','')}"),
         }
         if p.get('telefone') and novo in msgs:
             enviar_whatsapp(p['telefone'], msgs[novo])
@@ -2416,13 +2462,13 @@ def cron_carrinho_abandonado():
                 f"Vi que você começou um pedido aqui na Luqui mas ainda não finalizou.\n\n"
                 f"Total: *{rs(p['total'])}*\n\n"
                 f"Tá tudo certinho? Quer finalizar?\n"
-                f"👉 https://www.luquibrinquedos.com.br/pedido/{p['id']}/pagamento")
+                f"👉 https://www.luquibrinquedos.com.br/pedido/{p['id']}/pagamento?t={p.get('token','')}")
             enviar_email(p['email'],
                 f'Esqueceu de finalizar seu pedido #{p["id"]}?',
                 f"""<p>Oi {p['nome'].split()[0]}! 💛</p>
 <p>Notamos que você começou um pedido aqui na Luqui mas ainda não finalizou o pagamento.</p>
 <p><b>Total:</b> {rs(p['total'])}</p>
-<p><a href="https://www.luquibrinquedos.com.br/pedido/{p['id']}/pagamento"
+<p><a href="https://www.luquibrinquedos.com.br/pedido/{p['id']}/pagamento?t={p.get('token','')}"
    style="background:#FFC700;color:#1652C7;padding:12px 24px;border-radius:8px;
           font-weight:900;text-decoration:none;display:inline-block">
   💛 Finalizar pedido
@@ -2485,7 +2531,7 @@ def cron_email_pos_compra():
 Esperamos que tudo tenha chegado certinho! 🧸</p>
 <p>Que tal contar pra gente o que você achou? Sua avaliação ajuda outras famílias
 a escolherem com confiança!</p>
-<p><a href="https://www.luquibrinquedos.com.br/pedido/{p['id']}/tracking"
+<p><a href="https://www.luquibrinquedos.com.br/pedido/{p['id']}/tracking?t={p.get('token','')}"
      style="background:#FFC700;color:#1652C7;padding:12px 24px;border-radius:8px;
             font-weight:900;text-decoration:none;display:inline-block">
   ⭐ Avaliar produtos
@@ -3091,6 +3137,8 @@ def checkout_view():
 def checkout_consultar_pontos():
     """Consulta pontos pelo CPF informado no formulario (cliente sem login
     ou pra revalidar). Retorna saldo e valor disponivel."""
+    if not rate_limit_ok('cpf_lookup', _rl_ip(), 20, 300):
+        return jsonify({'erro': 'Muitas consultas. Aguarde um pouco.'}), 429
     cpf = (request.args.get('cpf') or '').strip()
     info = pdv_consultar_pontos(cpf)
     if not info:
@@ -3104,6 +3152,8 @@ def checkout_buscar_cliente_cpf():
     pré-preenchimento de dados no checkout quando o CPF digitado é de
     alguém que já comprou na loja física. Retorna nome/contato/endereço
     + saldo do Clube. Frontend mostra um aviso 'Encontramos seu cadastro'."""
+    if not rate_limit_ok('cpf_lookup', _rl_ip(), 20, 300):
+        return jsonify({'erro': 'Muitas consultas. Aguarde um pouco.'}), 429
     cpf = (request.args.get('cpf') or '').strip()
     dados = pdv_buscar_cliente_cpf(cpf)
     if not dados:
@@ -4971,7 +5021,7 @@ STATUS_LABELS = {
 @app.route('/pedido/<int:pid>/tracking')
 def pedido_tracking(pid):
     p = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one')
-    if not p:
+    if not p or not pedido_acesso_ok(p):
         abort(404)
     itens = db_execute(
         "SELECT * FROM pedido_itens WHERE pedido_id=%s ORDER BY id",
@@ -5028,10 +5078,10 @@ def admin_pedido_status(pid):
             'enviado': (f"🚚 Oi {primeiro}! Seu *Pedido #{pid}* "
                         f"acabou de sair pra entrega!"
                         + (f"\n\n*Rastreio:* {rastreio}" if rastreio else "")
-                        + f"\n\nAcompanhe: https://www.luquibrinquedos.com.br/pedido/{pid}/tracking"),
+                        + f"\n\nAcompanhe: https://www.luquibrinquedos.com.br/pedido/{pid}/tracking?t={p.get('token','')}"),
             'entregue': (f"💛 *Pedido #{pid} entregue!* Esperamos que ame!\n\n"
                          f"Que tal nos avaliar? "
-                         f"https://www.luquibrinquedos.com.br/pedido/{pid}/tracking"),
+                         f"https://www.luquibrinquedos.com.br/pedido/{pid}/tracking?t={p.get('token','')}"),
         }
         if novo in msgs:
             enviar_whatsapp(p['telefone'], msgs[novo])
@@ -5708,7 +5758,24 @@ def checkout_finalizar():
             log.warning(f"falha ao validar fiscal no PDV (segue): {e}")
     # Calcula totais
     subtotal = sum(float(it['preco']) * float(it['qtd']) for it in itens)
-    frete = float(d.get('frete_valor') or 0)
+    # Frete: NUNCA confiar no valor vindo do cliente (era manipulável — dava pra
+    # fechar pedido com frete negativo/adulterado). Re-cota no servidor e usa o
+    # valor da opção escolhida. Retirar na loja = 0.
+    if is_retira:
+        frete = 0.0
+    else:
+        frete_servico_esc = (d.get('frete_servico') or '').strip()
+        opcoes_frete = me_cotar(d.get('cep'), itens)
+        match_frete = next(
+            (o for o in opcoes_frete
+             if o.get('servico') == frete_servico_esc
+             or (d.get('frete_id') and str(o.get('id')) == str(d.get('frete_id')))),
+            None)
+        if not match_frete:
+            return jsonify({'erro': 'Não conseguimos confirmar o valor do frete. '
+                            'Recarregue a página e escolha a opção de entrega '
+                            'novamente.'}), 400
+        frete = float(match_frete['valor'])
     desconto_pix_pct = float(cfg('desconto_pix_pct', '3'))
     desconto_boleto_pct = float(cfg('desconto_boleto_pct', '3'))
     desconto = 0.0
@@ -5792,6 +5859,11 @@ def checkout_finalizar():
     # nao tem etiqueta.
     fsid = (d.get('frete_servico_id') or '').strip()
     if fsid in ('LOCAL', 'RETIRA'): fsid = ''
+    # Token imprevisível por pedido: as páginas /pedido/<id>/pagamento e
+    # /tracking são públicas (checkout sem login) e antes eram acessíveis só
+    # pelo id sequencial (IDOR — dava pra ver CPF/endereço de outro trocando o
+    # id). Agora exigem ?t=<token> (ou dono logado/admin).
+    ped_token = secrets.token_urlsafe(18)
     ped = db_execute("""
         INSERT INTO pedidos
           (cliente_id, email, nome, telefone, cpf, cep, endereco, numero,
@@ -5799,8 +5871,8 @@ def checkout_finalizar():
            forma_pagto, parcelas, frete_servico, frete_prazo, observacao,
            cupom_codigo, cupom_desconto, embrulho_presente, embrulho_mensagem,
            embrulho_tipo, juros_valor, entrega_agendada,
-           pontos_resgatados, desconto_pontos, melhorenvio_servico_id)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+           pontos_resgatados, desconto_pontos, melhorenvio_servico_id, token)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         RETURNING id""",
         [cli['id'] if cli else None,
          d['email'].strip().lower(), d['nome'].strip(), d['telefone'].strip(),
@@ -5819,7 +5891,7 @@ def checkout_finalizar():
          cupom_codigo or None, cupom_desconto,
          embrulho, embrulho_msg, embrulho_tipo, juros_valor, entrega_agendada,
          pontos_resgatados, desconto_pontos,
-         fsid or None],
+         fsid or None, ped_token],
         fetch='one')
     pid = ped['id']
     # Atualiza dados do cliente_site logado pra auto-preencher no proximo
@@ -5899,7 +5971,7 @@ def checkout_finalizar():
         session['carrinho'] = []
         session.modified = True
         return jsonify({'ok': True, 'pedido_id': pid,
-                        'pagamento_url': f'/pedido/{pid}/pagamento'})
+                        'pagamento_url': f'/pedido/{pid}/pagamento?t={ped_token}'})
     # PIX ou BOLETO: cria cobrança agora pra mostrar dados de pagamento na
     # própria página (QR visual / linha digitável). Cartão tem fluxo próprio.
     billing = 'PIX' if d['forma_pagto'] == 'pix' else 'BOLETO'
@@ -5933,7 +6005,7 @@ def checkout_finalizar():
     session['carrinho'] = []
     session.modified = True
     return jsonify({'ok': True, 'pedido_id': pid,
-                    'pagamento_url': f'/pedido/{pid}/pagamento'})
+                    'pagamento_url': f'/pedido/{pid}/pagamento?t={ped_token}'})
 
 
 @app.route('/api/admin/asaas/conta')
@@ -6052,7 +6124,7 @@ def pedido_pagar_cartao(pid):
 @app.route('/pedido/<int:pid>/pagamento')
 def pedido_pagamento(pid):
     p = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one')
-    if not p:
+    if not p or not pedido_acesso_ok(p):
         abort(404)
     # Lazy-fetch da imagem do QR Code PIX se faltou na criação do pedido
     # (pedidos antigos podem ter só o payload sem a imagem). Busca da API
