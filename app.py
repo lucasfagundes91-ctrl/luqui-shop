@@ -6410,8 +6410,19 @@ Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp
     if not p:
         return jsonify({'erro': 'pedido não encontrado'}), 404
     if event in ('PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'):
-        if p['status'] == 'pago':
-            return jsonify({'ok': True, 'ja_pago': True})
+        # Uma compra no CARTÃO gera DOIS eventos: PAYMENT_CONFIRMED na hora e
+        # PAYMENT_RECEIVED quando a operadora repassa o dinheiro — ~30 dias
+        # depois. Olhar só status=='pago' não segurava o segundo: até lá o
+        # pedido já tinha andado pra 'enviado', o guard passava batido e o
+        # pagamento era processado DE NOVO — outra venda no PDV, estoque
+        # baixado outra vez e NF-e nova autorizada. (No PIX isso nunca
+        # apareceu: lá os dois eventos chegam no mesmo segundo, com o pedido
+        # ainda em 'pago'.)
+        # pago_em é a marca de "essa transição já aconteceu" e não some quando
+        # o pedido avança de status. Pedido atrasado que paga depois tem
+        # pago_em nulo, então continua entrando normalmente.
+        if p['pago_em'] or p['pdv_venda_id']:
+            return jsonify({'ok': True, 'ja_processado': True})
         db_execute("""UPDATE pedidos SET status='pago', pago_em=NOW(),
                       atualizado_em=NOW() WHERE id=%s""", [pid])
         # Dispara venda no PDV Pro
