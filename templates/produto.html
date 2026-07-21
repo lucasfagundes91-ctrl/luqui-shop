@@ -271,7 +271,7 @@
 
   {% if p.videos %}
   <div id="video-lightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9999;align-items:center;justify-content:center;padding:20px"
-       onclick="if(event.target===this) fecharVideoLightbox()">
+       onmousedown="this._dnBg=(event.target===this)" onmouseup="if(event.target===this&&this._dnBg){fecharVideoLightbox();}this._dnBg=false">
     <button type="button" onclick="fecharVideoLightbox()" aria-label="Fechar"
             style="position:absolute;top:16px;right:20px;background:rgba(255,255,255,.18);color:#fff;border:none;width:42px;height:42px;border-radius:50%;font-size:24px;cursor:pointer;line-height:1;z-index:2">×</button>
     <div id="video-lightbox-box" style="width:100%;max-width:420px;aspect-ratio:9/16;background:#000;border-radius:14px;overflow:hidden;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.5)"></div>

@@ -55,7 +55,7 @@
 <!-- FABs Luqsys: tour + ajuda (canto inferior esquerdo, auto-hide) -->
 <button id="luqui-btn-tour" onclick="luquiAbrirTour()" title="Tour rápido" style="position:fixed;bottom:10px;left:74px;width:36px;height:36px;border-radius:50%;background:white;border:1px solid #e5e7eb;cursor:pointer;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.12);z-index:9997;transition:opacity .35s,transform .3s">🎯</button>
 <button id="luqui-btn-ajuda" onclick="luquiAbrirAjuda()" title="Ajuda — assistente" style="position:fixed;bottom:10px;left:14px;width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#1652c7 0%,#0e3a8f 100%);color:white;border:none;cursor:pointer;font-size:22px;box-shadow:0 4px 12px rgba(22,82,199,0.35);z-index:9998;transition:opacity .35s,transform .3s">🛍️</button>
-<div id="luqui-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999" onclick="if(event.target===this)luquiFecharModal()">
+<div id="luqui-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999" onmousedown="this._dnBg=(event.target===this)" onmouseup="if(event.target===this&&this._dnBg){luquiFecharModal();}this._dnBg=false">
   <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:white;border-radius:14px;padding:24px;max-width:380px;width:90%;box-shadow:0 10px 30px rgba(0,0,0,.3);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
     <div id="luqui-modal-titulo" style="font-size:18px;font-weight:700;margin-bottom:10px;color:#0f172a"></div>
     <div id="luqui-modal-corpo" style="font-size:14px;color:#444;line-height:1.5"></div>
