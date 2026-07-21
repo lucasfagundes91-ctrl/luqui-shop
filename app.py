@@ -5447,7 +5447,12 @@ def asaas_criar_customer(nome, email, cpf, telefone=None):
     except Exception as e:
         log.error("asaas customer search: %s", e)
     # Cria novo
-    body = {'name': nome, 'email': email, 'cpfCnpj': cpf_d, 'mobilePhone': telefone}
+    # notificationDisabled: checkout de e-commerce. A régua padrão do Asaas
+    # persegue quem não pagou (email/SMS na criação, 10 dias antes, no
+    # vencimento e nos atrasos, com robô de voz nos atrasos) — quem abandonou
+    # o carrinho levava ligação de cobrança e desistia.
+    body = {'name': nome, 'email': email, 'cpfCnpj': cpf_d, 'mobilePhone': telefone,
+            'notificationDisabled': True}
     try:
         r = requests.post(f'{ASAAS_BASE}/customers',
                           json=body, headers=_asaas_headers(), timeout=12)
