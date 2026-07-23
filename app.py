@@ -570,6 +570,21 @@ def init_db():
             me_rastreio VARCHAR(60)
         )""",
         "CREATE INDEX IF NOT EXISTS idx_etiq_avulsa_dt ON etiquetas_avulsas(criado_em DESC)",
+        # Servicos que o ME cota mas a transportadora recusa na postagem.
+        # cep_prefixo NULL = recusa da origem, vale pra qualquer destino.
+        # cep_prefixo_k existe so pra UNIQUE tratar NULL como valor (no
+        # Postgres cada NULL e distinto e o ON CONFLICT nao pegaria).
+        """CREATE TABLE IF NOT EXISTS me_bloqueios (
+            id SERIAL PRIMARY KEY,
+            service_id INT NOT NULL,
+            cep_prefixo VARCHAR(5),
+            cep_prefixo_k VARCHAR(5) GENERATED ALWAYS AS
+                (COALESCE(cep_prefixo, '')) STORED,
+            servico_nome VARCHAR(80),
+            motivo TEXT,
+            criado_em TIMESTAMPTZ DEFAULT NOW()
+        )""",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_me_bloq ON me_bloqueios(service_id, cep_prefixo_k)",
     ]
     for ddl in ddls:
         try:
@@ -1033,9 +1048,72 @@ def me_cotar(cep_destino, itens):
             'prazo':    f"{opt.get('delivery_time') or '?'} dias úteis",
             'company':  opt.get('company', {}).get('name', ''),
         })
+    # Tira as que o Melhor Envio cota mas a transportadora recusa na postagem.
+    out = me_filtrar_bloqueados(out, cep_destino)
     # Ordena por preço crescente (mais barato primeiro). Empate: prazo menor.
     out.sort(key=lambda o: (o['valor'], o.get('prazo', '')))
     return out
+
+
+# ─── Servicos que cotam mas recusam na hora de postar ────────────────────────
+# O /shipment/calculate do ME cota QUALQUER servico habilitado; quem valida as
+# regras da transportadora e o /me/cart, la na emissao da etiqueta. Resultado:
+# o cliente escolhia e PAGAVA um frete impossivel, e a loja so descobria ao
+# tentar postar. Foi o pedido #35 — cliente pagou LATAM e o aeroporto de
+# destino nao aceita declaracao de conteudo.
+#
+# Duas naturezas de recusa:
+#  - fixa da loja (origem): "nao aceita envios nao-comerciais partindo deste
+#    estado" (Jadlog, saindo do PR). Vale pra qualquer destino -> cep_prefixo NULL.
+#  - por destino: "o aeroporto de destino nao aceita..." (LATAM). Depende da
+#    regiao -> guarda os 3 primeiros digitos do CEP.
+def me_filtrar_bloqueados(opcoes, cep_destino):
+    cep = ''.join(c for c in (cep_destino or '') if c.isdigit())
+    try:
+        rows = db_execute(
+            "SELECT service_id, cep_prefixo FROM me_bloqueios", fetch='all') or []
+    except Exception as e:
+        log.warning("me_filtrar_bloqueados: %s", e)
+        return opcoes
+    bloq = set()
+    for r in rows:
+        pref = (r.get('cep_prefixo') or '').strip()
+        if not pref or (cep and cep.startswith(pref)):
+            bloq.add(str(r['service_id']))
+    if not bloq:
+        return opcoes
+    fora = [o for o in opcoes if str(o.get('id')) in bloq]
+    if fora:
+        log.info("cotacao %s: escondendo %s (bloqueio conhecido)",
+                 cep, ', '.join(o.get('servico', '?') for o in fora))
+    return [o for o in opcoes if str(o.get('id')) not in bloq]
+
+
+def me_registrar_bloqueio(service_id, cep_destino, motivo, servico_nome=''):
+    """Aprende com a recusa: da proxima vez esse servico nao e nem oferecido.
+
+    Recusa que cita a origem vale pra sempre; as demais ficam presas a regiao
+    do CEP (3 digitos), que e mais ou menos o alcance de um aeroporto/base.
+    """
+    m = (motivo or '').lower()
+    origem = ('partindo deste estado' in m or 'partindo do estado' in m
+              or 'nao-comerciais' in m or 'não-comerciais' in m)
+    cep = ''.join(c for c in (cep_destino or '') if c.isdigit())
+    pref = None if origem else (cep[:3] or None)
+    if not origem and not pref:
+        return
+    try:
+        db_execute("""INSERT INTO me_bloqueios
+                        (service_id, cep_prefixo, servico_nome, motivo)
+                      VALUES (%s,%s,%s,%s)
+                      ON CONFLICT (service_id, cep_prefixo_k) DO UPDATE
+                        SET motivo=EXCLUDED.motivo, criado_em=NOW()""",
+                   [int(service_id), pref, (servico_nome or '')[:80],
+                    (motivo or '')[:400]])
+        log.warning("bloqueio ME aprendido: servico %s (%s) cep_prefixo=%s — %s",
+                    service_id, servico_nome, pref or 'TODOS', (motivo or '')[:160])
+    except Exception as e:
+        log.warning("me_registrar_bloqueio: %s", e)
 
 
 # Rotas Melhor Envio que precisam de @requer_admin: definidas logo após
@@ -1442,8 +1520,12 @@ def _gerar_etiqueta_me(pid, service_id, servico_nome=''):
     try:
         r = me_request('POST', '/api/v2/me/cart', json_body=body)
         if not r.ok:
-            return False, {'erro': 'Melhor Envio recusou o envio — '
-                                   + me_erro_texto(r),
+            motivo = me_erro_texto(r)
+            # Aprende: o cliente nao pode escolher de novo um frete que a
+            # transportadora recusa. O cart e quem valida as regras dela —
+            # a cotacao aceita tudo.
+            me_registrar_bloqueio(service_id, cep_destino, motivo, servico_nome)
+            return False, {'erro': 'Melhor Envio recusou o envio — ' + motivo,
                            'detalhe': r.text[:500]}
         cart = r.json()
         order_id = cart.get('id')
