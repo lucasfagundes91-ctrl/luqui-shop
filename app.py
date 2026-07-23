@@ -34,6 +34,16 @@ app.secret_key = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
 DATABASE_URL = os.environ.get('DATABASE_URL') or ''
+
+# Status de pedido que JA FOI PAGO — tudo que vem depois de 'aguardando_pagto'
+# na STATUS_TIMELINE. Existia como lista solta em cada consulta e as copias
+# esqueciam 'preparando' e 'pronto_retirada', entao no instante em que o PDV
+# Pro aceitava o pedido (status vira 'preparando') o cliente passava a
+# aparecer com 0 pedidos e R$ 0,00 gasto no painel, o e-mail de avaliacao
+# nunca saia e ele ainda podia receber "voce esqueceu o carrinho".
+STATUS_PAGOS = ('pago', 'preparando', 'pronto_retirada', 'enviado', 'entregue')
+_SQL_PAGOS = "('" + "','".join(STATUS_PAGOS) + "')"
+
 PDVPRO_URL = os.environ.get('PDVPRO_URL', 'https://pdvpro.luqsys.com.br')
 PDVPRO_API_KEY = os.environ.get('PDVPRO_API_KEY', '')
 ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'lucasfagundes91@hotmail.com')
@@ -2538,7 +2548,7 @@ def cron_recuperar_pedidos_parados():
                   WHERE regexp_replace(COALESCE(q.telefone,''), '\\D', '', 'g')
                       = regexp_replace(COALESCE(p.telefone,''), '\\D', '', 'g')
                     AND regexp_replace(COALESCE(p.telefone,''), '\\D', '', 'g') <> ''
-                    AND q.status IN ('pago','enviado','entregue','pronto_retirada'))
+                    AND q.status IN """ + _SQL_PAGOS + """)
          ORDER BY p.total DESC""",
         ['%[recuperacao-enviada%'], fetch='all') or []
 
@@ -2641,7 +2651,7 @@ def cron_email_pos_compra():
         return 'unauthorized', 401
     candidatos = db_execute("""
         SELECT * FROM pedidos
-         WHERE status IN ('pago','enviado','entregue')
+         WHERE status IN """ + _SQL_PAGOS + """
            AND pago_em IS NOT NULL
            AND pago_em < NOW() - INTERVAL '7 days'
            AND pago_em > NOW() - INTERVAL '14 days'
@@ -5340,8 +5350,8 @@ def admin_assinantes():
 def admin_clientes():
     rows = db_execute("""
       SELECT c.id, c.nome, c.email, c.telefone, c.cpf, c.cidade, c.uf, c.criado_em,
-             COUNT(DISTINCT p.id) FILTER (WHERE p.status IN ('pago','enviado','entregue')) AS qtd_pedidos,
-             COALESCE(SUM(p.total) FILTER (WHERE p.status IN ('pago','enviado','entregue')),0) AS total_gasto,
+             COUNT(DISTINCT p.id) FILTER (WHERE p.status IN """ + _SQL_PAGOS + """) AS qtd_pedidos,
+             COALESCE(SUM(p.total) FILTER (WHERE p.status IN """ + _SQL_PAGOS + """),0) AS total_gasto,
              MAX(p.criado_em) AS ultimo_pedido,
              (SELECT a.id FROM clube_assinaturas a
               WHERE a.cliente_id=c.id AND a.status='ativa' LIMIT 1) AS assinatura_ativa
