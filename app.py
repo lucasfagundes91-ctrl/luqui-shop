@@ -5155,6 +5155,51 @@ def pedido_tracking(pid):
                            carrinho=carrinho_ler())
 
 
+@app.route('/api/admin/pedido/<int:pid>/detalhe')
+@requer_admin
+def admin_pedido_detalhe(pid):
+    """Tudo do pedido pro painel do admin: itens com foto, entrega e valores."""
+    p = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one')
+    if not p:
+        return jsonify({'erro': 'Pedido não encontrado'}), 404
+    itens = db_execute("""SELECT descricao, codigo_barras, foto_url,
+                                 preco_unitario, quantidade, subtotal
+                            FROM pedido_itens WHERE pedido_id=%s
+                           ORDER BY id""", [pid], fetch='all') or []
+    def num(v):
+        return float(v) if v is not None else 0.0
+    endereco = ''
+    if p.get('endereco'):
+        endereco = (f"{p['endereco']}, {p.get('numero') or 's/n'}"
+                    f"{' — ' + p['complemento'] if p.get('complemento') else ''}"
+                    f"\n{p.get('bairro') or ''} · {p.get('cidade') or ''}"
+                    f"/{p.get('uf') or ''} · CEP {p.get('cep') or ''}")
+    return jsonify({
+        'id': p['id'],
+        'status': p['status'],
+        'criado_em': p['criado_em'].strftime('%d/%m/%Y às %H:%M') if p.get('criado_em') else '',
+        'cliente': {'nome': p.get('nome'), 'email': p.get('email'),
+                    'telefone': p.get('telefone'), 'cpf': p.get('cpf')},
+        'entrega': {'endereco': endereco,
+                    'servico': p.get('melhorenvio_servico_nome') or p.get('frete_servico'),
+                    'prazo': p.get('frete_prazo'),
+                    'rastreio': p.get('melhorenvio_rastreio'),
+                    'presente': bool(p.get('embrulho_presente')),
+                    'mensagem': p.get('embrulho_mensagem')},
+        'pagamento': {'forma': p.get('forma_pagto'), 'parcelas': p.get('parcelas'),
+                      'link': p.get('asaas_link') if str(p.get('asaas_link') or '').startswith('http') else None,
+                      'cobranca': p.get('asaas_cobranca_id')},
+        'valores': {'subtotal': num(p.get('subtotal')), 'frete': num(p.get('frete')),
+                    'desconto': num(p.get('desconto')), 'juros': num(p.get('juros_valor')),
+                    'total': num(p.get('total')), 'cupom': p.get('cupom_codigo')},
+        'observacao': p.get('observacao'),
+        'itens': [{'descricao': i['descricao'], 'ean': i.get('codigo_barras'),
+                   'foto': i.get('foto_url'), 'preco': num(i.get('preco_unitario')),
+                   'qtd': num(i.get('quantidade')), 'subtotal': num(i.get('subtotal'))}
+                  for i in itens],
+    })
+
+
 @app.route('/api/admin/pedido/<int:pid>/status', methods=['POST'])
 @requer_admin
 def admin_pedido_status(pid):
