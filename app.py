@@ -725,6 +725,7 @@ def init_db():
             'me_cep_origem': '85801080',  # Luqui Brinquedos Cascavel
             'me_remetente_nome': 'Luqui Brinquedos',
             'me_remetente_cnpj': '',
+            'me_remetente_cnae': '',
             'me_remetente_telefone': '',
             'me_remetente_email': '',
             'me_remetente_logradouro': '',
@@ -944,7 +945,12 @@ def me_remetente_dict():
     """Monta o payload `from` esperado pelo Melhor Envio nos endpoints
     de carrinho (precisa de dados completos do remetente)."""
     cnpj = ''.join(c for c in cfg('me_remetente_cnpj', '') if c.isdigit())
-    return {
+    # CNAE do remetente: transportadora passou a exigir pra remetente CNPJ e o
+    # Melhor Envio trava a finalizacao da etiqueta pedindo o codigo. Vai so em
+    # digitos (7), formato 0000000 -> ex. 4763601 = comercio varejista de
+    # brinquedos. Fica em branco quando remetente e PF, que nao tem CNAE.
+    cnae = ''.join(c for c in cfg('me_remetente_cnae', '') if c.isdigit())
+    d = {
         'name':         cfg('me_remetente_nome', 'Luqui Brinquedos'),
         'phone':        cfg('me_remetente_telefone', ''),
         'email':        cfg('me_remetente_email', ''),
@@ -960,6 +966,9 @@ def me_remetente_dict():
         'postal_code':  ''.join(c for c in cfg('me_cep_origem', '')
                                 if c.isdigit()),
     }
+    if len(cnae) == 7:
+        d['economic_activity_code'] = cnae
+    return d
 
 
 def me_caixa_default():
@@ -1341,6 +1350,7 @@ def melhorenvio_desconectar():
 def admin_melhorenvio():
     if request.method == 'POST':
         for k in ('me_cep_origem', 'me_remetente_nome', 'me_remetente_cnpj',
+                  'me_remetente_cnae',
                   'me_remetente_telefone', 'me_remetente_email',
                   'me_remetente_logradouro', 'me_remetente_numero',
                   'me_remetente_complemento', 'me_remetente_bairro',

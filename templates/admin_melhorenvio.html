@@ -125,6 +125,14 @@
       <input name="me_remetente_cnpj" value="{{ cfg('me_remetente_cnpj') }}">
     </div>
     <div class="form-field">
+      <label>CNAE (7 dígitos, só números)</label>
+      <input name="me_remetente_cnae" value="{{ cfg('me_remetente_cnae') }}"
+             placeholder="4763601" maxlength="7">
+      <small style="color:#64748B">Exigido pela transportadora quando o remetente
+        é CNPJ — sem isso o Melhor Envio trava a finalização da etiqueta.
+        É o CNAE principal do CNPJ, sem pontuação.</small>
+    </div>
+    <div class="form-field">
       <label>Telefone</label>
       <input name="me_remetente_telefone" value="{{ cfg('me_remetente_telefone') }}">
     </div>
