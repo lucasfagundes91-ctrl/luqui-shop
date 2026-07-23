@@ -7,6 +7,7 @@ no PDV Pro automaticamente.
 import hashlib
 import json
 import logging
+import math
 import os
 import secrets
 import time
@@ -1313,6 +1314,38 @@ def admin_pedido_cotar(pid):
     return jsonify({'opcoes': opcoes})
 
 
+def me_volume_consolidado(vol):
+    """Junta os itens do pedido num UNICO volume, que e como a loja despacha.
+
+    A etiqueta declarava um volume por item (e, com a correcao de 23/07, um
+    por unidade). So que Correios e Loggi RECUSAM envio com mais de um volume,
+    e a Jadlog recusa nao-comercial saindo do PR — no pedido #35 pra Brasilia
+    sobrava so a Azul Cargo, a R$ 78,98, contra R$ 55,11 que o cliente pagou.
+    Consolidado, 5 das 8 transportadoras aceitam e o frete cai.
+
+    Caixa = maior comprimento x maior largura, e altura suficiente pro volume
+    total caber. Peso = soma real. Fica >= que a soma dos itens, entao nao
+    subdeclara: transportadora que remede nao acha caixa maior que a da nota.
+    """
+    itens = [v for v in vol for _ in range(max(1, int(v.get('quantity') or 1)))]
+    if not itens:
+        return []
+    if len(itens) == 1:
+        v = itens[0]
+        return [{'height': v['height'], 'width': v['width'],
+                 'length': v['length'], 'weight': v['weight']}]
+    peso = round(sum(float(v.get('weight') or 0) for v in itens), 3)
+    comp = max(float(v.get('length') or 0) for v in itens)
+    larg = max(float(v.get('width') or 0) for v in itens)
+    alt_max = max(float(v.get('height') or 0) for v in itens)
+    vol_total = sum(float(v.get('length') or 0) * float(v.get('width') or 0)
+                    * float(v.get('height') or 0) for v in itens)
+    base = comp * larg
+    alt = max(alt_max, math.ceil(vol_total / base) if base > 0 else alt_max)
+    return [{'height': round(alt, 1), 'width': round(larg, 1),
+             'length': round(comp, 1), 'weight': peso or 0.3}]
+
+
 def _admin_ou_api_key():
     """Permite admin logado OU X-API-Key do PDV Pro."""
     if admin_logado():
@@ -1343,16 +1376,9 @@ def _gerar_etiqueta_me(pid, service_id, servico_nome=''):
             it['produto'] = {}
         it['qtd'] = it['quantidade']
         it['preco'] = it['preco_unitario']
-    vol = me_volume_dos_itens(itens)
-    # `volumes` do ME e uma lista de volumes INDIVIDUAIS -- nao aceita campo
-    # `quantity`. Repetir cada volume conforme a quantidade, senao um item com
-    # qtd 2 vira 1 volume e a etiqueta sai sub-declarada (transportadora pode
-    # recusar ou cobrar a diferenca). No pedido #35 seriam 3 volumes/2,25 kg
-    # no lugar de 5 volumes/3,5 kg.
-    vol_resumo = [{'height': v['height'], 'width': v['width'],
-                   'length': v['length'], 'weight': v['weight']}
-                  for v in vol
-                  for _ in range(max(1, int(v.get('quantity') or 1)))]
+    # Uma caixa so — e assim que a loja despacha, e Correios/Loggi recusam
+    # envio multi-volume. Ver me_volume_consolidado().
+    vol_resumo = me_volume_consolidado(me_volume_dos_itens(itens))
     produtos_carrinho = [
         {'name': (it.get('descricao') or 'Produto')[:80],
          'quantity': int(float(it.get('quantidade') or 1)),
