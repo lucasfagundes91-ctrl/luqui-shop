@@ -880,6 +880,50 @@ def me_request(method, path, *, json_body=None, params=None, timeout=30):
     return r
 
 
+def me_erro_texto(r, padrao='erro no Melhor Envio'):
+    """Extrai a mensagem REAL de uma resposta de erro do Melhor Envio.
+
+    O ME devolve o motivo em formatos diferentes conforme o endpoint:
+    {"message": "..."} , {"error": "..."} ou {"errors": {"campo": ["..."]}}.
+    Sem isso o operador recebia "checkout ME falhou" e tinha que adivinhar se
+    era saldo, endereco invalido, token vencido ou dimensao recusada.
+    """
+    try:
+        d = r.json()
+    except Exception:
+        txt = (getattr(r, 'text', '') or '').strip()
+        return (txt[:300] or padrao)
+    if isinstance(d, str):
+        return d[:300]
+    if not isinstance(d, dict):
+        return padrao
+    msg = d.get('message') or d.get('error') or ''
+    partes = []
+    errs = d.get('errors')
+    if isinstance(errs, dict):
+        for campo, v in errs.items():
+            v = v if isinstance(v, list) else [v]
+            partes.append(f"{campo}: " + '; '.join(str(x) for x in v))
+    elif isinstance(errs, list):
+        partes += [str(x) for x in errs]
+    full = ' · '.join(x for x in ([str(msg)] if msg else []) + partes)
+    return (full or padrao)[:400]
+
+
+def me_saldo_atual():
+    """Saldo em conta no Melhor Envio, ou None se nao der pra ler."""
+    try:
+        r = me_request('GET', '/api/v2/me/balance')
+        if r.ok:
+            return float((r.json() or {}).get('balance') or 0)
+        r2 = me_request('GET', '/api/v2/me')
+        if r2.ok:
+            return float((r2.json() or {}).get('balance') or 0)
+    except Exception as e:
+        log.warning("me_saldo_atual: %s", e)
+    return None
+
+
 def me_remetente_dict():
     """Monta o payload `from` esperado pelo Melhor Envio nos endpoints
     de carrinho (precisa de dados completos do remetente)."""
@@ -1343,23 +1387,55 @@ def _gerar_etiqueta_me(pid, service_id, servico_nome=''):
             'reverse': False, 'non_commercial': False,
         },
     }
+    # ── Pre-checagem de saldo ────────────────────────────────────────────
+    # O checkout so falha DEPOIS do cart criado, o que deixa um envio pendente
+    # no painel do ME e devolvia "checkout ME falhou" sem dizer o motivo.
+    # Cotando antes da pra recusar na hora dizendo exatamente quanto falta.
+    try:
+        preco_srv = None
+        for o in (me_cotar(cep_destino, itens) or []):
+            if str(o.get('id')) == str(service_id):
+                preco_srv = float(o.get('valor') or 0)
+                servico_nome = servico_nome or o.get('servico') or ''
+                break
+        saldo = me_saldo_atual()
+        if preco_srv and saldo is not None and saldo < preco_srv:
+            def _rs(v):
+                return f'{v:.2f}'.replace('.', ',')
+            return False, {'erro':
+                f'Saldo insuficiente no Melhor Envio. A etiqueta '
+                f'{servico_nome or ""} custa R$ {_rs(preco_srv)} e você tem '
+                f'R$ {_rs(saldo)} — faltam R$ {_rs(preco_srv - saldo)}. '
+                f'Recarregue em app.melhorenvio.com.br/melhor-carteira '
+                f'e tente de novo.',
+                'saldo': saldo, 'preco': preco_srv}
+    except Exception as e:
+        # Pre-checagem e conveniencia: se falhar, segue e deixa o ME decidir.
+        log.warning("pre-checagem de saldo pedido %s: %s", pid, e)
+
     try:
         r = me_request('POST', '/api/v2/me/cart', json_body=body)
         if not r.ok:
-            return False, {'erro': 'cart falhou', 'detalhe': r.text[:500]}
+            return False, {'erro': 'Melhor Envio recusou o envio — '
+                                   + me_erro_texto(r),
+                           'detalhe': r.text[:500]}
         cart = r.json()
         order_id = cart.get('id')
         if not order_id:
-            return False, {'erro': 'sem id do envio', 'detalhe': cart}
+            return False, {'erro': 'Melhor Envio nao devolveu id do envio',
+                           'detalhe': cart}
         r2 = me_request('POST', '/api/v2/me/shipment/checkout',
                         json_body={'orders': [order_id]})
         if not r2.ok:
-            return False, {'erro': 'checkout ME falhou — confira saldo',
+            return False, {'erro': 'Pagamento da etiqueta recusado — '
+                                   + me_erro_texto(r2),
                            'detalhe': r2.text[:500]}
         r3 = me_request('POST', '/api/v2/me/shipment/generate',
                         json_body={'orders': [order_id]})
         if not r3.ok:
-            return False, {'erro': 'generate falhou', 'detalhe': r3.text[:500]}
+            return False, {'erro': 'Etiqueta paga mas nao gerada — '
+                                   + me_erro_texto(r3),
+                           'detalhe': r3.text[:500]}
         url_pdf = None
         r4 = me_request('POST', '/api/v2/me/shipment/print',
                         json_body={'mode': 'private', 'orders': [order_id]})
