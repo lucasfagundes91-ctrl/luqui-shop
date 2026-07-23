@@ -1268,8 +1268,15 @@ def _gerar_etiqueta_me(pid, service_id, servico_nome=''):
         it['qtd'] = it['quantidade']
         it['preco'] = it['preco_unitario']
     vol = me_volume_dos_itens(itens)
+    # `volumes` do ME e uma lista de volumes INDIVIDUAIS -- nao aceita campo
+    # `quantity`. Repetir cada volume conforme a quantidade, senao um item com
+    # qtd 2 vira 1 volume e a etiqueta sai sub-declarada (transportadora pode
+    # recusar ou cobrar a diferenca). No pedido #35 seriam 3 volumes/2,25 kg
+    # no lugar de 5 volumes/3,5 kg.
     vol_resumo = [{'height': v['height'], 'width': v['width'],
-                   'length': v['length'], 'weight': v['weight']} for v in vol]
+                   'length': v['length'], 'weight': v['weight']}
+                  for v in vol
+                  for _ in range(max(1, int(v.get('quantity') or 1)))]
     produtos_carrinho = [
         {'name': (it.get('descricao') or 'Produto')[:80],
          'quantity': int(float(it.get('quantidade') or 1)),
@@ -6428,6 +6435,13 @@ def _enviar_pedido_pro_pdv(pid):
         'total': float(p['total']),
         'desconto': float(p['desconto']),
         'frete': float(p['frete']),
+        # Juros do parcelamento no cartao. PRECISA ir separado: `total` ja vem
+        # com eles embutidos, mas a NF-e soma itens + frete e ignora juros. Sem
+        # esse campo o PDV grava acrescimo=0 e declara um pagamento MAIOR que o
+        # total da nota -> SEFAZ 866 "ausencia de troco". Quebrou o pedido #35
+        # (R$ 1.060,77 em 3x, R$ 50,71 de juros) em 23/07/2026 -- o primeiro
+        # pedido do site parcelado no cartao.
+        'juros': float(p.get('juros_valor') or 0),
         'forma_pagto': p['forma_pagto'],
         'frete_servico': p.get('frete_servico') or '',
     }
