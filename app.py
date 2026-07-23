@@ -1079,8 +1079,14 @@ def me_cotar(cep_destino, itens):
 def me_filtrar_bloqueados(opcoes, cep_destino):
     cep = ''.join(c for c in (cep_destino or '') if c.isdigit())
     try:
+        # Bloqueio expira em 60 dias. Ele nasce de uma recusa observada, e uma
+        # recusa pode vir de bug NOSSO, nao de regra da transportadora — foi o
+        # que aconteceu com LATAM e Jadlog, recusadas por falta da chave da
+        # NF-e no payload. Sem prazo, o erro de um dia vira regra permanente e
+        # esconde pra sempre uma opcao boa (a LATAM e aerea, a mais rapida).
         rows = db_execute(
-            "SELECT service_id, cep_prefixo FROM me_bloqueios", fetch='all') or []
+            "SELECT service_id, cep_prefixo FROM me_bloqueios "
+            "WHERE criado_em > NOW() - INTERVAL '60 days'", fetch='all') or []
     except Exception as e:
         log.warning("me_filtrar_bloqueados: %s", e)
         return opcoes
@@ -1402,6 +1408,30 @@ def admin_pedido_cotar(pid):
     return jsonify({'opcoes': opcoes})
 
 
+def _nfe_chave_do_pedido(ped):
+    """Chave de 44 digitos da NF-e do pedido, ou None.
+
+    Vale a pena consultar o PDV Pro: a chave so existe depois que a SEFAZ
+    autoriza, e o pedido guarda a `ref`, nao a chave.
+    """
+    ref = (ped or {}).get('nfe_ref')
+    if not ref or not PDVPRO_API_KEY:
+        return None
+    try:
+        r = requests.get(PDVPRO_URL + f'/api/integracao/nfe/{ref}',
+                         headers={'X-API-Key': PDVPRO_API_KEY}, timeout=10)
+        if not r.ok:
+            return None
+        d = r.json() or {}
+        if (d.get('status') or '') != 'autorizada':
+            return None
+        chave = ''.join(c for c in str(d.get('chave') or '') if c.isdigit())
+        return chave if len(chave) == 44 else None
+    except Exception as e:
+        log.warning("_nfe_chave_do_pedido %s: %s", ref, e)
+        return None
+
+
 def me_volume_consolidado(vol):
     """Junta os itens do pedido num UNICO volume, que e como a loja despacha.
 
@@ -1496,11 +1526,32 @@ def _gerar_etiqueta_me(pid, service_id, servico_nome=''):
         'products': produtos_carrinho,
         'volumes':  vol_resumo,
         'options': {
+            # Seguro = valor de VENDA da mercadoria (subtotal). Nao entra
+            # frete nem juros de cartao: seguro cobre o que pode se perder no
+            # transporte, nao o custo do transporte.
             'insurance_value': float(ped.get('subtotal') or 0),
             'receipt': False, 'own_hand': False,
             'reverse': False, 'non_commercial': False,
         },
     }
+    # ── Nota fiscal no envio ─────────────────────────────────────────────
+    # SEM a chave da NF-e o Melhor Envio trata o envio como "declaracao de
+    # conteudo" (nao-comercial), mesmo com non_commercial=False. E ai:
+    #   LATAM  -> "o aeroporto de destino nao aceita envios com declaracao de
+    #             conteudo" (aereo exige nota)
+    #   Jadlog -> "nao aceita envios nao-comerciais partindo deste estado"
+    # Era a causa das duas recusas — nao havia restricao de transportadora
+    # nenhuma. Emitindo pelo painel do ME funcionava justamente porque la a
+    # chave da nota vai junto.
+    chave_nf = _nfe_chave_do_pedido(ped)
+    if chave_nf:
+        body['options']['invoice'] = {'key': chave_nf}
+        if ped.get('nfe_numero'):
+            body['options']['invoice']['number'] = str(ped['nfe_numero'])
+        body['invoice'] = body['options']['invoice']
+    else:
+        log.warning("pedido %s sem chave de NF-e — envio vai como declaracao "
+                    "de conteudo e transportadora aerea pode recusar", pid)
     # ── Pre-checagem de saldo ────────────────────────────────────────────
     # O checkout so falha DEPOIS do cart criado, o que deixa um envio pendente
     # no painel do ME e devolvia "checkout ME falhou" sem dizer o motivo.
