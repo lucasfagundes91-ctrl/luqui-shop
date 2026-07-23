@@ -1621,6 +1621,15 @@ def _gerar_etiqueta_me(pid, service_id, servico_nome=''):
             return False, {'erro': 'Melhor Envio recusou o envio — ' + motivo,
                            'detalhe': r.text[:500]}
         cart = r.json()
+        # Preco REAL que o ME vai debitar. A coluna melhorenvio_valor existia e
+        # era lida no painel, mas ninguem gravava — entao nao dava pra comparar
+        # o frete cobrado do cliente com o que a etiqueta custou, nem perceber
+        # que uma etiqueta saiu mais cara que o cotado.
+        try:
+            preco_etiqueta = float(cart.get('price')
+                                   or cart.get('custom_price') or 0) or None
+        except (TypeError, ValueError):
+            preco_etiqueta = None
         order_id = cart.get('id')
         if not order_id:
             return False, {'erro': 'Melhor Envio nao devolveu id do envio',
@@ -1659,11 +1668,16 @@ def _gerar_etiqueta_me(pid, service_id, servico_nome=''):
                         melhorenvio_rastreio     = %s,
                         melhorenvio_servico_id   = %s,
                         melhorenvio_servico_nome = %s,
+                        melhorenvio_valor        = %s,
                         melhorenvio_pago_em      = NOW(),
                         atualizado_em            = NOW()
                        WHERE id=%s""",
                    [order_id, url_pdf, rastreio, str(service_id),
-                    (servico_nome or '')[:80], pid])
+                    (servico_nome or '')[:80], preco_etiqueta, pid])
+        if preco_etiqueta:
+            log.info("etiqueta pedido %s: %s custou R$ %.2f (frete cobrado do "
+                     "cliente: R$ %.2f)", pid, servico_nome or service_id,
+                     preco_etiqueta, float(ped.get('frete') or 0))
         return True, {'ok': True, 'etiqueta_id': order_id,
                       'rastreio': rastreio, 'pdf_url': url_pdf}
     except Exception as e:
