@@ -3793,6 +3793,62 @@ def clube_cancelar():
 # 2. Tipo: Web application
 # 3. Authorized redirect URI: https://www.luquibrinquedos.com.br/auth/google/callback
 # 4. Pegar Client ID + Client Secret, colocar em GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET
+def adotar_pedidos_convidado(cliente_id, email, cpf=None, email_verificado=False):
+    """Liga pedidos feitos como visitante a uma conta e completa o cadastro.
+
+    O checkout nao exige login, entao o pedido nasce com cliente_id NULL. Quem
+    comprava e SO DEPOIS criava conta ficava com "Meus pedidos" vazio e cadastro
+    em branco -- foi o que aconteceu com o pedido #35 (R$ 1.060,77): o cliente
+    entrou no /minha-conta 4 min depois de pagar e nao viu compra nenhuma.
+
+    Casamento por e-mail so vale quando o e-mail foi VERIFICADO (login Google).
+    O cadastro por e-mail/senha nao confirma o endereco, entao alguem podia se
+    registrar com o e-mail de alguem que comprou como visitante e herdar CPF,
+    telefone e endereco do outro. Nesse caso exige tambem o CPF bater.
+    """
+    email = (email or '').strip().lower()
+    cpf = ''.join(c for c in (cpf or '') if c.isdigit())
+    if not email:
+        return 0
+    if email_verificado:
+        cond, params = "LOWER(email)=%s", [email]
+    elif len(cpf) == 11:
+        cond, params = ("LOWER(email)=%s AND "
+                        "regexp_replace(COALESCE(cpf,''), '\\D', '', 'g')=%s",
+                        [email, cpf])
+    else:
+        return 0
+    try:
+        pedidos = db_execute(
+            f"SELECT * FROM pedidos WHERE cliente_id IS NULL AND {cond} "
+            f"ORDER BY criado_em DESC", params, fetch='all') or []
+        if not pedidos:
+            return 0
+        db_execute(f"UPDATE pedidos SET cliente_id=%s "
+                   f"WHERE cliente_id IS NULL AND {cond}",
+                   [cliente_id] + params)
+        # Completa o cadastro pelo pedido mais recente, sem sobrescrever o que
+        # o cliente ja tenha preenchido na conta.
+        p = pedidos[0]
+        campos = {'cpf': p.get('cpf'), 'telefone': p.get('telefone'),
+                  'cep': p.get('cep'), 'endereco': p.get('endereco'),
+                  'numero': p.get('numero'), 'complemento': p.get('complemento'),
+                  'bairro': p.get('bairro'), 'cidade': p.get('cidade'),
+                  'uf': p.get('uf')}
+        campos = {k: v for k, v in campos.items() if (v or '').strip()}
+        if campos:
+            sets = ', '.join(f"{k} = COALESCE(NULLIF({k}, ''), %s)" for k in campos)
+            db_execute(f"UPDATE clientes_site SET {sets} WHERE id=%s",
+                       list(campos.values()) + [cliente_id])
+        log.info("conta %s adotou %d pedido(s) de visitante (%s)",
+                 cliente_id, len(pedidos), email)
+        return len(pedidos)
+    except Exception as e:
+        # Nunca bloqueia o login por causa disso.
+        log.warning("adotar_pedidos_convidado(%s): %s", cliente_id, e)
+        return 0
+
+
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_OAUTH_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET', '')
 GOOGLE_OAUTH_HABILITADO = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
@@ -3884,6 +3940,8 @@ def auth_google_callback():
         c = {'id': nv['id']}
     session.permanent = True
     session['cliente_id'] = c['id']
+    # E-mail vem verificado pelo Google — pode casar pedidos so pelo e-mail.
+    adotar_pedidos_convidado(c['id'], email, email_verificado=True)
     return redirect(next_url)
 
 
@@ -3898,6 +3956,7 @@ def login():
         if c and check_password_hash(c['senha_hash'], senha):
             session.permanent = True
             session['cliente_id'] = c['id']
+            adotar_pedidos_convidado(c['id'], email, cpf=c.get('cpf'))
             return redirect(request.args.get('next') or url_for('home'))
         erro = 'E-mail ou senha incorretos.'
     return render_template('login.html', erro=erro,
@@ -3937,6 +3996,7 @@ def cadastrar():
                 fetch='one')
             session.permanent = True
             session['cliente_id'] = nv['id']
+            adotar_pedidos_convidado(nv['id'], d['email'].lower(), cpf=cpf_digs)
             # Respeita ?next= (ex: vindo do checkout, volta pra la com
             # os dados ja preenchidos pelo cadastro recem-criado)
             return redirect(request.args.get('next') or url_for('home'))
