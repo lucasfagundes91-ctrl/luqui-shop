@@ -6101,6 +6101,27 @@ def pedido_pagar_cartao(pid):
         except Exception:
             pass
         log.warning(f"pedido {pid} cartao recusado: code={code} msg={msg}")
+        # Fallback: a recusa do checkout transparente quase sempre é o emissor
+        # negando transação não autenticada. A fatura hospedada do Asaas roda
+        # antifraude/3DS própria e aprova onde o transparente apanha, então
+        # oferecemos esse caminho em vez de deixar o cliente na mão.
+        fallback = (p.get('asaas_link') or '')
+        if not fallback.startswith('http'):
+            cob = asaas_criar_cobranca(
+                customer_id, p['total'], 'CREDIT_CARD',
+                f'Luqui Brinquedos — Pedido #{pid}',
+                parcelas=p.get('parcelas') or 1,
+                externa_ref=f'pedido-{pid}')
+            fallback = (cob or {}).get('invoiceUrl') or ''
+            if fallback:
+                db_execute("""UPDATE pedidos SET asaas_cobranca_id=%s,
+                              asaas_link=%s WHERE id=%s""",
+                           [(cob or {}).get('id'), fallback, pid])
+        if fallback:
+            return jsonify({'erro': msg, 'fallback_url': fallback,
+                            'fallback_msg': 'Finalize pela página segura do '
+                                            'Asaas — costuma aprovar quando o '
+                                            'banco recusa aqui.'}), 402
         return jsonify({'erro': msg}), 402
 
     cob_id = resp.get('id')
