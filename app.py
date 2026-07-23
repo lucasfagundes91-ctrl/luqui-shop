@@ -719,7 +719,10 @@ def init_db():
         # Atualiza o subtitulo do banner "PAGUE NO PIX" se ainda estiver
         # no texto antigo de 10%
         db_execute(
-            "UPDATE banners SET subtitulo = REPLACE(subtitulo, '10% de desconto', '3% de desconto') "
+            # %% escapado: psycopg2 faz interpolação no texto da query quando
+            # há params, e '% d' quebra com "list index out of range" — o que
+            # abortava TODAS as migrações abaixo deste ponto.
+            "UPDATE banners SET subtitulo = REPLACE(subtitulo, '10%% de desconto', '3%% de desconto') "
             "WHERE titulo='PAGUE NO PIX' AND subtitulo LIKE %s",
             ['%10% de desconto%'])
         # Migração 2026-05-28: cartão agora só 1x sem juros; troca o
