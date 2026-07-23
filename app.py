@@ -1408,6 +1408,38 @@ def admin_pedido_cotar(pid):
     return jsonify({'opcoes': opcoes})
 
 
+def me_backfill_rastreio(ped):
+    """Busca no ME o rastreio de um pedido que tem etiqueta mas nao tem codigo.
+
+    Na emissao, a transportadora nem sempre ja atribuiu o codigo — o
+    /shipment/tracking volta vazio e o campo fica nulo pra sempre, porque nada
+    reconsultava depois. Resultado: cliente recebia "saiu pra entrega" sem
+    rastreio mesmo com a etiqueta comprada. Devolve o codigo ou None.
+    """
+    eid = (ped or {}).get('melhorenvio_etiqueta_id')
+    if not eid or (ped.get('melhorenvio_rastreio') or '').strip():
+        return (ped or {}).get('melhorenvio_rastreio') or None
+    try:
+        r = me_request('POST', '/api/v2/me/shipment/tracking',
+                       json_body={'orders': [eid]})
+        if not r.ok:
+            return None
+        t = r.json()
+        info = t.get(eid) if isinstance(t, dict) else None
+        cod = (info or {}).get('tracking') if isinstance(info, dict) else None
+        cod = (cod or '').strip() or None
+        if cod:
+            db_execute("UPDATE pedidos SET melhorenvio_rastreio=%s WHERE id=%s",
+                       [cod, ped['id']])
+            log.info("rastreio do pedido %s preenchido depois: %s",
+                     ped['id'], cod)
+        return cod
+    except Exception as e:
+        log.warning("me_backfill_rastreio pedido %s: %s",
+                    (ped or {}).get('id'), e)
+        return None
+
+
 def _nfe_chave_do_pedido(ped):
     """Chave de 44 digitos da NF-e do pedido, ou None.
 
@@ -1816,6 +1848,8 @@ def integracao_pedido_mudar_status(pid):
     # e a mensagem de "saiu pra entrega" saia sem rastreio porque so olhava o
     # que veio no request.
     rastreio = rastreio or (p.get('melhorenvio_rastreio') or '').strip() or None
+    if not rastreio and novo == 'enviado':
+        rastreio = me_backfill_rastreio(p)
     try:
         primeiro = (p.get('nome') or 'amigo(a)').split()[0]
         msgs = {
@@ -5619,6 +5653,8 @@ def admin_pedido_status(pid):
     # Idem à rota do PDV Pro: cai no rastreio ja gravado pela etiqueta quando
     # ninguem digitou um.
     rastreio = rastreio or (p.get('melhorenvio_rastreio') or '').strip() or None
+    if not rastreio and novo == 'enviado':
+        rastreio = me_backfill_rastreio(p)
     # Se cancelou e tem venda no PDV Pro, cancela NF e volta estoque
     if novo == 'cancelado' and p.get('pdv_venda_id') and PDVPRO_API_KEY:
         try:
