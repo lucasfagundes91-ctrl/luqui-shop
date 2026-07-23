@@ -2485,6 +2485,118 @@ def cron_carrinho_abandonado():
     return jsonify({'ok': True, 'enviados': enviados})
 
 
+RECUP_LIMITE_DIA = 3
+
+
+@app.route('/cron/recuperar-pedidos-parados')
+def cron_recuperar_pedidos_parados():
+    """Pedidos parados há 48h+: manda o link da fatura hospedada do Asaas.
+
+    Complementa /cron/carrinho-abandonado, que só pega a janela de 24-48h e
+    devolve o cliente pro checkout transparente — o mesmo que recusou o cartão
+    dele. Aqui mandamos o caminho que aprova 88% (ver o fallback em
+    /api/pedido/<id>/pagar-cartao).
+
+    Três travas, todas deliberadas:
+      1. Máximo de RECUP_LIMITE_DIA por dia — a Z-API restringe disparo em
+         massa, então isso NÃO pode virar fila de 50.
+      2. Dedupe por telefone: quem tentou 5 vezes recebe UMA mensagem, sobre o
+         pedido de maior valor, e os irmãos são marcados junto.
+      3. Pula quem já tem qualquer pedido pago — cliente que voltou e comprou
+         por outro caminho não pode ser cobrado de novo.
+    """
+    if request.args.get('token') != os.environ.get('CRON_TOKEN', 'troque'):
+        return 'unauthorized', 401
+    hoje = datetime.now(SP_TZ).date().isoformat()
+    marca_hoje = f'[recuperacao-enviada:{hoje}]'
+    ja_hoje = db_execute(
+        "SELECT COUNT(*) AS n FROM pedidos WHERE COALESCE(observacao,'') LIKE %s",
+        [f'%{marca_hoje}%'], fetch='one') or {}
+    restam = RECUP_LIMITE_DIA - int(ja_hoje.get('n') or 0)
+    if restam <= 0:
+        return jsonify({'ok': True, 'enviados': 0, 'motivo': 'limite diário'})
+
+    cands = db_execute("""
+        SELECT * FROM pedidos p
+         WHERE p.status='aguardando_pagto'
+           AND p.criado_em < NOW() - INTERVAL '48 hours'
+           AND COALESCE(p.observacao,'') NOT LIKE %s
+           AND NOT EXISTS (
+                 SELECT 1 FROM pedidos q
+                  WHERE regexp_replace(COALESCE(q.telefone,''), '\\D', '', 'g')
+                      = regexp_replace(COALESCE(p.telefone,''), '\\D', '', 'g')
+                    AND regexp_replace(COALESCE(p.telefone,''), '\\D', '', 'g') <> ''
+                    AND q.status IN ('pago','enviado','entregue','pronto_retirada'))
+         ORDER BY p.total DESC""",
+        ['%[recuperacao-enviada%'], fetch='all') or []
+
+    vistos, enviados, detalhe = set(), 0, []
+    for p in cands:
+        if enviados >= restam:
+            break
+        tel_norm = ''.join(c for c in (p.get('telefone') or '') if c.isdigit())
+        if not tel_norm or tel_norm in vistos:
+            continue
+        vistos.add(tel_norm)
+        try:
+            # Garante uma fatura hospedada (o caminho que o emissor aprova)
+            link = (p.get('asaas_link') or '')
+            if not link.startswith('http'):
+                cust = link.split(':', 1)[1] if link.startswith('customer:') else None
+                if not cust:
+                    cust = asaas_criar_customer(p['nome'], p['email'],
+                                                p['cpf'], p['telefone'])
+                cob = asaas_criar_cobranca(
+                    cust, p['total'], 'CREDIT_CARD',
+                    f'Luqui Brinquedos — Pedido #{p["id"]}',
+                    parcelas=p.get('parcelas') or 1,
+                    externa_ref=f'pedido-{p["id"]}') if cust else None
+                link = (cob or {}).get('invoiceUrl') or ''
+                if link:
+                    db_execute("""UPDATE pedidos SET asaas_cobranca_id=%s,
+                                  asaas_link=%s WHERE id=%s""",
+                               [(cob or {}).get('id'), link, p['id']])
+            if not link:
+                log.error("recuperacao %s: sem link de pagamento", p['id'])
+                continue
+            primeiro = ((p.get('nome') or '').strip().split() or ['amigo(a)'])[0]
+            enviar_whatsapp(p['telefone'],
+                f"💛 Oi {primeiro}! Aqui é da *Luqui Brinquedos*.\n\n"
+                f"Vi que seu pagamento do pedido #{p['id']} "
+                f"({rs(p['total'])}) não passou. Isso costuma ser o banco "
+                f"barrando compra pela internet, não é problema no seu cartão.\n\n"
+                f"Separei um link seguro que resolve:\n{link}\n\n"
+                f"Seus produtos estão guardados. Qualquer dúvida, é só chamar aqui! 🧸")
+            enviar_email(p['email'],
+                f'Seu pedido #{p["id"]} está guardado — link de pagamento',
+                f"""<p>Oi {primeiro}! 💛</p>
+<p>Notamos que o pagamento do seu pedido não foi concluído. Na maioria das
+vezes é o banco barrando a compra pela internet — não é problema no seu cartão.</p>
+<p><b>Pedido #{p['id']} — Total: {rs(p['total'])}</b></p>
+<p><a href="{link}"
+   style="background:#FFC700;color:#1652C7;padding:12px 24px;border-radius:8px;
+          font-weight:900;text-decoration:none;display:inline-block">
+  🔐 Pagar pela página segura
+</a></p>
+<p>Seus produtos continuam guardados. Se precisar de ajuda, é só responder. 🧸</p>""")
+            # Marca todos os pedidos parados do mesmo telefone
+            db_execute("""UPDATE pedidos SET observacao=COALESCE(observacao,'')
+                          || %s
+                          WHERE status='aguardando_pagto'
+                            AND regexp_replace(COALESCE(telefone,''),'\\D','','g')=%s""",
+                       [f' {marca_hoje}', tel_norm])
+            enviados += 1
+            detalhe.append({'pedido': p['id'], 'total': float(p['total'])})
+            # A Z-API engole mensagem quando o disparo é rápido demais; com
+            # 3 envios por rodada, esperar 12s entre eles é barato.
+            if enviados < restam:
+                time.sleep(12)
+        except Exception as e:
+            log.error("recuperacao %s: %s", p['id'], e)
+    return jsonify({'ok': True, 'enviados': enviados,
+                    'restantes_hoje': restam - enviados, 'detalhe': detalhe})
+
+
 @app.route('/promocoes')
 def pag_promocoes():
     """Página com produtos em promoção (puxa do PDV Pro)."""
