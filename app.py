@@ -122,9 +122,25 @@ def db_execute(sql, params=None, fetch=None):
 
 
 def _rl_ip():
+    """IP do CLIENTE, pra rate limit por visitante.
+
+    Pegava `xff.split(',')[-1]` — a ULTIMA entrada do X-Forwarded-For, que por
+    definicao e o proxy mais proximo do app, nunca o cliente. Resultado: todo
+    mundo caia no mesmo balde (a tabela tinha 2 IPs em 30 dias, os dois de
+    borda, contra ~58 mil visitantes distintos), entao o limite de CPF e o de
+    login eram GLOBAIS em vez de por pessoa — um visitante sozinho podia
+    trancar a consulta de CPF do site inteiro.
+
+    CF-Connecting-IP vem do Cloudflare e nao e falsificavel de fora (o edge
+    reescreve). O primeiro XFF e o fallback; ele ACEITA spoof, entao serve pra
+    espalhar carga legitima, nao como controle de seguranca forte.
+    """
+    cf = (request.headers.get('CF-Connecting-IP') or '').strip()
+    if cf:
+        return cf
     xff = request.headers.get('X-Forwarded-For', '')
     if xff:
-        return xff.split(',')[-1].strip()
+        return xff.split(',')[0].strip()
     return request.remote_addr or '0.0.0.0'
 
 
@@ -212,6 +228,12 @@ def init_db():
         "ALTER TABLE clientes_site ALTER COLUMN senha_hash DROP NOT NULL",
         "ALTER TABLE clientes_site ADD COLUMN IF NOT EXISTS google_sub VARCHAR(40)",
         "ALTER TABLE clientes_site ADD COLUMN IF NOT EXISTS foto_url TEXT",
+        # E-mail comprovadamente do cliente: veio do Google ou ele clicou no
+        # link magico que so chegou naquela caixa. Sem isso nao da pra casar
+        # pedido de visitante so por e-mail sem risco de entregar CPF e
+        # endereco de um cliente pra outro.
+        "ALTER TABLE clientes_site ADD COLUMN IF NOT EXISTS email_verificado BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE clientes_site ADD COLUMN IF NOT EXISTS email_verificado_em TIMESTAMPTZ",
         "CREATE INDEX IF NOT EXISTS idx_clientes_site_google ON clientes_site(google_sub)",
         # Pedidos da loja
         """CREATE TABLE IF NOT EXISTS pedidos (
@@ -5215,6 +5237,58 @@ STATUS_LABELS = {
 }
 
 
+@app.route('/pedido/<int:pid>/acessar')
+def pedido_acessar(pid):
+    """Link magico do e-mail de confirmacao: entra na conta sem senha.
+
+    O checkout nao exige cadastro, entao o pedido nasce com cliente_id NULL e
+    quem comprava como visitante ficava sem conta e sem historico. Este link
+    resolve os dois de uma vez, SEM por etapa nenhuma entre o cliente e o
+    pagamento: quem clica provou que controla a caixa de e-mail (o token so
+    foi enviado pra la), entao da pra criar/vincular a conta ja verificada e
+    puxar CPF, telefone e endereco do proprio pedido.
+
+    O token e o mesmo `pedidos.token` (24 hex) que ja protege as paginas de
+    pagamento e tracking contra IDOR.
+    """
+    # Token e curto; sem freio da pra tentar forca bruta. Limita por IP real.
+    if not rate_limit_ok('magic_link', _rl_ip(), 20, 300):
+        return ('Muitas tentativas. Aguarde alguns minutos e tente de novo.',
+                429, {'Content-Type': 'text/plain; charset=utf-8'})
+    p = db_execute("""SELECT *, (criado_em > NOW() - INTERVAL '90 days') AS na_janela
+                        FROM pedidos WHERE id=%s""", [pid], fetch='one')
+    tok = str((p or {}).get('token') or '')
+    if not p or not tok or not secrets.compare_digest(
+            str(request.args.get('t') or ''), tok):
+        abort(404)
+    email = (p.get('email') or '').strip().lower()
+    if not email:
+        abort(404)
+    # Link de pedido antigo continua abrindo o tracking, mas para de autenticar
+    # -- caixa de e-mail abandonada nao vira chave vitalicia da conta.
+    if not p.get('na_janela'):
+        return redirect(url_for('pedido_tracking', pid=pid, t=tok))
+
+    c = db_execute("SELECT * FROM clientes_site WHERE LOWER(email)=%s",
+                   [email], fetch='one')
+    if not c:
+        nv = db_execute(
+            "INSERT INTO clientes_site (nome, email, email_verificado, "
+            "email_verificado_em) VALUES (%s,%s,TRUE,NOW()) RETURNING id",
+            [(p.get('nome') or 'Cliente')[:160], email[:160]], fetch='one')
+        cid = nv['id']
+    else:
+        cid = c['id']
+        db_execute("UPDATE clientes_site SET email_verificado=TRUE, "
+                   "email_verificado_em=COALESCE(email_verificado_em, NOW()) "
+                   "WHERE id=%s", [cid])
+    session.permanent = True
+    session['cliente_id'] = cid
+    adotar_pedidos_convidado(cid, email, email_verificado=True)
+    log.info("magic link: pedido %s autenticou a conta %s (%s)", pid, cid, email)
+    return redirect(url_for('minha_conta'))
+
+
 @app.route('/pedido/<int:pid>/tracking')
 def pedido_tracking(pid):
     p = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one')
@@ -6738,6 +6812,14 @@ Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp
 <b>Total pago:</b> R$ {p['total']}<br>
 <b>Entrega em:</b> {p['endereco']}, {p['numero']} — {p['cidade']}/{p['uf']}</p>
 <p>Te avisamos quando sair pra entrega! 🚚</p>
+<p><a href="https://www.luquibrinquedos.com.br/pedido/{pid}/acessar?t={p.get('token','')}"
+     style="background:#FFC700;color:#1652C7;padding:12px 24px;border-radius:8px;
+            font-weight:900;text-decoration:none;display:inline-block">
+  👤 Acessar meus pedidos
+</a></p>
+<p style="font-size:13px;color:#64748B">Esse link entra direto na sua conta, sem senha —
+guarda ele só pra você. Lá você acompanha a entrega, baixa a nota fiscal e junta
+pontos do Clube Luqui.</p>
 <p>Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp (45) 99111-9800</a></p>
 <p>Abraço,<br>Luqui Brinquedos 🧸</p>""")
         except Exception as e:
