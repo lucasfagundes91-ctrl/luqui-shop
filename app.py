@@ -45,6 +45,11 @@ ASAAS_BASE = 'https://api.asaas.com/v3'
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
 EMAIL_FROM = os.environ.get('EMAIL_FROM',
                             'Luqui Brinquedos <contato@luquibrinquedos.com.br>')
+# O Resend só entrega de domínio verificado na conta. Enquanto o plano
+# comportar 1 domínio só (ocupado por luqsys.com.br), o EMAIL_FROM aponta pra
+# lá e o Reply-To traz a resposta do cliente pro endereço real da loja.
+EMAIL_REPLY_TO = os.environ.get('EMAIL_REPLY_TO',
+                                'contato@luquibrinquedos.com.br')
 SITE_URL = os.environ.get('SITE_URL', 'https://www.luquibrinquedos.com.br')
 ZAPI_INSTANCE = os.environ.get('ZAPI_INSTANCE', '')
 ZAPI_TOKEN = os.environ.get('ZAPI_TOKEN', '')
@@ -5804,6 +5809,7 @@ def enviar_email(para, assunto, html):
                                    'Content-Type': 'application/json',
                                    'User-Agent': 'LuquiShop/1.0'},
                           json={'from': EMAIL_FROM, 'to': [para],
+                                'reply_to': EMAIL_REPLY_TO,
                                 'subject': assunto, 'html': html},
                           timeout=15)
         if r.status_code in (200, 202):
