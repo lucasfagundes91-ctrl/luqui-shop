@@ -1811,6 +1811,11 @@ def integracao_pedido_mudar_status(pid):
                                    THEN COALESCE(pronto_em, NOW()) ELSE pronto_em END,
                   atualizado_em=NOW() WHERE id=%s""",
                [novo, rastreio, novo, pid])
+    # Sem rastreio digitado, usa o que a etiqueta ja gravou. Quando a emissao
+    # e automatica (webhook do pagamento) o codigo esta no banco desde entao —
+    # e a mensagem de "saiu pra entrega" saia sem rastreio porque so olhava o
+    # que veio no request.
+    rastreio = rastreio or (p.get('melhorenvio_rastreio') or '').strip() or None
     try:
         primeiro = (p.get('nome') or 'amigo(a)').split()[0]
         msgs = {
@@ -5611,6 +5616,9 @@ def admin_pedido_status(pid):
                   melhorenvio_rastreio=COALESCE(%s, melhorenvio_rastreio),
                   atualizado_em=NOW() WHERE id=%s""",
                [novo, rastreio, pid])
+    # Idem à rota do PDV Pro: cai no rastreio ja gravado pela etiqueta quando
+    # ninguem digitou um.
+    rastreio = rastreio or (p.get('melhorenvio_rastreio') or '').strip() or None
     # Se cancelou e tem venda no PDV Pro, cancela NF e volta estoque
     if novo == 'cancelado' and p.get('pdv_venda_id') and PDVPRO_API_KEY:
         try:
