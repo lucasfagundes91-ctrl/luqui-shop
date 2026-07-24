@@ -7170,6 +7170,29 @@ def avaliar_risco_pedido(pid):
             score += 10
             motivos.append('Checkout sem conta (visitante)')
 
+        # 3.5) Valor idêntico repetido por identidades diferentes. Assinatura
+        # de teste de cartão: quem valida números roubados repete SEMPRE o
+        # mesmo carrinho barato e só troca o nome. Em 24/07 saíram quatro
+        # pedidos de R$ 10,76 em 55 min — "yhuj uhjkm", "Rafael Almeida",
+        # "Ana Santos", "Gabriel Santos" — e o primeiro veio de outro IP, então
+        # nem velocidade por IP nem valor alto pegariam. O valor pega.
+        try:
+            rep = db_execute(
+                "SELECT COUNT(DISTINCT cpf) AS n FROM pedidos "
+                "WHERE total=%s AND id<>%s AND cpf IS NOT NULL AND cpf<>%s "
+                "AND criado_em > NOW() - interval '3 hours'",
+                [p.get('total'), pid, p.get('cpf')], fetch='one') or {}
+            if int(rep.get('n') or 0) >= 2:
+                score += 35
+                motivos.append(f'Mesmo valor exato ({_brl(total)}) usado por '
+                               f'{int(rep["n"]) + 1} CPFs diferentes em 3h')
+            elif int(rep.get('n') or 0) == 1:
+                score += 20
+                motivos.append(f'Mesmo valor exato ({_brl(total)}) que outro '
+                               f'pedido de CPF diferente nas últimas 3h')
+        except Exception:
+            pass
+
         # 4) Mesmo CPF trocando telefone/e-mail entre pedidos.
         try:
             iguais = db_execute(
