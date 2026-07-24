@@ -30,7 +30,7 @@
         <td style="padding:14px 16px;font-size:13px">
           {% if p.atualizado_em %}
             <span style="background:#D1FAE5;color:#065F46;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600">✓ Personalizado</span>
-            <div style="color:#94A3B8;font-size:11px;margin-top:2px">{{ p.atualizado_em.strftime('%d/%m/%Y %H:%M') }}</div>
+            <div style="color:#94A3B8;font-size:11px;margin-top:2px">{{ p.atualizado_em|brt('%d/%m/%Y %H:%M') }}</div>
           {% else %}
             <span style="background:#FEF3C7;color:#92400E;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600">Texto padrão</span>
           {% endif %}

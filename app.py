@@ -13,7 +13,7 @@ import os
 import secrets
 import time
 import unicodedata
-from datetime import datetime, timedelta
+from datetime import date as _date, datetime, timedelta, timezone
 from functools import wraps
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
@@ -35,6 +35,13 @@ SP_TZ = ZoneInfo('America/Sao_Paulo')
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
+# Cookie de sessão: HttpOnly tira do alcance de JS (XSS não rouba a sessão do
+# admin), SameSite=Lax impede que outro site dispare POST autenticado no lugar
+# do Lucas, Secure só sai em HTTPS. Sem Secure, um único acesso em http:// vaza
+# o cookie em texto claro.
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = bool(os.environ.get('RAILWAY_ENVIRONMENT'))
 
 DATABASE_URL = os.environ.get('DATABASE_URL') or ''
 
@@ -4143,9 +4150,22 @@ def checkout_buscar_cliente_cpf():
     pré-preenchimento de dados no checkout quando o CPF digitado é de
     alguém que já comprou na loja física. Retorna nome/contato/endereço
     + saldo do Clube. Frontend mostra um aviso 'Encontramos seu cadastro'."""
-    if not rate_limit_ok('cpf_lookup', _rl_ip(), 20, 300):
-        return jsonify({'erro': 'Muitas consultas. Aguarde um pouco.'}), 429
+    # Este endpoint devolve nome, telefone e ENDEREÇO COMPLETO de qualquer
+    # cliente da loja física a partir do CPF, sem login. Com uma lista de CPFs
+    # vazada (o que não falta no Brasil) e um pool de proxies — que os golpistas
+    # de 22-24/07 comprovadamente têm — dava pra enriquecer a base inteira.
+    # Dois freios: por IP e por CPF. O de CPF é o que importa, porque trocar de
+    # IP é barato e trocar o CPF alvo não adianta pro atacante.
     cpf = (request.args.get('cpf') or '').strip()
+    cpf_digs = _so_digitos(cpf)
+    if not cpf_valido(cpf_digs):
+        return jsonify({'cliente_existe': False})
+    if not rate_limit_ok('cpf_lookup', _rl_ip(), 8, 600):
+        return jsonify({'erro': 'Muitas consultas. Aguarde um pouco.'}), 429
+    if not rate_limit_ok('cpf_alvo', cpf_digs, 5, 86400):
+        log.warning("buscar-cliente-cpf: CPF %s consultado demais (ip=%s)",
+                    cpf_digs[:3] + '********', _rl_ip())
+        return jsonify({'cliente_existe': False})
     dados = pdv_buscar_cliente_cpf(cpf)
     if not dados:
         return jsonify({'cliente_existe': False})
@@ -4813,6 +4833,10 @@ def auth_google_callback():
 def login():
     erro = None
     if request.method == 'POST':
+        if not rate_limit_ok('login_cliente', _rl_ip(), 12, 900):
+            return render_template(
+                'login.html', erro='Muitas tentativas. Aguarde alguns minutos.',
+                categorias=listar_categorias(), carrinho=carrinho_ler()), 429
         email = (request.form.get('email') or '').strip().lower()
         senha = request.form.get('senha') or ''
         c = db_execute("SELECT * FROM clientes_site WHERE LOWER(email)=%s",
@@ -5852,6 +5876,13 @@ def lista_presentear(slug, item_id):
 def admin_login():
     erro = None
     if request.method == 'POST':
+        # Sem freio, o /admin/login aceitava tentativa infinita (medido: 10
+        # senhas erradas seguidas, 10x HTTP 200). É a chave do painel inteiro —
+        # pedidos, CPF, endereço e telefone de todo mundo.
+        if not rate_limit_ok('login_admin', _rl_ip(), 8, 900):
+            return render_template(
+                'admin_login.html',
+                erro='Muitas tentativas. Aguarde 15 minutos.'), 429
         email = (request.form.get('email') or '').strip().lower()
         senha = request.form.get('senha') or ''
         a = db_execute("SELECT * FROM admin_user WHERE LOWER(email)=%s",
@@ -6917,6 +6948,51 @@ _ORG_DATACENTER = (
 )
 
 
+@app.after_request
+def _headers_seguranca(resp):
+    """A produção não devolvia header de segurança nenhum (conferido no curl).
+
+    Sem HSTS, o primeiro acesso em http:// pode ser interceptado; sem
+    nosniff/frame-options a loja podia ser embutida em iframe de terceiro
+    (clickjacking em cima do checkout). CSP fica de fora de propósito: os
+    templates usam script/style inline pra caramba e uma CSP restritiva
+    quebraria o site — entra depois, com nonce, se valer a pena.
+    """
+    resp.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    resp.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
+    resp.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    resp.headers.setdefault('Permissions-Policy',
+                            'geolocation=(), microphone=(), camera=()')
+    if os.environ.get('RAILWAY_ENVIRONMENT'):
+        resp.headers.setdefault('Strict-Transport-Security',
+                                'max-age=31536000; includeSubDomains')
+    return resp
+
+
+@app.template_filter('brt')
+def _filtro_brt(v, fmt='%d/%m/%Y %H:%M'):
+    """Formata data/hora SEMPRE no fuso de Brasília.
+
+    O Postgres da Railway roda em UTC e as colunas de pedido são TIMESTAMPTZ,
+    então o psycopg2 devolve datetime ciente em UTC. Chamar `.strftime()` direto
+    no template imprime a hora UTC: um pedido das 15h44 aparecia como 18h44, e o
+    #35, feito 22h42 do dia 22, aparecia como "23/07 02:42" — dia errado.
+
+    `date` puro (aniversário, validade de cupom, próximo envio) NÃO leva
+    conversão: não tem hora, e deslocar fuso mudaria o dia à toa.
+    """
+    if not v:
+        return '—'
+    try:
+        if isinstance(v, datetime):
+            if v.tzinfo is None:
+                v = v.replace(tzinfo=timezone.utc)
+            v = v.astimezone(SP_TZ)
+        return v.strftime(fmt)
+    except Exception:
+        return '—'
+
+
 def _so_digitos(v):
     return ''.join(c for c in (v or '') if c.isdigit())
 
@@ -7048,6 +7124,27 @@ def avaliar_risco_pedido(pid):
                                    f'{", ".join(sorted(cpfs))[:80]}')
             except Exception:
                 pass
+            # Velocidade. Teste de cartão roda ao contrário do golpe de valor
+            # alto: várias compras BARATAS e idênticas, nomes de teclado
+            # aleatório, minutos de intervalo, pra descobrir quais números de
+            # cartão ainda passam. Os pedidos #40/#41 (R$ 10,76 cada, 11 min de
+            # diferença) pontuaram só 10 porque toda a régua olhava pra valor
+            # ALTO. Frequência pega o que o valor não pega.
+            try:
+                v = db_execute(
+                    "SELECT COUNT(*) AS n, COUNT(DISTINCT cpf) AS cpfs "
+                    "FROM pedidos WHERE ip_cliente=%s AND id<>%s "
+                    "AND criado_em > NOW() - interval '1 hour'",
+                    [ip, pid], fetch='one') or {}
+                if int(v.get('n') or 0) >= 2:
+                    score += 30
+                    motivos.append(f'{int(v["n"]) + 1} pedidos do mesmo IP '
+                                   f'em menos de 1 hora')
+                elif int(v.get('n') or 0) == 1 and int(v.get('cpfs') or 0) == 1:
+                    score += 15
+                    motivos.append('2 pedidos do mesmo IP em menos de 1 hora')
+            except Exception:
+                pass
             rep = ip_reputacao(ip)
             if rep:
                 if rep.get('datacenter'):
@@ -7092,6 +7189,35 @@ def avaliar_risco_pedido(pid):
     except Exception as e:
         log.error("avaliar_risco pedido %s: %s", pid, e)
         return 0, []
+
+
+def reavaliar_vizinhos(pid, ip):
+    """Repontua os pedidos recentes do MESMO IP.
+
+    Um pedido só pode ser julgado com o que existia quando ele nasceu: o #41
+    valia 10 pontos até o #42 aparecer 1 minuto depois com outro CPF no mesmo
+    IP. Sem reavaliar pra trás, o primeiro pedido de uma sequência de teste de
+    cartão fica sempre limpo — e é justamente o que já passou.
+    """
+    if not ip:
+        return
+    try:
+        irmaos = db_execute(
+            "SELECT id FROM pedidos WHERE ip_cliente=%s AND id<>%s "
+            "AND criado_em > NOW() - interval '24 hours' "
+            "AND risco_liberado_em IS NULL ORDER BY id DESC LIMIT 10",
+            [ip, pid], fetch='all') or []
+        for irm in irmaos:
+            antes = db_execute("SELECT risco_score FROM pedidos WHERE id=%s",
+                               [irm['id']], fetch='one') or {}
+            sc, mt = avaliar_risco_pedido(irm['id'])
+            # Só alerta quem CRUZOU o limite agora — senão cada pedido novo
+            # remandaria o mesmo aviso dos vizinhos já sinalizados.
+            if sc >= RISCO_LIMITE and int(antes.get('risco_score') or 0) < RISCO_LIMITE:
+                alertar_risco(irm['id'], sc, mt,
+                              contexto=' — reavaliado pelo pedido seguinte')
+    except Exception as e:
+        log.error("reavaliar vizinhos de %s: %s", pid, e)
 
 
 def alertar_risco(pid, score, motivos, contexto=''):
@@ -7374,6 +7500,7 @@ def checkout_finalizar():
     try:
         _sc, _mt = avaliar_risco_pedido(pid)
         alertar_risco(pid, _sc, _mt, contexto=' — pedido criado, ainda não pago')
+        reavaliar_vizinhos(pid, _rl_ip())
     except Exception as e:
         log.error("antifraude checkout pedido %s: %s", pid, e)
     # Cria customer + cobrança no Asaas
@@ -7523,6 +7650,7 @@ def pedido_pagar_cartao(pid):
                    [holder_nome, holder_cpf, _rl_ip(), pid])
         sc, mt = avaliar_risco_pedido(pid)
         alertar_risco(pid, sc, mt, contexto=' — cartão sendo processado agora')
+        reavaliar_vizinhos(pid, p.get('ip_cliente') or _rl_ip())
     except Exception as e:
         log.error("antifraude cartao pedido %s: %s", pid, e)
 
@@ -7902,13 +8030,20 @@ def _capi_registrar(pid, resposta):
 # ─── Webhook Asaas: confirma pagamento ────────────────────────────────────────
 @app.route('/webhook/asaas', methods=['POST'])
 def webhook_asaas():
-    # Autenticação
-    if ASAAS_WEBHOOK_TOKEN:
-        recv = (request.headers.get('asaas-access-token')
-                or request.headers.get('Asaas-Access-Token') or '').strip()
-        if recv != ASAAS_WEBHOOK_TOKEN:
-            log.warning("webhook/asaas: token inválido")
-            return jsonify({'erro': 'token inválido'}), 401
+    # Autenticação — FAIL-CLOSED. Antes era `if ASAAS_WEBHOOK_TOKEN:`, ou seja,
+    # se a env sumisse (deploy novo, typo, serviço recriado) o endpoint passava
+    # a aceitar QUALQUER POST. E este webhook marca pedido como pago, dispara
+    # venda no PDV e gera etiqueta: um POST forjado com
+    # {"event":"PAYMENT_CONFIRMED","payment":{"externalReference":"pedido-N"}}
+    # despacharia mercadoria de graça. Sem token configurado, ninguém entra.
+    if not ASAAS_WEBHOOK_TOKEN:
+        log.error("webhook/asaas: ASAAS_WEBHOOK_TOKEN não configurado — recusando")
+        return jsonify({'erro': 'webhook não configurado'}), 503
+    recv = (request.headers.get('asaas-access-token')
+            or request.headers.get('Asaas-Access-Token') or '').strip()
+    if not secrets.compare_digest(recv, ASAAS_WEBHOOK_TOKEN):
+        log.warning("webhook/asaas: token inválido")
+        return jsonify({'erro': 'token inválido'}), 401
     d = request.get_json(silent=True) or {}
     event = d.get('event')
     payment = d.get('payment') or {}

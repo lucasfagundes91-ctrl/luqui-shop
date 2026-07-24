@@ -7,7 +7,7 @@
     <h1 style="color:var(--azul)">🎁 Lista de {{ lista.nome_crianca }}</h1>
     <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--mut);margin-top:6px">
       {% if lista.idade %}<span>{{ lista.idade }} aninhos</span>{% endif %}
-      {% if lista.data_aniversario %}<span>📅 {{ lista.data_aniversario.strftime('%d/%m/%Y') }}</span>{% endif %}
+      {% if lista.data_aniversario %}<span>📅 {{ lista.data_aniversario|brt('%d/%m/%Y') }}</span>{% endif %}
     </div>
     {% if lista.mensagem %}
       <p style="margin-top:10px;font-size:14px">{{ lista.mensagem }}</p>

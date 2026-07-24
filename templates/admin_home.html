@@ -114,7 +114,7 @@
           <tr>
             <td><b style="color:#1652C7">#{{ p.id }}</b></td>
             <td>{{ p.nome or '—' }}<div style="font-size:11px;color:#64748B">{{ p.cidade }}{% if p.uf %}/{{ p.uf }}{% endif %}</div></td>
-            <td style="font-size:12px;color:#475569">{{ p.criado_em.strftime('%d/%m %H:%M') if p.criado_em else '—' }}</td>
+            <td style="font-size:12px;color:#475569">{{ p.criado_em|brt('%d/%m %H:%M') }}</td>
             <td><b>{{ rs(p.total) }}</b></td>
             <td>
               {% if p.status == 'pago' %}<span class="pill verde">💰 Pago</span>
@@ -147,7 +147,7 @@
           <tr>
             <td><b>{{ a.cliente_nome }}</b></td>
             <td>{{ a.plano_nome }}</td>
-            <td style="font-size:12px;color:#475569">{{ a.proximo_envio.strftime('%d/%m/%Y') if a.proximo_envio else '—' }}</td>
+            <td style="font-size:12px;color:#475569">{{ a.proximo_envio|brt('%d/%m/%Y') }}</td>
             <td><span class="pill verde">{{ a.status }}</span></td>
           </tr>
         {% endfor %}

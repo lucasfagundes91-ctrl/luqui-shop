@@ -10,7 +10,7 @@
     <div style="font-size:18px;font-weight:800;margin-top:6px">
       {% if lista.idade %}{{ lista.idade }} {{ 'aninho' if lista.idade == 1 else 'aninhos' }}{% endif %}
       {% if lista.idade and lista.data_aniversario %} · {% endif %}
-      {% if lista.data_aniversario %}📅 {{ lista.data_aniversario.strftime('%d/%m/%Y') }}{% endif %}
+      {% if lista.data_aniversario %}📅 {{ lista.data_aniversario|brt('%d/%m/%Y') }}{% endif %}
     </div>
     {% if lista.mensagem %}
       <p style="margin-top:14px;font-size:15px;max-width:600px;margin-left:auto;margin-right:auto;line-height:1.5">

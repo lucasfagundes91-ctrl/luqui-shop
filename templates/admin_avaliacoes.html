@@ -63,7 +63,7 @@
             {{ '★' * a.estrelas }}<span class="vazia">{{ '★' * (5 - a.estrelas) }}</span>
           </div>
           <div class="av-cliente">👤 {{ a.cliente_nome or 'Anônimo' }}</div>
-          <div class="av-data">{{ a.criado_em.strftime('%d/%m/%Y %H:%M') if a.criado_em else '—' }}</div>
+          <div class="av-data">{{ a.criado_em|brt('%d/%m/%Y %H:%M') }}</div>
         </div>
         <a href="/produto/{{ a.produto_pdv_id }}" target="_blank" class="av-prod">#{{ a.produto_pdv_id }}</a>
       </div>

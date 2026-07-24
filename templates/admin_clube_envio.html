@@ -62,8 +62,8 @@
           <span class="pill amarelo">PENDENTE</span>
         {% endif %}
         <div style="margin-top:6px;color:#64748B">
-          Último envio: {{ a.ultimo_envio.strftime('%d/%m/%Y') if a.ultimo_envio else 'nunca' }}<br>
-          Próximo programado: {{ a.proximo_envio.strftime('%d/%m/%Y') if a.proximo_envio else '—' }}
+          Último envio: {{ a.ultimo_envio|brt('%d/%m/%Y') }}<br>
+          Próximo programado: {{ a.proximo_envio|brt('%d/%m/%Y') }}
         </div>
       </div>
     </div>

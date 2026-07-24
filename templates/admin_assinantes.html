@@ -58,7 +58,7 @@
         </td>
         <td><span class="plano-bd">🎁 {{ a.plano_nome }}</span></td>
         <td><span class="preco">{{ rs(a.preco_mensal) }}</span></td>
-        <td style="font-size:12px;color:#475569">{{ a.proximo_envio.strftime('%d/%m/%Y') if a.proximo_envio else '—' }}</td>
+        <td style="font-size:12px;color:#475569">{{ a.proximo_envio|brt('%d/%m/%Y') }}</td>
         <td>
           {% if a.status == 'ativa' %}
             <span class="pill-st verde">✓ Ativa</span>

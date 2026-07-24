@@ -342,7 +342,7 @@
         {% if a.titulo %}<div style="font-weight:700;margin:6px 0">{{ a.titulo }}</div>{% endif %}
         <div style="color:var(--txt);line-height:1.5">{{ a.comentario }}</div>
         {% if a.foto_url %}<img src="{{ a.foto_url }}" alt="" style="max-width:200px;border-radius:8px;margin-top:8px">{% endif %}
-        <div style="font-size:11px;color:var(--mut);margin-top:6px">{{ a.criado_em.strftime('%d/%m/%Y') if a.criado_em else '' }}</div>
+        <div style="font-size:11px;color:var(--mut);margin-top:6px">{{ a.criado_em|brt('%d/%m/%Y') }}</div>
       </div>
       {% endfor %}
     {% else %}

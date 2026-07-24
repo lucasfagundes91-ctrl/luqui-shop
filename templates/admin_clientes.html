@@ -71,9 +71,9 @@
           <span class="qtd-pedidos {% if not c.qtd_pedidos %}zero{% endif %}">{{ c.qtd_pedidos }}</span>
         </td>
         <td><span class="valor-gasto {% if not c.total_gasto %}zero{% endif %}">{{ rs(c.total_gasto) }}</span></td>
-        <td style="font-size:12px;color:#475569">{{ c.ultimo_pedido.strftime('%d/%m/%Y') if c.ultimo_pedido else '—' }}</td>
+        <td style="font-size:12px;color:#475569">{{ c.ultimo_pedido|brt('%d/%m/%Y') }}</td>
         <td>{% if c.assinatura_ativa %}<span class="pill amarelo">🎁 Ativo</span>{% else %}<span style="color:#94A3B8;font-size:12px">—</span>{% endif %}</td>
-        <td style="font-size:12px;color:#475569">{{ c.criado_em.strftime('%d/%m/%Y') if c.criado_em else '—' }}</td>
+        <td style="font-size:12px;color:#475569">{{ c.criado_em|brt('%d/%m/%Y') }}</td>
         <td>
           {% if c.telefone %}
             <a href="https://wa.me/55{{ c.telefone|replace(' ','')|replace('(','')|replace(')','')|replace('-','') }}"

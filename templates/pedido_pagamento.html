@@ -40,7 +40,7 @@ if(typeof gtag !== 'undefined'){
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;margin-bottom:24px">
         <div>
           <h1 style="font-size:24px">Pedido #{{ p.id }}</h1>
-          <div style="color:var(--mut);font-size:13px">{{ p.criado_em.strftime('%d/%m/%Y %H:%M') if p.criado_em else '' }}</div>
+          <div style="color:var(--mut);font-size:13px">{{ p.criado_em|brt('%d/%m/%Y %H:%M') }}</div>
         </div>
         <div style="text-align:right">
           <div style="font-size:12px;color:var(--mut)">TOTAL A PAGAR</div>

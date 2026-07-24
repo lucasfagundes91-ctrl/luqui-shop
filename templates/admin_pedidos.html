@@ -195,7 +195,7 @@
           {% endif %}
         </td>
         <td>{{ p.cidade or '—' }}{% if p.uf %}/{{ p.uf }}{% endif %}</td>
-        <td style="font-size:12px;color:#475569">{{ p.criado_em.strftime('%d/%m %H:%M') if p.criado_em else '—' }}</td>
+        <td style="font-size:12px;color:#475569">{{ p.criado_em|brt('%d/%m %H:%M') }}</td>
         <td>
           <div class="valor-bold">{{ rs(p.total) }}</div>
           <div class="forma-pgto">{{ p.forma_pagto or '—' }}</div>

@@ -16,7 +16,7 @@
         <div style="background:#fff;border:1px solid var(--linha);border-radius:14px;padding:18px">
           <h3 style="color:var(--azul);margin-bottom:4px">🎁 {{ l.nome_crianca }}</h3>
           {% if l.idade %}<div style="font-size:13px;color:var(--mut)">{{ l.idade }} {{ 'aninho' if l.idade == 1 else 'aninhos' }}</div>{% endif %}
-          {% if l.data_aniversario %}<div style="font-size:13px;color:var(--mut)">📅 {{ l.data_aniversario.strftime('%d/%m/%Y') }}</div>{% endif %}
+          {% if l.data_aniversario %}<div style="font-size:13px;color:var(--mut)">📅 {{ l.data_aniversario|brt('%d/%m/%Y') }}</div>{% endif %}
           <div style="margin:12px 0;font-size:13px">
             <b style="color:var(--verde)">{{ l.qtd_itens }}</b> {{ 'item' if l.qtd_itens == 1 else 'itens' }}
             {% if l.qtd_comprados %}

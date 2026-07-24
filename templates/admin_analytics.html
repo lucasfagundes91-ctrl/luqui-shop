@@ -51,7 +51,7 @@
     <div style="display:flex;gap:6px;margin-top:4px">
       {% for d in por_dia %}
         <div style="flex:1;text-align:center;font-size:10px;color:#64748B;min-width:0">
-          {{ d.dia.strftime('%d/%m') }}
+          {{ d.dia|brt('%d/%m') }}
         </div>
       {% endfor %}
     </div>
@@ -121,7 +121,7 @@
             </td>
             <td style="text-align:right;font-weight:700">{{ b.n }}</td>
             <td style="text-align:right;color:{% if b.sem_resultado %}#DC2626{% else %}#64748B{% endif %}">{{ b.sem_resultado }}</td>
-            <td style="text-align:right;color:#64748B;font-size:12px">{{ b.ultima.strftime('%d/%m %H:%M') if b.ultima }}</td>
+            <td style="text-align:right;color:#64748B;font-size:12px">{{ b.ultima|brt('%d/%m %H:%M') }}</td>
           </tr>
         {% endfor %}
       </tbody>
@@ -139,7 +139,7 @@
       <tbody>
         {% for v in ultimas %}
           <tr>
-            <td style="font-size:11px;color:#64748B;white-space:nowrap">{{ v.ts.strftime('%d/%m %H:%M:%S') }}</td>
+            <td style="font-size:11px;color:#64748B;white-space:nowrap">{{ v.ts|brt('%d/%m %H:%M:%S') }}</td>
             <td style="font-family:monospace;font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ v.path }}</td>
             <td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#64748B">{{ v.referer or '(direto)' }}</td>
             <td>

@@ -19,7 +19,7 @@
           <p style="font-size:13px;margin-top:6px">
             {{ rs(assinatura.preco_mensal) }}/mês · Status:
             <b style="text-transform:uppercase">{{ assinatura.status }}</b>
-            {% if assinatura.proximo_envio %}<br>📦 Próximo envio: {{ assinatura.proximo_envio.strftime('%d/%m/%Y') }}{% endif %}
+            {% if assinatura.proximo_envio %}<br>📦 Próximo envio: {{ assinatura.proximo_envio|brt('%d/%m/%Y') }}{% endif %}
           </p>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
@@ -42,7 +42,7 @@
         {% for e in envios %}
         <div style="display:flex;justify-content:space-between;padding:10px;background:#F8FAFC;border-radius:8px;font-size:13px">
           <span><b>{{ e.referencia_mes }}</b> · {{ e.descricao or 'Caixa do mês' }}</span>
-          <span style="color:var(--mut)">{{ e.enviado_em.strftime('%d/%m/%Y') if e.enviado_em else '' }}</span>
+          <span style="color:var(--mut)">{{ e.enviado_em|brt('%d/%m/%Y') }}</span>
         </div>
         {% endfor %}
       </div>
@@ -178,7 +178,7 @@
         {% for p in pedidos %}
           <tr style="border-top:1px solid var(--linha);font-size:13px">
             <td style="padding:12px"><a href="/pedido/{{ p.id }}/tracking?t={{ p.token }}" style="color:var(--azul);font-weight:700">#{{ p.id }}</a></td>
-            <td style="padding:12px">{{ p.criado_em.strftime('%d/%m/%Y') if p.criado_em else '—' }}</td>
+            <td style="padding:12px">{{ p.criado_em|brt('%d/%m/%Y') }}</td>
             <td style="padding:12px;text-align:right;font-weight:700">{{ rs(p.total) }}</td>
             <td style="padding:12px">
               <span style="background:#EFF6FF;color:var(--azul);padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700">{{ p.status }}</span>

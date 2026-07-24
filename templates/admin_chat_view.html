@@ -9,7 +9,7 @@
   <div><b>Cliente:</b> {{ conv.nome or '(sem nome)' }}</div>
   <div><b>WhatsApp:</b> {{ conv.lead_telefone or '—' }}</div>
   <div><b>Criança:</b> {{ conv.sexo_crianca or '?' }} · {{ conv.idade_crianca or '?' }} anos</div>
-  <div><b>Início:</b> {{ conv.criado_em.strftime('%d/%m %H:%M') if conv.criado_em else '—' }}</div>
+  <div><b>Início:</b> {{ conv.criado_em|brt('%d/%m %H:%M') }}</div>
   <div><b>IP:</b> {{ conv.ip or '—' }}</div>
   <div>
     {% if conv.lead_marcado %}
@@ -39,7 +39,7 @@
       {% endif %}
     {% endif %}
     <div style="font-size:10px;color:#94A3B8;align-self:{{ 'flex-end' if m.role=='user' else 'flex-start' }}">
-      {{ m.criado_em.strftime('%H:%M') if m.criado_em else '' }}
+      {{ m.criado_em|brt('%H:%M') }}
     </div>
   {% endfor %}
 </div>

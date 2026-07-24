@@ -98,7 +98,7 @@
             <span style="color:#94A3B8;font-size:12px">—</span>
           {% endif %}
         </td>
-        <td><span class="data-msg">{{ c.ultimo_msg_em.strftime('%d/%m %H:%M') if c.ultimo_msg_em else '—' }}</span></td>
+        <td><span class="data-msg">{{ c.ultimo_msg_em|brt('%d/%m %H:%M') }}</span></td>
         <td><a href="/admin/chats/{{ c.id }}" class="btn-ver">💬 Ver conversa</a></td>
       </tr>
       {% endfor %}

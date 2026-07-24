@@ -126,7 +126,7 @@
           <b>{{ c.usos }}</b>
           {% if c.usos_max %}<span style="color:#64748B"> / {{ c.usos_max }}</span>{% endif %}
         </td>
-        <td style="font-size:12px;color:#475569">{{ c.valido_ate.strftime('%d/%m/%Y') if c.valido_ate else 'Sem prazo' }}</td>
+        <td style="font-size:12px;color:#475569">{{ c.valido_ate|brt('%d/%m/%Y') }}</td>
         <td><span class="pill-st {{ 'ativo' if c.ativo else 'inativo' }}">{{ '✓ Ativo' if c.ativo else '○ Inativo' }}</span></td>
         <td>
           <a href="/admin/cupons?edit={{ c.id }}" class="btn-mini editar">✏️ Editar</a>
