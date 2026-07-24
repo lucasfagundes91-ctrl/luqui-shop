@@ -7463,6 +7463,15 @@ def enviar_purchase_capi(p):
         log.info("CAPI: META_CAPI_TOKEN vazio, pulando pedido %s", p.get('id'))
         return False
     try:
+        # itens do pedido pro custom_data (uma query so; falha aqui nao impede
+        # o evento — venda sem detalhe de item ainda vale mais que venda nenhuma)
+        try:
+            itens = db_execute("SELECT produto_pdv_id, quantidade, preco_unitario "
+                               "FROM pedido_itens WHERE pedido_id=%s AND "
+                               "produto_pdv_id IS NOT NULL", [p['id']], fetch='all') or []
+        except Exception as e:
+            log.error("CAPI itens pedido=%s: %s", p.get('id'), e)
+            itens = []
         nome = (p.get('nome') or '').strip().split()
         user = {
             'em': [_capi_hash(p.get('email'))] if p.get('email') else None,
@@ -7491,6 +7500,14 @@ def enviar_purchase_capi(p):
                 'currency': 'BRL',
                 'value': float(p.get('total') or 0),
                 'order_id': str(p['id']),
+                # os PRODUTOS vendidos: sem isso a Meta sabe que houve venda mas
+                # nao QUAL item, e o anuncio de catalogo nao aprende nada.
+                'content_type': 'product',
+                'content_ids': [str(i['produto_pdv_id']) for i in itens],
+                'contents': [{'id': str(i['produto_pdv_id']),
+                              'quantity': int(float(i.get('quantidade') or 1)),
+                              'item_price': float(i.get('preco_unitario') or 0)}
+                             for i in itens],
             },
         }
         r = requests.post(

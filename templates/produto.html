@@ -1,6 +1,11 @@
 {% extends "base.html" %}
 {% block titulo %}{{ p.descricao }} — Luqui Brinquedos{% endblock %}
 {% block descricao %}{{ p.descricao_longa or p.descricao }} — Compre na Luqui Brinquedos. Frete pra todo Brasil, parcelado em até 12x, 3% off no PIX.{% endblock %}
+{% block og_titulo %}{{ p.descricao }} — Luqui Brinquedos{% endblock %}
+{% block og_descricao %}{{ (p.descricao_longa or p.descricao)|truncate(200) }} — R$ {{ '%.2f'|format(p.preco_promo or p.preco_venda or 0) }}{% endblock %}
+{% block og_imagem %}{{ p.foto_url or 'https://www.luquibrinquedos.com.br/static/logo.png' }}{% endblock %}
+{% block og_url %}https://www.luquibrinquedos.com.br/produto/{{ p.id }}{% endblock %}
+{% block og_tipo %}product{% endblock %}
 {% block extra_head %}
 <script type="application/ld+json">
 {

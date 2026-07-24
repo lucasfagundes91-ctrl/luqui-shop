@@ -7,7 +7,14 @@ if(typeof fbq !== 'undefined'){
   {# eventID igual ao event_id da Conversions API (enviar_purchase_capi): o
      servidor sempre manda o Purchase; se o cliente TAMBEM abrir esta pagina,
      a Meta deduplica pelo id em vez de contar a venda duas vezes. #}
-  fbq('track','Purchase',{value:{{ p.total }},currency:'BRL',content_ids:['pedido-{{ p.id }}']},{eventID:'pedido-{{ p.id }}'});
+  {# content_ids tem que ser os PRODUTOS, nao o numero do pedido: e assim que a
+     Meta sabe quais itens vendem e alimenta o anuncio de catalogo. #}
+  fbq('track','Purchase',{
+    value:{{ p.total }},currency:'BRL',content_type:'product',
+    content_ids:[{% for it in itens %}'{{ it.produto_pdv_id }}'{% if not loop.last %},{% endif %}{% endfor %}],
+    contents:[{% for it in itens %}{id:'{{ it.produto_pdv_id }}',quantity:{{ (it.quantidade or 1)|int }}}{% if not loop.last %},{% endif %}{% endfor %}],
+    num_items:{{ itens|length }}
+  },{eventID:'pedido-{{ p.id }}'});
 }
 if(typeof gtag !== 'undefined'){
   gtag('event','purchase',{transaction_id:'{{ p.id }}',value:{{ p.total }},currency:'BRL'});

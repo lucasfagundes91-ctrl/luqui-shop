@@ -7,11 +7,13 @@
 <meta name="description" content="{% block descricao %}A loja de brinquedos da família — pelúcias, jogos, bonecas, hot wheels, lego e muito mais. Loja física em Cascavel/PR.{% endblock %}">
 <link rel="icon" type="image/png" href="/static/favicon.png">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
-<meta property="og:title" content="Luqui Brinquedos — Aqui você compra brincando">
-<meta property="og:description" content="Loja de brinquedos da família. Pelúcias, jogos, Hot Wheels, Lego, Pokémon e muito mais. Cascavel/PR — envio pra todo Brasil.">
-<meta property="og:image" content="https://www.luquibrinquedos.com.br/static/logo.png">
-<meta property="og:url" content="https://www.luquibrinquedos.com.br/">
-<meta property="og:type" content="website">
+{# Blocos: a pagina de produto sobrescreve com o item. Sem isso, compartilhar
+   um brinquedo no WhatsApp mostrava a logo da loja em vez do produto. #}
+<meta property="og:title" content="{% block og_titulo %}Luqui Brinquedos — Aqui você compra brincando{% endblock %}">
+<meta property="og:description" content="{% block og_descricao %}Loja de brinquedos da família. Pelúcias, jogos, Hot Wheels, Lego, Pokémon e muito mais. Cascavel/PR — envio pra todo Brasil.{% endblock %}">
+<meta property="og:image" content="{% block og_imagem %}https://www.luquibrinquedos.com.br/static/logo.png{% endblock %}">
+<meta property="og:url" content="{% block og_url %}https://www.luquibrinquedos.com.br/{% endblock %}">
+<meta property="og:type" content="{% block og_tipo %}website{% endblock %}">
 <style>
   :root{
     --azul:#1652C7; --azul-d:#0E3D9E; --azul-c:#3B82F6;
