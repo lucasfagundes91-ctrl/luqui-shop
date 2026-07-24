@@ -3564,12 +3564,19 @@ def _xml_escape(t):
 def _feed_produtos():
     """Pagina a API do PDV ate o fim. Cacheado: o feed e lido por robo, nao
     faz sentido bater no PDV a cada request."""
-    itens, offset = [], 0
+    # dedup por id: a ordenacao do PDV nao e estavel entre paginas, entao um
+    # produto podia cair em duas paginas e aparecer duas vezes no feed (achados:
+    # 109549, 67008, 84226). ID repetido faz a Meta descartar o item.
+    vistos, itens, offset = set(), [], 0
     while True:
         lote, total = listar_produtos(limite=100, offset=offset)
         if not lote:
             break
-        itens.extend(lote)
+        for p in lote:
+            pid = p.get('id')
+            if pid and pid not in vistos:
+                vistos.add(pid)
+                itens.append(p)
         offset += len(lote)
         if offset >= (total or 0) or offset >= 5000:
             break
