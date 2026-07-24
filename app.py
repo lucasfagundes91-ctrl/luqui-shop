@@ -496,6 +496,11 @@ def init_db():
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS melhorenvio_pago_em TIMESTAMPTZ",
         # Token imprevisível pra acesso às páginas públicas de pedido (anti-IDOR).
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS token VARCHAR(32)",
+        # resultado do Purchase mandado pra Meta (CAPI) — sem isso a unica
+        # forma de saber se o evento saiu era o log do Railway ou esperar as
+        # 5h de atraso da API de estatisticas do Facebook.
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS capi_em TIMESTAMPTZ",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS capi_resposta TEXT",
         """CREATE TABLE IF NOT EXISTS rate_limit_hits (
             id BIGSERIAL PRIMARY KEY, bucket TEXT NOT NULL, chave TEXT NOT NULL,
             criado_em TIMESTAMPTZ DEFAULT NOW())""",
@@ -3540,6 +3545,39 @@ def pag_404(e):
                            categorias=listar_categorias(),
                            cliente=cliente_logado(),
                            carrinho=carrinho_ler()), 404
+
+
+@app.route('/__capi')
+def __capi_status():
+    """Diagnostico do Purchase mandado pra Meta. Existe porque a API de
+    estatisticas do Facebook atrasa ~5h — sem isto nao da pra saber se o
+    evento saiu sem esperar a tarde inteira.
+    Autentica pelo SHA-256 do META_CAPI_TOKEN: quem ja tem o segredo consegue
+    calcular, e o segredo em si nunca viaja na URL (nem vai pro access log)."""
+    esperado = hashlib.sha256((META_CAPI_TOKEN or 'x').encode()).hexdigest()
+    tok = (request.args.get('t') or '').strip()
+    if not META_CAPI_TOKEN or not secrets.compare_digest(tok, esperado):
+        return jsonify({'erro': 'nao autorizado'}), 401
+    try:
+        rows = db_execute("""SELECT id, total, status, pago_em, capi_em, capi_resposta
+                             FROM pedidos
+                             WHERE capi_em IS NOT NULL OR pago_em IS NOT NULL
+                             ORDER BY COALESCE(capi_em, pago_em) DESC LIMIT 10""",
+                          fetch='all') or []
+        return jsonify({
+            'token_configurado': bool(META_CAPI_TOKEN),
+            'pixel': META_PIXEL_ID,
+            'ultimos': [{
+                'pedido': r['id'],
+                'total': float(r['total'] or 0),
+                'status': r['status'],
+                'pago_em': r['pago_em'].isoformat() if r['pago_em'] else None,
+                'capi_em': r['capi_em'].isoformat() if r['capi_em'] else None,
+                'capi_resposta': r['capi_resposta'],
+            } for r in rows],
+        })
+    except Exception as e:
+        return jsonify({'erro': str(e)[:200]}), 500
 
 
 @app.route('/healthz')
@@ -7373,10 +7411,23 @@ def enviar_purchase_capi(p):
         ok = r.status_code == 200 and r.json().get('events_received', 0) > 0
         log.info("CAPI Purchase pedido=%s valor=%s -> %s %s",
                  p['id'], p.get('total'), r.status_code, r.text[:200])
+        _capi_registrar(p['id'], f"HTTP {r.status_code} {r.text[:300]}")
         return ok
     except Exception as e:
         log.error("CAPI Purchase pedido=%s falhou: %s", p.get('id'), e)
+        _capi_registrar(p.get('id'), f"EXCECAO {type(e).__name__}: {e}"[:300])
         return False
+
+
+def _capi_registrar(pid, resposta):
+    """Grava o resultado no proprio pedido. Em try/except: gravar diagnostico
+    nunca pode derrubar o processamento do pagamento."""
+    try:
+        if pid:
+            db_execute("UPDATE pedidos SET capi_em=NOW(), capi_resposta=%s "
+                       "WHERE id=%s", [resposta, pid])
+    except Exception as e:
+        log.error("CAPI registrar pedido=%s: %s", pid, e)
 
 
 # ─── Webhook Asaas: confirma pagamento ────────────────────────────────────────
