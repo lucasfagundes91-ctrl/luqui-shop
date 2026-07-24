@@ -6921,6 +6921,12 @@ def _so_digitos(v):
     return ''.join(c for c in (v or '') if c.isdigit())
 
 
+def _brl(v):
+    """1060.77 -> 'R$ 1.060,77'. Trocar ',' por '.' direto no format do Python
+    estraga o separador decimal junto ('R$ 1.060.77')."""
+    return 'R$ ' + f'{float(v or 0):,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+
+
 def _nome_norm(v):
     """Nome sem acento, sem pontuacao, caixa alta, espaco unico."""
     v = unicodedata.normalize('NFKD', (v or '')).encode('ascii', 'ignore').decode()
@@ -7056,10 +7062,10 @@ def avaliar_risco_pedido(pid):
         # 3) Perfil da compra. Sozinho nao condena ninguem — soma pouco.
         if total >= RISCO_VALOR_MUITO_ALTO:
             score += 25
-            motivos.append(f'Valor alto (R$ {total:,.2f})'.replace(',', '.'))
+            motivos.append(f'Valor alto ({_brl(total)})')
         elif total >= RISCO_VALOR_ALTO:
             score += 15
-            motivos.append(f'Valor acima da média (R$ {total:,.2f})'.replace(',', '.'))
+            motivos.append(f'Valor acima da média ({_brl(total)})')
         if p.get('forma_pagto') == 'cartao' and int(p.get('parcelas') or 1) >= 6:
             score += 10
             motivos.append(f'{p["parcelas"]}x no cartão')
