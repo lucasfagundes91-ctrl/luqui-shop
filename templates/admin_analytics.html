@@ -104,6 +104,34 @@
 </div>
 
 <div class="card">
+  <h3 style="margin-bottom:14px">🔎 O que as pessoas procuram</h3>
+  <p style="color:#64748B;font-size:12px;margin-bottom:12px">
+    Busca do site + Luquizinha. Termo em <b style="color:#DC2626">vermelho</b> é procura
+    que não achou nada — vale conferir se falta cadastrar ou comprar esse produto.
+    Alimenta a vitrine "Bombando nas buscas" da home.
+  </p>
+  {% if top_buscas %}
+    <table>
+      <thead><tr><th>Termo</th><th style="text-align:right">Buscas</th><th style="text-align:right">Sem resultado</th><th style="text-align:right">Última</th></tr></thead>
+      <tbody>
+        {% for b in top_buscas %}
+          <tr>
+            <td style="font-size:13px;font-weight:600{% if b.sem_resultado == b.n %};color:#DC2626{% endif %}">
+              <a href="/buscar?q={{ b.termo|urlencode }}" target="_blank" style="color:inherit;text-decoration:none">{{ b.termo }}</a>
+            </td>
+            <td style="text-align:right;font-weight:700">{{ b.n }}</td>
+            <td style="text-align:right;color:{% if b.sem_resultado %}#DC2626{% else %}#64748B{% endif %}">{{ b.sem_resultado }}</td>
+            <td style="text-align:right;color:#64748B;font-size:12px">{{ b.ultima.strftime('%d/%m %H:%M') if b.ultima }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p style="color:#64748B">Ninguém buscou nada ainda nesse período.</p>
+  {% endif %}
+</div>
+
+<div class="card">
   <h3 style="margin-bottom:14px">⏱️ Últimas 50 visitas (incluindo bots)</h3>
   {% if ultimas %}
     <table>

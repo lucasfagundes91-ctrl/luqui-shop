@@ -11,6 +11,7 @@ import math
 import os
 import secrets
 import time
+import unicodedata
 from datetime import datetime, timedelta
 from functools import wraps
 from urllib.parse import urlencode
@@ -172,6 +173,45 @@ _VISITA_SKIP_PREFIXES = ('/static/', '/admin', '/api/', '/webhook', '/auth/',
                          '/favicon', '/sitemap', '/health')
 
 
+def _ip_hash_atual():
+    """Hash do IP do visitante (anonimizado, LGPD)."""
+    ip = (request.headers.get('CF-Connecting-IP')
+          or (request.headers.get('X-Forwarded-For') or '').split(',')[0].strip()
+          or request.remote_addr or '')
+    return hashlib.sha256(
+        (ip + (app.secret_key or 'salt')).encode('utf-8')
+    ).hexdigest()[:40]
+
+
+def _normalizar_termo(termo):
+    """minúsculas, sem acento e sem pontuação — pra agrupar 'BONECA!' com
+    'boneca' e 'bonéca' no ranking de buscas."""
+    t = unicodedata.normalize('NFKD', (termo or '').lower())
+    t = ''.join(c for c in t if not unicodedata.combining(c))
+    t = re.sub(r'[^a-z0-9 ]+', ' ', t)
+    return re.sub(r'\s+', ' ', t).strip()[:120]
+
+
+def log_busca(termo, resultados=0, origem='site'):
+    """Registra o que a pessoa procurou. Nunca quebra a request."""
+    try:
+        termo = (termo or '').strip()[:120]
+        norm = _normalizar_termo(termo)
+        if not norm or len(norm) < 2:
+            return
+        ua_low = (request.headers.get('User-Agent') or '').lower()
+        if any(b in ua_low for b in _BOT_HINTS):
+            return
+        db_execute(
+            """INSERT INTO site_buscas
+               (termo, termo_norm, origem, resultados, ip_hash, cliente_id)
+               VALUES (%s,%s,%s,%s,%s,%s)""",
+            [termo, norm, origem, int(resultados or 0),
+             _ip_hash_atual(), session.get('cliente_id')])
+    except Exception:
+        pass
+
+
 @app.before_request
 def _track_visita():
     """Grava pageviews em site_visitas. Silencioso em erro."""
@@ -184,12 +224,7 @@ def _track_visita():
                 return
         ua = (request.headers.get('User-Agent') or '')[:300]
         ref = (request.headers.get('Referer') or '')[:500]
-        ip = (request.headers.get('CF-Connecting-IP')
-              or (request.headers.get('X-Forwarded-For') or '').split(',')[0].strip()
-              or request.remote_addr or '')
-        ip_h = hashlib.sha256(
-            (ip + (app.secret_key or 'salt')).encode('utf-8')
-        ).hexdigest()[:40]
+        ip_h = _ip_hash_atual()
         ua_low = ua.lower()
         is_bot = any(b in ua_low for b in _BOT_HINTS)
         cid = session.get('cliente_id')
@@ -542,6 +577,20 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_site_visitas_ts ON site_visitas(ts DESC)",
         "CREATE INDEX IF NOT EXISTS idx_site_visitas_path ON site_visitas(path, ts DESC)",
         "CREATE INDEX IF NOT EXISTS idx_site_visitas_ip ON site_visitas(ip_hash, ts DESC)",
+        # O que as pessoas procuram (busca do site + Luquizinha). Alimenta a
+        # vitrine "Bombando nas buscas" da home e o relatório do admin.
+        """CREATE TABLE IF NOT EXISTS site_buscas (
+            id BIGSERIAL PRIMARY KEY,
+            ts TIMESTAMPTZ DEFAULT NOW(),
+            termo VARCHAR(120) NOT NULL,
+            termo_norm VARCHAR(120) NOT NULL,
+            origem VARCHAR(20) DEFAULT 'site',
+            resultados INT DEFAULT 0,
+            ip_hash VARCHAR(64),
+            cliente_id INT REFERENCES clientes_site(id) ON DELETE SET NULL
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_site_buscas_ts ON site_buscas(ts DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_site_buscas_termo ON site_buscas(termo_norm, ts DESC)",
         # Etiquetas Melhor Envio emitidas avulsas pela calculadora do PDV Pro
         # (sem vinculo com pedido do site). Guarda rastreio + PDF + dados do
         # destinatario pra auditoria e reenvio do link pelo WhatsApp.
@@ -1763,6 +1812,144 @@ def listar_categorias():
     return r.get('categorias', [])
 
 
+# ─── Vitrines da home (mais vendidos / mais visitados / mais procurados) ──────
+_VITRINE_CACHE = {}
+
+
+def _vitrine_cache(chave, ttl, fn):
+    """Memoiza a vitrine por `ttl` segundos. Em erro devolve o valor velho
+    (ou vazio) — home nunca cai por causa de vitrine."""
+    agora = time.time()
+    c = _VITRINE_CACHE.get(chave)
+    if c and (agora - c['t']) < ttl:
+        return c['v']
+    try:
+        v = fn() or []
+    except Exception as e:
+        log.error("vitrine %s: %s", chave, e)
+        return (c or {}).get('v') or []
+    _VITRINE_CACHE[chave] = {'t': agora, 'v': v}
+    return v
+
+
+def produtos_por_ids(ids, so_com_estoque=True):
+    """Busca produtos no PDV em UM request (?ids=) preservando a ordem do
+    ranking. Filtra pelos ids pedidos porque PDV antigo (sem suporte a
+    ?ids=) devolveria o catálogo inteiro."""
+    ids = [int(i) for i in ids if i][:24]
+    if not ids:
+        return []
+    r = pdv_get('/api/integracao/produtos',
+                {'ids': ','.join(str(i) for i in ids), 'limite': len(ids)},
+                ttl=300) or {}
+    achados = {}
+    for p in r.get('produtos', []):
+        if p.get('id') in set(ids):
+            if so_com_estoque and float(p.get('estoque_atual') or 0) <= 0:
+                continue
+            achados[p['id']] = p
+    return [achados[i] for i in ids if i in achados]
+
+
+def produtos_mais_vendidos(limite=8, dias=90):
+    """Ranking REAL de vendas do site (últimos `dias`). Se ainda não há
+    pedido suficiente, completa com os marcados como mais vendidos no PDV."""
+    def _calc():
+        rows = db_execute("""
+            SELECT pi.produto_pdv_id AS pid, SUM(pi.quantidade) AS qtd
+              FROM pedido_itens pi
+              JOIN pedidos p ON p.id = pi.pedido_id
+             WHERE pi.produto_pdv_id IS NOT NULL
+               AND p.status NOT IN ('aguardando_pagto', 'cancelado')
+               AND p.criado_em >= NOW() - %s::interval
+             GROUP BY pi.produto_pdv_id
+             ORDER BY qtd DESC
+             LIMIT %s""", [f"{dias} days", limite * 3], fetch='all') or []
+        prods = produtos_por_ids([r['pid'] for r in rows])[:limite]
+        if len(prods) < limite:
+            vistos = {p['id'] for p in prods}
+            extra, _ = listar_produtos(limite=limite * 2, destaque='mais_vendido')
+            for p in extra:
+                if p['id'] in vistos or float(p.get('estoque_atual') or 0) <= 0:
+                    continue
+                prods.append(p)
+                if len(prods) >= limite:
+                    break
+        return prods
+    return _vitrine_cache(f'vendidos:{limite}:{dias}', 600, _calc)
+
+
+def produtos_mais_visitados(limite=8, dias=30):
+    """Ranking pelos pageviews de /produto/<id> (site_visitas), contando
+    visitantes únicos pra uma pessoa só não inflar o card."""
+    def _calc():
+        rows = db_execute("""
+            SELECT substring(path from '^/produto/([0-9]+)')::int AS pid,
+                   COUNT(DISTINCT ip_hash) AS unicos,
+                   COUNT(*) AS views
+              FROM site_visitas
+             WHERE NOT is_bot
+               AND ts >= NOW() - %s::interval
+               AND path ~ '^/produto/[0-9]+'
+             GROUP BY pid
+             ORDER BY unicos DESC, views DESC
+             LIMIT %s""", [f"{dias} days", limite * 3], fetch='all') or []
+        return produtos_por_ids([r['pid'] for r in rows])[:limite]
+    return _vitrine_cache(f'visitados:{limite}:{dias}', 600, _calc)
+
+
+def produtos_mais_procurados(limite=8, dias=30):
+    """Vitrine que gira o estoque em cima do que as pessoas PROCURAM:
+    pega os termos mais buscados (site + Luquizinha), busca produtos com
+    estoque de cada um e rotaciona a ordem a cada 15 min pra a home não
+    ficar sempre igual e mais produtos pegarem vitrine."""
+    termos = db_execute("""
+        SELECT termo_norm, COUNT(*) AS n
+          FROM site_buscas
+         WHERE ts >= NOW() - %s::interval
+           AND resultados > 0
+         GROUP BY termo_norm
+         ORDER BY n DESC, MAX(ts) DESC
+         LIMIT 15""", [f"{dias} days"], fetch='all') or []
+    termos = [t['termo_norm'] for t in termos]
+    if not termos:
+        return []
+    # rotação: janela de 15 min desloca quais termos abrem a vitrine
+    giro = int(time.time() // 900) % len(termos)
+    termos = termos[giro:] + termos[:giro]
+
+    def _calc():
+        prods, vistos = [], set()
+        for termo in termos[:6]:
+            achados, _ = listar_produtos(busca=termo, limite=6)
+            for p in achados:
+                if p['id'] in vistos or float(p.get('estoque_atual') or 0) <= 0:
+                    continue
+                vistos.add(p['id'])
+                p = dict(p)
+                p['termo_busca'] = termo
+                prods.append(p)
+                break  # 1 produto por termo primeiro, pra variar a vitrine
+            if len(prods) >= limite:
+                break
+        if len(prods) < limite:
+            for termo in termos[:6]:
+                achados, _ = listar_produtos(busca=termo, limite=6)
+                for p in achados:
+                    if p['id'] in vistos or float(p.get('estoque_atual') or 0) <= 0:
+                        continue
+                    vistos.add(p['id'])
+                    p = dict(p)
+                    p['termo_busca'] = termo
+                    prods.append(p)
+                    if len(prods) >= limite:
+                        break
+                if len(prods) >= limite:
+                    break
+        return prods[:limite]
+    return _vitrine_cache(f'procurados:{limite}:{giro}', 900, _calc)
+
+
 def _dedupe_por_slug(items):
     """Junta items com mesmo slug somando qtd. Usado pra remover
     duplicacao quando um grupo/subgrupo aparece em mais de um departamento
@@ -2941,10 +3128,67 @@ vezes é o banco barrando a compra pela internet — não é problema no seu car
 
 @app.route('/promocoes')
 def pag_promocoes():
-    """Página com produtos em promoção (puxa do PDV Pro)."""
+    """Página única de ofertas: promoção vigente do PDV + o que era o
+    LiquidaLuqui (flag `liquida` no PDV), num só lugar. Ordena por maior
+    desconto — quem chega vê primeiro a oferta que mais vale a pena."""
+    ordem = request.args.get('ordem', 'desconto')
+    itens, vistos = [], set()
+
     rs_promos = pdv_get('/api/integracao/promocoes') or {}
+    for p in rs_promos.get('promocoes', []):
+        pid = p.get('produto_id')
+        if not pid or pid in vistos:
+            continue
+        vistos.add(pid)
+        itens.append({
+            'id': pid,
+            'descricao': p.get('descricao'),
+            'foto_url': p.get('foto'),
+            'preco_venda': float(p.get('preco_venda') or 0),
+            'preco_promo': float(p.get('preco_promo') or 0) or None,
+            'estoque_atual': float(p.get('estoque_atual') or 0),
+            'tag': 'promo',
+        })
+
+    # LiquidaLuqui: produtos marcados como liquida no PDV entram na mesma
+    # vitrine (sem repetir quem já está em promoção vigente).
+    liquida, _ = listar_produtos(limite=48, destaque='liquida')
+    for p in liquida:
+        if p['id'] in vistos:
+            continue
+        vistos.add(p['id'])
+        itens.append({
+            'id': p['id'],
+            'descricao': p.get('descricao'),
+            'foto_url': p.get('foto_url'),
+            'preco_venda': float(p.get('preco_venda') or 0),
+            'preco_promo': (float(p['preco_promo'])
+                            if p.get('preco_promo') else None),
+            'estoque_atual': float(p.get('estoque_atual') or 0),
+            'tag': 'liquida',
+        })
+
+    for it in itens:
+        cheio, promo = it['preco_venda'], it['preco_promo']
+        it['economia'] = (cheio - promo) if (promo and cheio > promo) else 0
+        it['desconto_pct'] = int(round(it['economia'] / cheio * 100)) if (
+            it['economia'] and cheio) else 0
+        it['preco_final'] = promo or cheio
+
+    # esgotado sempre por último, independentemente da ordenação
+    chaves = {
+        'desconto': lambda i: (-i['desconto_pct'], i['preco_final']),
+        'menor-preco': lambda i: (i['preco_final'],),
+        'maior-preco': lambda i: (-i['preco_final'],),
+    }
+    chave = chaves.get(ordem, chaves['desconto'])
+    itens.sort(key=lambda i: (i['estoque_atual'] <= 0,) + tuple(chave(i)))
+
+    economia_max = max([i['economia'] for i in itens], default=0)
     return render_template('promocoes.html',
-                           promocoes=rs_promos.get('promocoes', []),
+                           itens=itens,
+                           ordem=ordem if ordem in chaves else 'desconto',
+                           economia_max=economia_max,
                            categorias=listar_categorias(),
                            cliente=cliente_logado(),
                            carrinho=carrinho_ler())
@@ -3217,6 +3461,9 @@ def sitemap_xml():
     if CLUBE_LUQUI_ATIVO:
         urls.append((base + '/clube', '0.9', 'weekly'))
     urls += [
+        (base + '/promocoes', '0.9', 'daily'),
+        (base + '/novidades', '0.8', 'weekly'),
+        (base + '/mais-vendidos', '0.8', 'weekly'),
         (base + '/trocas-devolucoes', '0.5', 'yearly'),
         (base + '/entregas', '0.5', 'yearly'),
         (base + '/formas-pagamento', '0.5', 'yearly'),
@@ -3287,6 +3534,9 @@ def home():
                            produtos=produtos,
                            categorias=categorias,
                            banners=banners,
+                           mais_vendidos=produtos_mais_vendidos(8),
+                           mais_visitados=produtos_mais_visitados(8),
+                           mais_procurados=produtos_mais_procurados(8),
                            desconto_pix_pct=float(cfg('desconto_pix_pct', '3')),
                            cliente=cliente_logado(),
                            carrinho=carrinho_ler())
@@ -3337,6 +3587,8 @@ def buscar():
     extras = filtros_da_querystring(request)
     produtos, total = (listar_produtos(busca=q, limite=48, **extras)
                        if (q or extras) else ([], 0))
+    if q:
+        log_busca(q, resultados=total, origem='site')
     return render_template('busca.html',
                            produtos=produtos, total=total,
                            termo=q or 'Busca', termo_q=q,
@@ -3391,7 +3643,9 @@ def pag_mais_vendidos():
 
 @app.route('/liquida-luqui')
 def pag_liquida_luqui():
-    return _pagina_destaque('liquida', '💥 LiquidaLuqui')
+    """LiquidaLuqui virou parte de /promocoes — mantido só como redirect
+    301 pros links antigos (Instagram, Google, WhatsApp) não morrerem."""
+    return redirect('/promocoes', code=301)
 
 
 @app.route('/produto/<int:pid>')
@@ -5028,6 +5282,7 @@ def _luq_tool_buscar_produtos(args):
             continue
         out = _formatar_produtos(produtos, preco_max=preco_max)
         if out:
+            log_busca(termo, resultados=len(out), origem='luquizinha')
             return {'produtos': out, 'termo_usado': t, 'tipo': 'match'}
 
     # Nada bateu com o pedido. NÃO devolver lista aleatória (a IA mostra
@@ -5035,6 +5290,7 @@ def _luq_tool_buscar_produtos(args):
     # confuso). Devolve vazio com flag pra IA dizer que não tem agora e
     # pedir o WhatsApp pra avisar quando chegar.
     if termo:
+        log_busca(termo, resultados=0, origem='luquizinha')
         return {'produtos': [], 'termo_usado': termo,
                 'tipo': 'sem_match', 'pedido_original': termo}
 
@@ -5484,10 +5740,22 @@ def admin_analytics():
         FROM site_visitas
         ORDER BY ts DESC LIMIT 50""", fetch='all') or []
 
+    # O que as pessoas procuram — separa quem achou de quem NÃO achou nada
+    # (esse segundo grupo é lista de compras: procura existe, produto não).
+    top_buscas = db_execute("""
+        SELECT termo_norm AS termo, COUNT(*) AS n,
+               COUNT(*) FILTER (WHERE resultados = 0) AS sem_resultado,
+               MAX(ts) AS ultima
+        FROM site_buscas
+        WHERE ts >= NOW() - %s::interval
+        GROUP BY termo_norm ORDER BY n DESC LIMIT 25""",
+        [intervalo], fetch='all') or []
+
     return render_template('admin_analytics.html',
                            resumo=resumo, por_dia=por_dia,
                            top_paginas=top_paginas,
                            top_referrers=top_referrers,
+                           top_buscas=top_buscas,
                            ultimas=ultimas, dias=dias)
 
 

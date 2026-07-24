@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_card.html" import card %}
 {% block conteudo %}
 
 {% if cupom_primeira_compra_ativo %}
@@ -117,45 +118,68 @@
 <div class="secao"><h2>Produtos em destaque</h2></div>
 <section class="produtos">
   {% for p in produtos %}
-    <div class="prod-card">
-      {% if p.preco_promo %}<span class="selo promo">PROMO</span>
-      {% elif p.novidade %}<span class="selo">NOVIDADE!</span>{% endif %}
-      <a href="/produto/{{ p.id }}">
-        <div class="foto">
-          {% if p.foto_url %}<img src="{{ p.foto_url }}" alt="{{ p.descricao }}">
-          {% else %}<span class="ph">📦</span>{% endif %}
-        </div>
-        <div class="desc">{{ p.descricao }}</div>
-      </a>
-      {% if p.preco_promo %}
-        <div class="preco-velho">{{ rs(p.preco_venda) }}</div>
-        <div class="preco">{{ rs(p.preco_promo) }}</div>
-      {% else %}
-        <div class="preco">{{ rs(p.preco_venda) }}</div>
-      {% endif %}
-      <div class="parc">ou 12x de R$ {{ '%.2f'|format((p.preco_promo or p.preco_venda|float)/12) }}</div>
-      {% if (p.estoque_atual or 0) > 0 %}
-      <div class="acoes">
-        <button class="btn-mini-add" onclick="carrinhoAdd({{ p.id }})">+ Carrinho</button>
-        <button class="btn-mini-buy" onclick="comprarAgora({{ p.id }})">Comprar</button>
-      </div>
-      <button class="btn-mini-lista" onclick="addNaLista({{ p.id }}, this)">
-        🎁 Lista de aniversário
-      </button>
-      {% else %}
-      <button class="btn-mini-add" disabled style="background:#e2e8f0;color:#64748b;cursor:not-allowed;width:100%;margin-top:6px">
-        😔 Indisponível
-      </button>
-      <button class="btn-mini-lista" onclick="avisarVoltaCard({{ p.id }})" style="margin-top:4px">
-        🔔 Me avisa quando chegar
-      </button>
-      {% endif %}
-    </div>
+    {{ card(p) }}
   {% else %}
     <div style="grid-column:1/-1;padding:60px;text-align:center;color:var(--mut)">
       Conectando ao catálogo do PDV Pro... configure <code>PDVPRO_API_KEY</code>.
     </div>
   {% endfor %}
+</section>
+
+{% if mais_vendidos %}
+<!-- MAIS VENDIDOS — ranking real de pedidos dos últimos 90 dias -->
+<div class="secao">
+  <h2>⭐ Os mais vendidos</h2>
+  <div class="sub">O que mais sai da nossa loja nos últimos meses</div>
+  <a class="ver-todos" href="/mais-vendidos">ver todos os mais vendidos →</a>
+</div>
+<section class="produtos">
+  {% for p in mais_vendidos %}{{ card(p, selo='TOP ' ~ loop.index, selo_classe='top') }}{% endfor %}
+</section>
+{% endif %}
+
+{% if mais_visitados %}
+<!-- MAIS VISITADOS — pageviews reais de /produto/<id> nos últimos 30 dias -->
+<div class="secao">
+  <h2>👀 Os mais visitados</h2>
+  <div class="sub">Os brinquedos que mais gente veio olhar aqui no site</div>
+</div>
+<section class="produtos">
+  {% for p in mais_visitados %}{{ card(p, selo='MAIS VISTO', selo_classe='visto') }}{% endfor %}
+</section>
+{% endif %}
+
+{% if mais_procurados %}
+<!-- BOMBANDO NAS BUSCAS — gira estoque em cima do que as pessoas procuram.
+     A ordem rotaciona a cada 15 min pra sempre dar vez a produto novo. -->
+<div class="secao">
+  <h2>🔎 Bombando nas buscas</h2>
+  <div class="sub">Escolhidos pelo que as pessoas mais procuram — e que temos pronto pra enviar</div>
+</div>
+<section class="produtos">
+  {% for p in mais_procurados %}
+    {{ card(p, selo='PROCURADO', selo_classe='busca',
+            nota='🔎 quem busca "' ~ p.termo_busca ~ '" leva esse') }}
+  {% endfor %}
+</section>
+{% endif %}
+
+<!-- INSTAGRAM -->
+<section style="max-width:1200px;margin:30px auto;padding:0 16px">
+  <a href="https://instagram.com/luquibrinquedos" target="_blank" rel="noopener"
+     style="display:flex;align-items:center;justify-content:center;gap:18px;flex-wrap:wrap;
+            background:linear-gradient(45deg,#F58529,#DD2A7B,#8134AF);color:#fff;
+            padding:26px 20px;border-radius:18px;text-align:center;
+            box-shadow:0 8px 24px rgba(221,42,123,.25)">
+    <span style="font-size:46px;line-height:1">📷</span>
+    <span>
+      <b style="display:block;font-size:20px;font-weight:900">Siga a Luqui no Instagram</b>
+      <span style="font-size:14px;opacity:.95">@luquibrinquedos — novidades, promoções e bastidores da loja</span>
+    </span>
+    <span style="background:#fff;color:#DD2A7B;font-weight:900;padding:12px 22px;border-radius:10px">
+      Seguir agora →
+    </span>
+  </a>
 </section>
 
 {% endblock %}

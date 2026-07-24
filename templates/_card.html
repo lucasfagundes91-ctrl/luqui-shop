@@ -1,0 +1,44 @@
+{# Card de produto usado na home, nas vitrines e em /promocoes.
+   Aceita tanto `id` (catálogo) quanto `produto_id` (endpoint de promoções). #}
+{% macro card(p, selo=None, selo_classe='', nota=None, mostrar_lista=True) %}
+{% set pid = p.id or p.produto_id %}
+{% set promo = p.preco_promo %}
+<div class="prod-card">
+  {% if selo %}<span class="selo {{ selo_classe }}">{{ selo }}</span>
+  {% elif promo %}<span class="selo promo">PROMO</span>
+  {% elif p.eh_novidade or p.novidade %}<span class="selo">NOVIDADE!</span>{% endif %}
+  <a href="/produto/{{ pid }}">
+    <div class="foto">
+      {% if p.foto_url or p.foto %}<img src="{{ p.foto_url or p.foto }}" alt="{{ p.descricao }}" loading="lazy">
+      {% else %}<span class="ph">📦</span>{% endif %}
+    </div>
+    <div class="desc">{{ p.descricao }}</div>
+  </a>
+  {% if promo %}
+    <div class="preco-velho">{{ rs(p.preco_venda) }}</div>
+    <div class="preco">{{ rs(promo) }}</div>
+  {% else %}
+    <div class="preco">{{ rs(p.preco_venda) }}</div>
+  {% endif %}
+  <div class="parc">ou 12x de R$ {{ '%.2f'|format((promo or p.preco_venda|float)/12) }}</div>
+  {% if nota %}<div class="card-nota">{{ nota }}</div>{% endif %}
+  {% if (p.estoque_atual or 0) > 0 %}
+  <div class="acoes">
+    <button class="btn-mini-add" onclick="carrinhoAdd({{ pid }})">+ Carrinho</button>
+    <button class="btn-mini-buy" onclick="comprarAgora({{ pid }})">Comprar</button>
+  </div>
+  {% if mostrar_lista %}
+  <button class="btn-mini-lista" onclick="addNaLista({{ pid }}, this)">
+    🎁 Lista de aniversário
+  </button>
+  {% endif %}
+  {% else %}
+  <button class="btn-mini-add" disabled style="background:#e2e8f0;color:#64748b;cursor:not-allowed;width:100%;margin-top:6px">
+    😔 Indisponível
+  </button>
+  <button class="btn-mini-lista" onclick="avisarVoltaCard({{ pid }})" style="margin-top:4px">
+    🔔 Me avisa quando chegar
+  </button>
+  {% endif %}
+</div>
+{% endmacro %}

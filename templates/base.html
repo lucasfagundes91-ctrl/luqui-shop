@@ -84,6 +84,9 @@
   .menu .sep{ width:1px; background:rgba(255,255,255,.18); margin:8px 4px; }
   .menu .mlink.promo{ background:#F59E0B; }
   .menu .mlink.promo:hover{ background:#D97706; }
+  .menu .mlink.insta{ background:linear-gradient(45deg,#F58529,#DD2A7B,#8134AF);
+    color:#fff; }
+  .menu .mlink.insta:hover{ filter:brightness(1.12); }
   .menu .mlink.clube{ background:var(--amarelo); color:var(--azul); }
   .menu .mlink.clube:hover{ background:var(--amarelo-d); }
   .menu .mlink.lista{ background:#0E3D9E; color:#FFC700;
@@ -161,6 +164,10 @@
     text-transform:uppercase; letter-spacing:1.5px; position:relative; display:inline-block; }
   .secao h2:after{ content:''; display:block; width:60px; height:3px;
     background:var(--amarelo); margin:8px auto 0; border-radius:2px; }
+  .secao .sub{ font-size:12.5px; color:var(--mut); margin-top:8px; }
+  .secao .ver-todos{ display:inline-block; margin-top:6px; font-size:12px;
+    font-weight:800; color:var(--azul); }
+  .secao .ver-todos:hover{ text-decoration:underline; }
 
   /* ─── Grid de produtos ─── */
   .produtos{ max-width:1200px; margin:0 auto 30px; padding:0 16px;
@@ -186,6 +193,11 @@
     text-decoration:line-through; }
   .prod-card .preco{ color:var(--verde); font-weight:900; font-size:20px; }
   .prod-card .parc{ font-size:11px; color:var(--mut); margin-top:2px; }
+  .prod-card .card-nota{ font-size:11px; font-weight:700; color:var(--azul);
+    margin-top:4px; }
+  .prod-card .selo.busca{ background:var(--azul); color:#fff; }
+  .prod-card .selo.visto{ background:#7C3AED; color:#fff; }
+  .prod-card .selo.top{ background:#059669; color:#fff; }
   .prod-card .btn{ margin-top:auto; background:var(--azul); color:#fff;
     padding:10px; border-radius:8px; font-weight:700; text-align:center;
     font-size:13px; transition:background .12s; }
@@ -415,9 +427,10 @@ gtag('config', '{{ GOOGLE_TAG_ID }}');
     </div>
     {% endif %}
     <a href="/retirar-na-loja">🏪 Retirar</a>
-    <a href="/promocoes">🔥 Promoções</a>
     <span class="sep"></span>
-    <a class="mlink promo" href="/liquida-luqui">💥 LIQUIDA</a>
+    <a class="mlink promo" href="/promocoes">🔥 PROMOÇÕES</a>
+    <a class="mlink insta" href="https://instagram.com/luquibrinquedos"
+       target="_blank" rel="noopener">📷 Instagram</a>
     <a class="mlink lista" href="/lista-aniversario">🎂 Lista Aniv</a>
     {% if clube_ativo %}<a class="mlink clube" href="/clube">🎁 Clube Luqui</a>{% endif %}
   </div>
@@ -865,8 +878,9 @@ document.addEventListener('keydown', e=>{
     <div>
       <h4>Loja</h4>
       <a href="/">Início</a>
-      <a href="/buscar?q=novidade">Novidades</a>
-      <a href="/buscar?q=promo">Promoções</a>
+      <a href="/novidades">Novidades</a>
+      <a href="/promocoes">Promoções</a>
+      <a href="/mais-vendidos">Mais vendidos</a>
       {% if clube_ativo %}<a href="/clube">Clube Luqui</a>{% endif %}
       <a href="/sobre">Sobre a Luqui</a>
       <a href="/minha-conta">Minha conta</a>
