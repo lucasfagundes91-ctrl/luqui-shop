@@ -22,7 +22,7 @@ import re
 import psycopg2
 import psycopg2.extras
 import requests
-from flask import (Flask, abort, g, jsonify, redirect, render_template,
+from flask import (Flask, Response, abort, g, jsonify, redirect, render_template,
                    request, send_from_directory, session, url_for)
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -3545,6 +3545,94 @@ def pag_404(e):
                            categorias=listar_categorias(),
                            cliente=cliente_logado(),
                            carrinho=carrinho_ler()), 404
+
+
+# ─── Feed de produtos (catalogo Meta / Google Shopping) ───────────────────────
+# Anuncio de PRODUTO (catalogo) precisa de um feed: e ele que diz pra Meta o
+# que existe, por quanto e se tem estoque. Sem isso so da pra anunciar imagem
+# solta, sem o produto certo pra pessoa certa nem retargeting por item.
+# Formato: RSS 2.0 com namespace g: — o mesmo que Meta e Google Shopping leem.
+FEED_TTL = int(os.environ.get('FEED_TTL', '1800'))   # 30 min
+_FEED_CACHE = {}
+
+
+def _xml_escape(t):
+    return (str(t or '').replace('&', '&amp;').replace('<', '&lt;')
+            .replace('>', '&gt;').replace('"', '&quot;'))
+
+
+def _feed_produtos():
+    """Pagina a API do PDV ate o fim. Cacheado: o feed e lido por robo, nao
+    faz sentido bater no PDV a cada request."""
+    itens, offset = [], 0
+    while True:
+        lote, total = listar_produtos(limite=100, offset=offset)
+        if not lote:
+            break
+        itens.extend(lote)
+        offset += len(lote)
+        if offset >= (total or 0) or offset >= 5000:
+            break
+    return itens
+
+
+@app.route('/feed.xml')
+def feed_xml():
+    agora = time.time()
+    c = _FEED_CACHE.get('xml')
+    if c and (agora - c['t']) < FEED_TTL:
+        return Response(c['v'], mimetype='application/xml; charset=utf-8')
+    try:
+        produtos = _feed_produtos()
+    except Exception as e:
+        log.error("feed.xml: %s", e)
+        if c:                      # entrega o feed velho em vez de quebrar
+            return Response(c['v'], mimetype='application/xml; charset=utf-8')
+        return Response('<rss version="2.0"/>', mimetype='application/xml'), 503
+
+    base = SITE_URL.rstrip('/')
+    linhas = ['<?xml version="1.0" encoding="UTF-8"?>',
+              '<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">',
+              '<channel>',
+              f'<title>{_xml_escape("Luqui Brinquedos")}</title>',
+              f'<link>{base}</link>',
+              '<description>Catalogo de produtos</description>']
+    incluidos = 0
+    for p in produtos:
+        preco = p.get('preco_promo') or p.get('preco_venda')
+        foto = p.get('foto_url')
+        titulo = (p.get('descricao') or '').strip()
+        # sem preco, foto ou titulo a Meta rejeita o item — nao adianta mandar
+        if not (preco and foto and titulo and p.get('id')):
+            continue
+        if not str(foto).startswith('http'):
+            foto = base + '/' + str(foto).lstrip('/')
+        estoque = p.get('estoque_atual')
+        disp = 'in stock' if (estoque is None or float(estoque) > 0) else 'out of stock'
+        desc = (p.get('descricao_longa') or titulo).strip()[:4900]
+        linhas.append('<item>')
+        linhas.append(f"<g:id>{p['id']}</g:id>")
+        linhas.append(f'<g:title>{_xml_escape(titulo[:150])}</g:title>')
+        linhas.append(f'<g:description>{_xml_escape(desc)}</g:description>')
+        linhas.append(f"<g:link>{base}/produto/{p['id']}</g:link>")
+        linhas.append(f'<g:image_link>{_xml_escape(foto)}</g:image_link>')
+        linhas.append(f'<g:availability>{disp}</g:availability>')
+        linhas.append(f'<g:price>{float(preco):.2f} BRL</g:price>')
+        if p.get('preco_promo') and p.get('preco_venda'):
+            linhas.append(f"<g:sale_price>{float(p['preco_promo']):.2f} BRL</g:sale_price>")
+        linhas.append('<g:condition>new</g:condition>')
+        linhas.append(f'<g:brand>{_xml_escape(p.get("marca") or "Luqui Brinquedos")}</g:brand>')
+        if p.get('codigo_barras'):
+            linhas.append(f'<g:gtin>{_xml_escape(p["codigo_barras"])}</g:gtin>')
+        if p.get('departamento'):
+            linhas.append(f'<g:product_type>{_xml_escape(p["departamento"])}</g:product_type>')
+        linhas.append('</item>')
+        incluidos += 1
+    linhas.append('</channel></rss>')
+    xml = '\n'.join(linhas)
+    _FEED_CACHE['xml'] = {'t': agora, 'v': xml}
+    log.info("feed.xml: %s produtos no feed (de %s lidos)", incluidos, len(produtos))
+    return Response(xml, mimetype='application/xml; charset=utf-8')
 
 
 @app.route('/__capi')
