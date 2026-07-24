@@ -7344,13 +7344,19 @@ def enviar_purchase_capi(p):
             'fn': [_capi_hash(nome[0])] if nome else None,
             'ln': [_capi_hash(nome[-1])] if len(nome) > 1 else None,
             'country': [_capi_hash('br')],
+            # identificador proprio: garante casamento mesmo em pedido sem
+            # email/telefone, e liga varias compras do mesmo cliente.
+            'external_id': [_capi_hash(str(p.get('cliente_id')))] if p.get('cliente_id') else None,
         }
         user = {k: v for k, v in user.items() if v and v[0]}
         evento = {
             'event_name': 'Purchase',
             'event_time': int(time.time()),
             'action_source': 'website',
-            'event_source_url': f"{SITE_URL.rstrip('/')}/pedido/{p['id']}",
+            # rota real e /pedido/<id>/pagamento — a Meta cruza essa URL com o
+            # que o pixel do navegador viu; apontar pra URL inexistente derruba
+            # a qualidade do casamento do evento.
+            'event_source_url': f"{SITE_URL.rstrip('/')}/pedido/{p['id']}/pagamento",
             # mesmo event_id do fbq do navegador: se os dois dispararem, a Meta
             # deduplica em vez de contar a venda duas vezes.
             'event_id': f"pedido-{p['id']}",
