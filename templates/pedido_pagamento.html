@@ -4,7 +4,10 @@
 {% if p.status == 'pago' %}
 <script>
 if(typeof fbq !== 'undefined'){
-  fbq('track','Purchase',{value:{{ p.total }},currency:'BRL',content_ids:['pedido-{{ p.id }}']});
+  {# eventID igual ao event_id da Conversions API (enviar_purchase_capi): o
+     servidor sempre manda o Purchase; se o cliente TAMBEM abrir esta pagina,
+     a Meta deduplica pelo id em vez de contar a venda duas vezes. #}
+  fbq('track','Purchase',{value:{{ p.total }},currency:'BRL',content_ids:['pedido-{{ p.id }}']},{eventID:'pedido-{{ p.id }}'});
 }
 if(typeof gtag !== 'undefined'){
   gtag('event','purchase',{transaction_id:'{{ p.id }}',value:{{ p.total }},currency:'BRL'});

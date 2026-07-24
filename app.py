@@ -6973,6 +6973,76 @@ def cron_reconciliar_pedidos_site():
     })
 
 
+# ─── Meta Conversions API ─────────────────────────────────────────────────────
+# O fbq('track','Purchase') vive em pedido_pagamento.html e só roda se o cliente
+# CARREGAR a pagina do pedido ja com status='pago'. No fluxo real ele paga fora
+# do site (app do banco), o Asaas confirma aqui no servidor e o cliente nunca
+# mais volta na aba — entao o evento nunca disparava. Resultado medido em
+# 24/07/2026: 16 InitiateCheckout e ZERO Purchase em 7 dias.
+# Aqui o proprio servidor manda o evento, sem depender do navegador.
+META_PIXEL_ID = os.environ.get('META_PIXEL_ID', '1011945628185906')
+META_CAPI_TOKEN = os.environ.get('META_CAPI_TOKEN', '')
+
+
+def _capi_hash(valor):
+    """SHA-256 do dado normalizado, como a Meta exige (minusculo, sem espaco)."""
+    v = (valor or '').strip().lower()
+    return hashlib.sha256(v.encode()).hexdigest() if v else None
+
+
+def _capi_telefone(tel):
+    """So digitos, com DDI 55 — senao a Meta nao casa o contato."""
+    d = re.sub(r'\D', '', tel or '')
+    if not d:
+        return None
+    if not d.startswith('55'):
+        d = '55' + d
+    return hashlib.sha256(d.encode()).hexdigest()
+
+
+def enviar_purchase_capi(p):
+    """Manda o Purchase pra Meta pelo servidor. Nunca levanta excecao:
+    rastreamento quebrado nao pode derrubar processamento de pagamento."""
+    if not META_CAPI_TOKEN:
+        log.info("CAPI: META_CAPI_TOKEN vazio, pulando pedido %s", p.get('id'))
+        return False
+    try:
+        nome = (p.get('nome') or '').strip().split()
+        user = {
+            'em': [_capi_hash(p.get('email'))] if p.get('email') else None,
+            'ph': [_capi_telefone(p.get('telefone'))] if p.get('telefone') else None,
+            'fn': [_capi_hash(nome[0])] if nome else None,
+            'ln': [_capi_hash(nome[-1])] if len(nome) > 1 else None,
+            'country': [_capi_hash('br')],
+        }
+        user = {k: v for k, v in user.items() if v and v[0]}
+        evento = {
+            'event_name': 'Purchase',
+            'event_time': int(time.time()),
+            'action_source': 'website',
+            'event_source_url': f"{SITE_URL.rstrip('/')}/pedido/{p['id']}",
+            # mesmo event_id do fbq do navegador: se os dois dispararem, a Meta
+            # deduplica em vez de contar a venda duas vezes.
+            'event_id': f"pedido-{p['id']}",
+            'user_data': user,
+            'custom_data': {
+                'currency': 'BRL',
+                'value': float(p.get('total') or 0),
+                'order_id': str(p['id']),
+            },
+        }
+        r = requests.post(
+            f'https://graph.facebook.com/v22.0/{META_PIXEL_ID}/events',
+            json={'data': [evento], 'access_token': META_CAPI_TOKEN}, timeout=10)
+        ok = r.status_code == 200 and r.json().get('events_received', 0) > 0
+        log.info("CAPI Purchase pedido=%s valor=%s -> %s %s",
+                 p['id'], p.get('total'), r.status_code, r.text[:200])
+        return ok
+    except Exception as e:
+        log.error("CAPI Purchase pedido=%s falhou: %s", p.get('id'), e)
+        return False
+
+
 # ─── Webhook Asaas: confirma pagamento ────────────────────────────────────────
 @app.route('/webhook/asaas', methods=['POST'])
 def webhook_asaas():
@@ -7078,6 +7148,9 @@ Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp
             return jsonify({'ok': True, 'ja_processado': True})
         db_execute("""UPDATE pedidos SET status='pago', pago_em=NOW(),
                       atualizado_em=NOW() WHERE id=%s""", [pid])
+        # Purchase pra Meta pelo SERVIDOR — o guard de pago_em acima ja garante
+        # que isso roda uma vez so por pedido, mesmo com o 2o evento do cartao.
+        enviar_purchase_capi(p)
         # Dispara venda no PDV Pro
         _enviar_pedido_pro_pdv(pid)
         # ─ Gera etiqueta Melhor Envio AUTOMATICAMENTE (se nao for retirada)
