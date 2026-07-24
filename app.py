@@ -839,6 +839,28 @@ def init_db():
     except Exception as e:
         log.error("seed config: %s", e)
 
+    # Backfill one-time: as buscas que a Luquizinha já fez estão gravadas
+    # nos blocks das conversas. Sem isso a vitrine "Bombando nas buscas"
+    # ficaria vazia por dias esperando gente buscar de novo.
+    try:
+        n = (db_execute("SELECT COUNT(*) AS n FROM site_buscas",
+                        fetch='one') or {}).get('n', 0)
+        if not n:
+            db_execute("""
+                INSERT INTO site_buscas (ts, termo, termo_norm, origem, resultados)
+                SELECT m.criado_em,
+                       LEFT(b->'input'->>'termo', 120),
+                       LEFT(LOWER(TRIM(b->'input'->>'termo')), 120),
+                       'luquizinha', 1
+                  FROM site_chat_mensagens m,
+                       LATERAL jsonb_array_elements(m.blocks) b
+                 WHERE m.blocks IS NOT NULL
+                   AND b->>'type' = 'tool_use'
+                   AND b->>'name' = 'buscar_produtos'
+                   AND COALESCE(TRIM(b->'input'->>'termo'), '') <> ''""")
+    except Exception as e:
+        log.error("backfill buscas: %s", e)
+
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 def cfg(chave, default=''):
@@ -1852,8 +1874,41 @@ def produtos_por_ids(ids, so_com_estoque=True):
 
 
 def produtos_mais_vendidos(limite=8, dias=90):
-    """Ranking REAL de vendas do site (últimos `dias`). Se ainda não há
-    pedido suficiente, completa com os marcados como mais vendidos no PDV."""
+    """Ranking REAL de vendas dos últimos `dias`, nesta ordem de fonte:
+    1) vendas da loja no PDV (loja física + PDV vendem muito mais que o
+       site, então é o ranking mais honesto),
+    2) pedidos do próprio site,
+    3) a flag "mais vendido" que o lojista marca no PDV.
+    Cada fonte só completa o que faltou pra fechar `limite`."""
+    def _calc():
+        prods = []
+        rs_pdv = pdv_get('/api/integracao/mais-vendidos',
+                         {'dias': dias, 'limite': limite * 2}, ttl=600) or {}
+        ids_pdv = [p['id'] for p in rs_pdv.get('produtos', []) if p.get('id')]
+        if ids_pdv:
+            prods = produtos_por_ids(ids_pdv)[:limite]
+        if len(prods) >= limite:
+            return prods
+        vistos = {p['id'] for p in prods}
+        for p in _mais_vendidos_do_site(limite, dias):
+            if p['id'] not in vistos:
+                vistos.add(p['id'])
+                prods.append(p)
+                if len(prods) >= limite:
+                    return prods
+        extra, _ = listar_produtos(limite=limite * 2, destaque='mais_vendido')
+        for p in extra:
+            if p['id'] in vistos or float(p.get('estoque_atual') or 0) <= 0:
+                continue
+            prods.append(p)
+            if len(prods) >= limite:
+                break
+        return prods
+    return _vitrine_cache(f'vendidos:{limite}:{dias}', 600, _calc)
+
+
+def _mais_vendidos_do_site(limite, dias):
+    """Ranking pelos pedidos feitos no próprio site."""
     def _calc():
         rows = db_execute("""
             SELECT pi.produto_pdv_id AS pid, SUM(pi.quantidade) AS qtd
@@ -1865,18 +1920,8 @@ def produtos_mais_vendidos(limite=8, dias=90):
              GROUP BY pi.produto_pdv_id
              ORDER BY qtd DESC
              LIMIT %s""", [f"{dias} days", limite * 3], fetch='all') or []
-        prods = produtos_por_ids([r['pid'] for r in rows])[:limite]
-        if len(prods) < limite:
-            vistos = {p['id'] for p in prods}
-            extra, _ = listar_produtos(limite=limite * 2, destaque='mais_vendido')
-            for p in extra:
-                if p['id'] in vistos or float(p.get('estoque_atual') or 0) <= 0:
-                    continue
-                prods.append(p)
-                if len(prods) >= limite:
-                    break
-        return prods
-    return _vitrine_cache(f'vendidos:{limite}:{dias}', 600, _calc)
+        return produtos_por_ids([r['pid'] for r in rows])[:limite]
+    return _vitrine_cache(f'vendidos-site:{limite}:{dias}', 600, _calc)
 
 
 def produtos_mais_visitados(limite=8, dias=30):
