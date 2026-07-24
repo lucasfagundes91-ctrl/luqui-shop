@@ -5,6 +5,7 @@ via API (X-API-Key). Quando um pedido é pago, dispara webhook que cria a venda
 no PDV Pro automaticamente.
 """
 import hashlib
+import io
 import json
 import logging
 import math
@@ -3556,6 +3557,66 @@ FEED_TTL = int(os.environ.get('FEED_TTL', '1800'))   # 30 min
 _FEED_CACHE = {}
 
 
+FEED_IMG_MIN = 500          # minimo que a Meta aceita no catalogo
+_IMG_CACHE = {}             # pid -> (t, bytes|None)  None = usar o original
+
+
+def _img_para_catalogo(bruto):
+    """Devolve JPEG >=500x500 ou None se o original ja serve.
+
+    Foto pequena NAO e esticada: esticar 270x270 pra 500 borra e fica feio no
+    anuncio. Em vez disso a imagem vai centralizada numa moldura branca — sem
+    perda de qualidade, e e o padrao de e-commerce.
+    """
+    from PIL import Image
+    im = Image.open(io.BytesIO(bruto))
+    if im.width >= FEED_IMG_MIN and im.height >= FEED_IMG_MIN:
+        return None
+    im = im.convert('RGB')
+    lado = max(FEED_IMG_MIN, im.width, im.height)
+    fundo = Image.new('RGB', (lado, lado), (255, 255, 255))
+    fundo.paste(im, ((lado - im.width) // 2, (lado - im.height) // 2))
+    saida = io.BytesIO()
+    fundo.save(saida, 'JPEG', quality=88, optimize=True)
+    return saida.getvalue()
+
+
+@app.route('/pimg/<int:pid>.jpg')
+def produto_img_catalogo(pid):
+    """Imagem do produto no tamanho que o catalogo da Meta exige.
+
+    Foto grande -> redireciona pro original (nao gasta banda nossa).
+    Foto pequena -> devolve com moldura branca ate 500x500.
+    Existe porque 71 produtos tinham foto abaixo de 500px e ficavam de fora do
+    catalogo; corrigir um por um no PDV nao era viavel.
+    """
+    agora = time.time()
+    c = _IMG_CACHE.get(pid)
+    if c and (agora - c[0]) < 86400:
+        if c[1] is None:
+            return redirect(c[2], code=302)
+        return Response(c[1], mimetype='image/jpeg',
+                        headers={'Cache-Control': 'public, max-age=86400'})
+    try:
+        p = buscar_produto(pid)
+        url = (p or {}).get('foto_url')
+        if not url:
+            abort(404)
+        if not str(url).startswith('http'):
+            url = SITE_URL.rstrip('/') + '/' + str(url).lstrip('/')
+        r = requests.get(url, timeout=15)
+        r.raise_for_status()
+        nova = _img_para_catalogo(r.content)
+    except Exception as e:
+        log.error("pimg %s: %s", pid, str(e)[:120])
+        abort(404)
+    _IMG_CACHE[pid] = (agora, nova, url)
+    if nova is None:
+        return redirect(url, code=302)
+    return Response(nova, mimetype='image/jpeg',
+                    headers={'Cache-Control': 'public, max-age=86400'})
+
+
 def _xml_escape(t):
     return (str(t or '').replace('&', '&amp;').replace('<', '&lt;')
             .replace('>', '&gt;').replace('"', '&quot;'))
@@ -3612,8 +3673,9 @@ def feed_xml():
         # sem preco, foto ou titulo a Meta rejeita o item — nao adianta mandar
         if not (preco and foto and titulo and p.get('id')):
             continue
-        if not str(foto).startswith('http'):
-            foto = base + '/' + str(foto).lstrip('/')
+        # sempre pelo /pimg: foto grande so redireciona pro original, pequena
+        # ganha moldura branca ate 500x500 (exigencia do catalogo da Meta).
+        foto = f"{base}/pimg/{p['id']}.jpg"
         estoque = p.get('estoque_atual')
         disp = 'in stock' if (estoque is None or float(estoque) > 0) else 'out of stock'
         desc = (p.get('descricao_longa') or titulo).strip()[:4900]
