@@ -97,6 +97,13 @@
   .pill.azul{background:#DBEAFE;color:#1E40AF}
   .pill.cinza{background:#E2E8F0;color:#475569}
   .pill.vermelho{background:#FEE2E2;color:#991B1B}
+  /* Antifraude */
+  .risco-box{margin-top:6px;padding:8px 10px;border-radius:8px;background:#FEF2F2;
+    border:1px solid #FECACA;color:#991B1B;font-size:11px;line-height:1.5;max-width:420px}
+  .risco-box b{display:block;margin-bottom:2px}
+  .btn-liberar-risco{margin-top:6px;padding:5px 10px;border:0;border-radius:6px;
+    background:#991B1B;color:#fff;font-size:11px;font-weight:800;cursor:pointer}
+  .btn-liberar-risco:hover{background:#7F1D1D}
 </style>
 
 <div class="header-pedidos">
@@ -172,6 +179,20 @@
         <td>
           <div class="nome-cli">{{ p.nome or '—' }}</div>
           <div class="sub-cli">{{ p.email }}{% if p.telefone %} · {{ p.telefone }}{% endif %}</div>
+          {% if (p.risco_score or 0) >= 50 %}
+            <div class="risco-box">
+              <b>🚨 Risco {{ p.risco_score }}{% if p.risco_liberado_em %} — liberado{% endif %}</b>
+              <div>{{ p.risco_motivos }}</div>
+              {% if p.titular_nome %}<div>Titular do cartão: <b>{{ p.titular_nome }}</b>{% if p.titular_cpf %} · CPF {{ p.titular_cpf }}{% endif %}</div>{% endif %}
+              {% if p.ip_cliente %}<div>IP: {{ p.ip_cliente }}</div>{% endif %}
+              {% if not p.risco_liberado_em %}
+                <button type="button" class="btn-liberar-risco"
+                        onclick="liberarRisco({{ p.id }})">✅ Conferi, liberar envio</button>
+              {% endif %}
+            </div>
+          {% elif p.titular_nome and (p.risco_score or 0) > 0 %}
+            <div class="sub-cli">💳 titular: {{ p.titular_nome }}</div>
+          {% endif %}
         </td>
         <td>{{ p.cidade or '—' }}{% if p.uf %}/{{ p.uf }}{% endif %}</td>
         <td style="font-size:12px;color:#475569">{{ p.criado_em.strftime('%d/%m %H:%M') if p.criado_em else '—' }}</td>
@@ -267,6 +288,18 @@ const rs = v => 'R$ ' + (v||0).toFixed(2).replace('.', ',');
 const esc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; };
 
 function fecharPedido(){ document.getElementById('ped-bg').classList.remove('on'); }
+
+async function liberarRisco(pid){
+  if(!confirm('Liberar o pedido #' + pid + ' pra envio?\n\n'
+      + 'Só faça isso depois de confirmar com o cliente que o cartão é dele. '
+      + 'Depois de postado, um chargeback vira prejuízo.')) return;
+  try{
+    const r = await fetch('/api/admin/pedidos/' + pid + '/liberar-risco', {method:'POST'});
+    const d = await r.json();
+    if(d.erro){ alert('⚠️ ' + d.erro); return; }
+    location.reload();
+  }catch(e){ alert('Erro: ' + e); }
+}
 
 async function verPedido(pid){
   const bg = document.getElementById('ped-bg');

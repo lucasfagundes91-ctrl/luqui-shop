@@ -640,6 +640,29 @@ def init_db():
             criado_em TIMESTAMPTZ DEFAULT NOW()
         )""",
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_me_bloq ON me_bloqueios(service_id, cep_prefixo_k)",
+        # ── Antifraude ────────────────────────────────────────────────────
+        # O titular do cartao vinha no checkout transparente e era jogado
+        # fora depois de mandar pro Asaas. Sem isso nao da pra saber se quem
+        # pagou e quem comprou — que e exatamente a pergunta que aparece
+        # quando um chargeback chega 60 dias depois.
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS titular_nome VARCHAR(80)",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS titular_cpf VARCHAR(20)",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS ip_cliente VARCHAR(45)",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS risco_score INT DEFAULT 0",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS risco_motivos TEXT",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS risco_em TIMESTAMPTZ",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS risco_liberado_em TIMESTAMPTZ",
+        "CREATE INDEX IF NOT EXISTS idx_pedidos_ip ON pedidos(ip_cliente, criado_em DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_pedidos_risco ON pedidos(risco_score DESC, criado_em DESC)",
+        # Cache de reputacao de IP (RDAP). Sem cache, cada checkout pagaria
+        # uma consulta externa; com cache e ~1 por IP novo.
+        """CREATE TABLE IF NOT EXISTS ip_reputacao (
+            ip VARCHAR(45) PRIMARY KEY,
+            rir VARCHAR(20),
+            org VARCHAR(200),
+            datacenter BOOLEAN DEFAULT FALSE,
+            checado_em TIMESTAMPTZ DEFAULT NOW()
+        )""",
     ]
     for ddl in ddls:
         try:
@@ -6047,6 +6070,30 @@ def admin_pedidos():
                            filtro_status=filtro_status, busca=busca)
 
 
+@app.route('/api/admin/pedidos/<int:pid>/liberar-risco', methods=['POST'])
+@requer_admin
+def admin_liberar_risco(pid):
+    """Destrava um pedido retido pelo antifraude e gera a etiqueta que o
+    webhook segurou. Decisao humana explicita — nada libera sozinho."""
+    p = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one')
+    if not p:
+        return jsonify({'erro': 'Pedido não encontrado'}), 404
+    db_execute("UPDATE pedidos SET risco_liberado_em=NOW() WHERE id=%s", [pid])
+    log.warning("pedido %s liberado manualmente do antifraude (score=%s)",
+                pid, p.get('risco_score'))
+    gerou = False
+    try:
+        fsid = (p.get('melhorenvio_servico_id') or '').strip()
+        if (p.get('pago_em') and fsid
+                and not (p.get('melhorenvio_etiqueta_id') or '').strip()
+                and me_configurado() and me_token_atual()):
+            gerou, _ = _gerar_etiqueta_me(
+                pid, fsid, servico_nome=(p.get('frete_servico') or '')[:80])
+    except Exception as e:
+        log.error("etiqueta pos-liberacao pedido %s: %s", pid, e)
+    return jsonify({'ok': True, 'etiqueta_gerada': gerou})
+
+
 STATUS_TIMELINE = ['aguardando_pagto', 'pago', 'preparando', 'pronto_retirada', 'enviado', 'entregue']
 STATUS_LABELS = {
     'aguardando_pagto': 'Aguardando pagamento',
@@ -6844,6 +6891,225 @@ def enviar_email(para, assunto, html):
     return False
 
 
+# ─── Antifraude ───────────────────────────────────────────────────────────────
+# Motivacao (24/07/2026): 5 pedidos pra Brasilia sairam todos do mesmo punhado
+# de IPs adjacentes de datacenter (45.134.141.130/131/133 — CDN77/DataCamp),
+# com DUAS identidades diferentes (CPFs, nomes, e-mails e telefones distintos)
+# saindo do MESMO IP. Um deles foi pago no cartao e a etiqueta saiu sozinha no
+# webhook — mercadoria na rua antes de qualquer olho humano ver o pedido.
+#
+# O desenho aqui e deliberado: NADA disso recusa pagamento. Bloquear cartao por
+# score derruba venda legitima demais (mae pagando com o cartao dela, presente
+# comprado pelo marido). O que trava e o passo IRREVERSIVEL — a etiqueta
+# automatica. Pedido de risco alto fica pago e parado esperando o Lucas.
+RISCO_LIMITE = 50          # >= isso segura a etiqueta automatica
+RISCO_VALOR_ALTO = 800.0
+RISCO_VALOR_MUITO_ALTO = 1500.0
+
+# Nomes de rede que denunciam hospedagem/VPN em vez de banda larga residencial.
+_ORG_DATACENTER = (
+    'datacamp', 'cdn77', 'ovh', 'hetzner', 'digitalocean', 'linode', 'vultr',
+    'contabo', 'leaseweb', 'choopa', 'quadranet', 'psychz', 'm247', 'zenlayer',
+    'amazon', 'aws', 'google', 'microsoft', 'azure', 'oracle', 'alibaba',
+    'cloudflare', 'fastly', 'akamai', 'hostinger', 'godaddy', 'namecheap',
+    'nordvpn', 'surfshark', 'expressvpn', 'mullvad', 'privatelayer', 'packethub',
+    'hosting', 'datacenter', 'data center', 'cloud', 'server', 'colo',
+)
+
+
+def _so_digitos(v):
+    return ''.join(c for c in (v or '') if c.isdigit())
+
+
+def _nome_norm(v):
+    """Nome sem acento, sem pontuacao, caixa alta, espaco unico."""
+    v = unicodedata.normalize('NFKD', (v or '')).encode('ascii', 'ignore').decode()
+    v = re.sub(r'[^A-Za-z ]', ' ', v).upper()
+    return ' '.join(v.split())
+
+
+def nomes_batem(a, b):
+    """True se os dois nomes sao plausivelmente da mesma pessoa.
+
+    A fatura do cartao vem abreviada e as vezes sem nome do meio
+    ("MARIA A DA SILVA" x "Maria Aparecida da Silva"), entao comparar string
+    crua da falso positivo demais. Regra: primeiro nome igual E ultimo
+    sobrenome igual — o resto do miolo pode faltar.
+    """
+    pa, pb = _nome_norm(a).split(), _nome_norm(b).split()
+    if not pa or not pb:
+        return None                       # sem dado pra comparar
+    if pa == pb:
+        return True
+    # inicial abreviada: "MARIA A SILVA" casa com "MARIA APARECIDA SILVA"
+    def _casa(x, y):
+        return x == y or (len(x) == 1 and y.startswith(x)) or (len(y) == 1 and x.startswith(y))
+    if not _casa(pa[0], pb[0]):
+        return False
+    if len(pa) == 1 or len(pb) == 1:
+        return True                       # so o primeiro nome, nao da pra negar
+    return _casa(pa[-1], pb[-1])
+
+
+def ip_reputacao(ip):
+    """{'rir','org','datacenter'} do IP, com cache no banco.
+
+    Consulta RDAP (rdap.org redireciona pro RIR certo). Falha SEMPRE aberta:
+    se a consulta cair, o pedido segue como se o IP fosse limpo — antifraude
+    que derruba checkout custa mais caro que a fraude que ele pega.
+    """
+    ip = (ip or '').strip()
+    if not ip or ip.startswith(('10.', '192.168.', '127.')):
+        return None
+    try:
+        cache = db_execute("SELECT * FROM ip_reputacao WHERE ip=%s "
+                           "AND checado_em > NOW() - interval '30 days'",
+                           [ip], fetch='one')
+        if cache:
+            return {'rir': cache['rir'], 'org': cache['org'],
+                    'datacenter': cache['datacenter']}
+    except Exception:
+        return None
+    try:
+        r = requests.get(f'https://rdap.org/ip/{ip}',
+                         headers={'User-Agent': 'LuquiShop-antifraude/1.0'},
+                         timeout=4)
+        if r.status_code != 200:
+            return None
+        d = r.json() or {}
+        org = (d.get('name') or '')[:200]
+        for ent in (d.get('entities') or []):
+            vc = ent.get('vcardArray')
+            if not vc:
+                continue
+            for campo in vc[1]:
+                if campo[0] == 'fn' and campo[3]:
+                    org = f'{org} / {campo[3]}'[:200]
+                    break
+        port = (d.get('port43') or '')
+        rir = ('lacnic' if 'lacnic' in port else
+               'ripe' if 'ripe' in port else
+               'arin' if 'arin' in port else
+               'apnic' if 'apnic' in port else
+               'afrinic' if 'afrinic' in port else '')[:20]
+        alvo = org.lower()
+        dc = any(k in alvo for k in _ORG_DATACENTER)
+        db_execute("""INSERT INTO ip_reputacao (ip, rir, org, datacenter, checado_em)
+                      VALUES (%s,%s,%s,%s,NOW())
+                      ON CONFLICT (ip) DO UPDATE SET rir=EXCLUDED.rir,
+                        org=EXCLUDED.org, datacenter=EXCLUDED.datacenter,
+                        checado_em=NOW()""", [ip, rir, org, dc])
+        return {'rir': rir, 'org': org, 'datacenter': dc}
+    except Exception as e:
+        log.info("rdap %s falhou (segue): %s", ip, e)
+        return None
+
+
+def avaliar_risco_pedido(pid):
+    """Recalcula score+motivos do pedido e grava. Retorna (score, motivos)."""
+    try:
+        p = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one')
+        if not p:
+            return 0, []
+        score, motivos = 0, []
+        total = float(p.get('total') or 0)
+        cpf = _so_digitos(p.get('cpf'))
+        ip = (p.get('ip_cliente') or '').strip()
+
+        # 1) Titular do cartao x comprador — o sinal que o Lucas pediu.
+        if p.get('titular_cpf'):
+            if _so_digitos(p['titular_cpf']) != cpf:
+                score += 40
+                motivos.append('CPF do titular do cartão ≠ CPF do comprador')
+            bate = nomes_batem(p.get('titular_nome'), p.get('nome'))
+            if bate is False:
+                score += 40
+                motivos.append(f"Titular do cartão \"{p['titular_nome']}\" "
+                               f"≠ comprador \"{p['nome']}\"")
+
+        # 2) Mesmo IP, outra identidade. Foi assim que os 5 pedidos de
+        #    Brasilia se denunciaram: dois CPFs saindo do mesmo endereco.
+        if ip:
+            try:
+                outros = db_execute(
+                    "SELECT DISTINCT cpf, nome FROM pedidos "
+                    "WHERE ip_cliente=%s AND id<>%s AND cpf IS NOT NULL",
+                    [ip, pid], fetch='all') or []
+                cpfs = {_so_digitos(o['cpf']) for o in outros} - {cpf, ''}
+                if cpfs:
+                    score += 35
+                    motivos.append(f'Mesmo IP já usou outro(s) CPF(s): '
+                                   f'{", ".join(sorted(cpfs))[:80]}')
+            except Exception:
+                pass
+            rep = ip_reputacao(ip)
+            if rep:
+                if rep.get('datacenter'):
+                    score += 30
+                    motivos.append(f'IP de datacenter/VPN ({rep.get("org") or "?"})')
+                elif rep.get('rir') and rep['rir'] != 'lacnic' \
+                        and (p.get('uf') or '') != '':
+                    score += 20
+                    motivos.append(f'IP registrado fora da América Latina '
+                                   f'({rep["rir"].upper()}) com entrega no Brasil')
+
+        # 3) Perfil da compra. Sozinho nao condena ninguem — soma pouco.
+        if total >= RISCO_VALOR_MUITO_ALTO:
+            score += 25
+            motivos.append(f'Valor alto (R$ {total:,.2f})'.replace(',', '.'))
+        elif total >= RISCO_VALOR_ALTO:
+            score += 15
+            motivos.append(f'Valor acima da média (R$ {total:,.2f})'.replace(',', '.'))
+        if p.get('forma_pagto') == 'cartao' and int(p.get('parcelas') or 1) >= 6:
+            score += 10
+            motivos.append(f'{p["parcelas"]}x no cartão')
+        if not p.get('cliente_id'):
+            score += 10
+            motivos.append('Checkout sem conta (visitante)')
+
+        # 4) Mesmo CPF trocando telefone/e-mail entre pedidos.
+        try:
+            iguais = db_execute(
+                "SELECT DISTINCT telefone, email FROM pedidos "
+                "WHERE cpf=%s AND id<>%s", [p.get('cpf'), pid], fetch='all') or []
+            if any(_so_digitos(o['telefone']) != _so_digitos(p.get('telefone'))
+                   for o in iguais):
+                score += 15
+                motivos.append('Mesmo CPF já comprou com outro telefone')
+        except Exception:
+            pass
+
+        db_execute("""UPDATE pedidos SET risco_score=%s, risco_motivos=%s,
+                      risco_em=NOW() WHERE id=%s""",
+                   [score, ' | '.join(motivos) or None, pid])
+        return score, motivos
+    except Exception as e:
+        log.error("avaliar_risco pedido %s: %s", pid, e)
+        return 0, []
+
+
+def alertar_risco(pid, score, motivos, contexto=''):
+    """Avisa o Lucas no WhatsApp. Nunca levanta excecao pro fluxo de venda."""
+    if score < RISCO_LIMITE:
+        return
+    try:
+        p = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one') or {}
+        enviar_whatsapp(
+            ADMIN_WHATSAPP,
+            f"🚨 *Pedido #{pid} com risco alto* ({score} pts){contexto}\n\n"
+            f"Comprador: {p.get('nome')} — CPF {p.get('cpf')}\n"
+            f"Titular do cartão: {p.get('titular_nome') or '(não informado)'}\n"
+            f"Total: *R$ {p.get('total')}* em {p.get('parcelas')}x "
+            f"({p.get('forma_pagto')})\n"
+            f"Entrega: {p.get('cidade')}/{p.get('uf')}\n"
+            f"IP: {p.get('ip_cliente') or '—'}\n\n"
+            f"*Por quê:*\n" + '\n'.join(f'• {m}' for m in motivos) + "\n\n"
+            f"⛔ A etiqueta automática NÃO vai sair. Confere e libera em "
+            f"https://www.luquibrinquedos.com.br/admin/pedidos")
+    except Exception as e:
+        log.error("alerta risco pedido %s: %s", pid, e)
+
+
 # ─── Checkout: finalizar pedido ───────────────────────────────────────────────
 @app.route('/api/checkout/finalizar', methods=['POST'])
 def checkout_finalizar():
@@ -7021,8 +7287,9 @@ def checkout_finalizar():
            forma_pagto, parcelas, frete_servico, frete_prazo, observacao,
            cupom_codigo, cupom_desconto, embrulho_presente, embrulho_mensagem,
            embrulho_tipo, juros_valor, entrega_agendada,
-           pontos_resgatados, desconto_pontos, melhorenvio_servico_id, token)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+           pontos_resgatados, desconto_pontos, melhorenvio_servico_id, token,
+           ip_cliente)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         RETURNING id""",
         [cli['id'] if cli else None,
          d['email'].strip().lower(), d['nome'].strip(), d['telefone'].strip(),
@@ -7041,7 +7308,7 @@ def checkout_finalizar():
          cupom_codigo or None, cupom_desconto,
          embrulho, embrulho_msg, embrulho_tipo, juros_valor, entrega_agendada,
          pontos_resgatados, desconto_pontos,
-         fsid or None, ped_token],
+         fsid or None, ped_token, _rl_ip()],
         fetch='one')
     pid = ped['id']
     # Atualiza dados do cliente_site logado pra auto-preencher no proximo
@@ -7094,6 +7361,15 @@ def checkout_finalizar():
                            [d['nome'].strip()[:120], pid, int(lista_item_id)])
             except Exception as e:
                 log.error(f"reservar lista item {lista_item_id}: {e}")
+    # Antifraude: pontua o pedido assim que ele existe (IP, identidade repetida,
+    # valor, parcelas). Roda ANTES da cobrança so pra o Lucas ser avisado de
+    # tentativa mesmo quando o pagamento nem chega a acontecer — foi o caso dos
+    # pedidos #38/#39. Nao interrompe o checkout em hipotese nenhuma.
+    try:
+        _sc, _mt = avaliar_risco_pedido(pid)
+        alertar_risco(pid, _sc, _mt, contexto=' — pedido criado, ainda não pago')
+    except Exception as e:
+        log.error("antifraude checkout pedido %s: %s", pid, e)
     # Cria customer + cobrança no Asaas
     # Debita pontos no PDV (se foi usado). Se falhar, desfaz o desconto
     # pra nao dar credito de graca pro cliente.
@@ -7230,6 +7506,19 @@ def pedido_pagar_cartao(pid):
     }
     remote_ip = (request.headers.get('X-Forwarded-For')
                  or request.remote_addr or '0.0.0.0').split(',')[0].strip()
+
+    # Guarda QUEM pagou antes de mandar pro gateway. O numero do cartao nao
+    # e persistido (e nem pode ser), mas nome e CPF do titular sim: sem eles,
+    # quando o chargeback chega nao existe como provar que o comprador e o
+    # dono do cartao — nem como perceber, na hora, que nao e.
+    try:
+        db_execute("""UPDATE pedidos SET titular_nome=%s, titular_cpf=%s,
+                      ip_cliente=COALESCE(ip_cliente,%s) WHERE id=%s""",
+                   [holder_nome, holder_cpf, _rl_ip(), pid])
+        sc, mt = avaliar_risco_pedido(pid)
+        alertar_risco(pid, sc, mt, contexto=' — cartão sendo processado agora')
+    except Exception as e:
+        log.error("antifraude cartao pedido %s: %s", pid, e)
 
     code, resp = asaas_criar_cobranca_cartao(
         customer_id, p['total'],
@@ -7718,10 +8007,25 @@ Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp
         # Pre-condicoes: tem service_id (cliente escolheu PAC/SEDEX/etc no
         # checkout) e nao tem etiqueta ainda. Tudo em try/except — falha aqui
         # nao bloqueia o resto (cliente ja recebe email/WhatsApp do pedido).
+        # Antifraude: reavalia AGORA (o titular do cartao so existe depois do
+        # pagamento) e, se o pedido for de risco alto, a etiqueta automatica
+        # NAO sai. Esse e o unico passo irreversivel do fluxo — depois que a
+        # mercadoria e postada, chargeback vira prejuizo puro.
+        risco_sc = 0
+        try:
+            risco_sc, risco_mt = avaliar_risco_pedido(pid)
+            if risco_sc >= RISCO_LIMITE and not p.get('risco_liberado_em'):
+                alertar_risco(pid, risco_sc, risco_mt,
+                              contexto=' — *PAGO*, retido antes de postar')
+        except Exception as e:
+            log.error("antifraude webhook pedido %s: %s", pid, e)
         try:
             fsid = (p.get('melhorenvio_servico_id') or '').strip()
             etiq_ja = (p.get('melhorenvio_etiqueta_id') or '').strip()
-            if fsid and not etiq_ja and me_configurado() and me_token_atual():
+            if risco_sc >= RISCO_LIMITE and not p.get('risco_liberado_em'):
+                log.warning("pedido %s retido por antifraude (score=%s) — "
+                            "etiqueta automatica nao gerada", pid, risco_sc)
+            elif fsid and not etiq_ja and me_configurado() and me_token_atual():
                 ok_et, res_et = _gerar_etiqueta_me(
                     pid, fsid, servico_nome=(p.get('frete_servico') or '')[:80])
                 if ok_et:
