@@ -1803,13 +1803,16 @@ def pdv_get(path, params=None, ttl=60):
 _FILTROS_VALIDOS = ('departamento', 'grupo', 'subgrupo', 'marca', 'faixa_etaria', 'destaque')
 
 
-def listar_produtos(busca=None, categoria=None, limite=24, offset=0, **filtros):
+def listar_produtos(busca=None, categoria=None, limite=24, offset=0, ordem=None,
+                    **filtros):
     """`categoria` ainda é aceito como alias de `departamento` pra compat.
     Filtros extras (departamento/grupo/subgrupo/marca/faixa_etaria) podem ser
     string única ou lista — viram CSV pro PDV."""
     p = {'limite': limite, 'offset': offset}
     if busca:
         p['busca'] = busca
+    if ordem:
+        p['ordem'] = ordem
     if categoria:
         p['categoria'] = categoria
     for k in _FILTROS_VALIDOS:
@@ -3567,7 +3570,9 @@ def __version():
 
 @app.route('/')
 def home():
-    produtos, _ = listar_produtos(limite=12)
+    # ordem=recentes: a vitrine de baixo mostrava sempre os mesmos produtos
+    # do começo do alfabeto (ABC, A CASA...). Agora é o que chegou por último.
+    produtos, _ = listar_produtos(limite=12, ordem='recentes')
     categorias = listar_categorias()
     banners = db_execute(
         "SELECT * FROM banners WHERE ativo ORDER BY ordem", fetch='all') or []
@@ -3644,13 +3649,24 @@ def buscar():
                            carrinho=carrinho_ler())
 
 
-def _pagina_destaque(tag, titulo):
-    """Renderiza a pagina /novidades, /mais-vendidos, /liquida-luqui usando
-    o template de busca, filtrando produtos com a flag de destaque no PDV."""
+def _pagina_destaque(tag, titulo, fallback=None):
+    """Renderiza /novidades e /mais-vendidos usando o template de busca.
+    A flag de destaque no PDV é opcional: se ninguém marcou produto nenhum,
+    a página cairia vazia — então `fallback` monta a lista com dado real
+    (cadastro mais recente / ranking de venda) em vez de mostrar nada."""
     extras = filtros_da_querystring(request)
     # garante que o destaque sempre fica fixado mesmo que o usuario clique filtros
     extras['destaque'] = [tag]
     produtos, total = listar_produtos(limite=48, **extras)
+    if not produtos and fallback:
+        extras.pop('destaque', None)
+        if fallback == 'vendidos' and not extras:
+            produtos = produtos_mais_vendidos(24)
+            total = len(produtos)
+        else:
+            produtos, total = listar_produtos(
+                limite=48, ordem='recentes' if fallback == 'recentes' else None,
+                **extras)
     return render_template('busca.html',
                            produtos=produtos, total=total,
                            termo=titulo, termo_q='',
@@ -3678,12 +3694,13 @@ def pag_todos_produtos():
 
 @app.route('/novidades')
 def pag_novidades():
-    return _pagina_destaque('novidade', '✨ Novidades')
+    return _pagina_destaque('novidade', '✨ Novidades', fallback='recentes')
 
 
 @app.route('/mais-vendidos')
 def pag_mais_vendidos():
-    return _pagina_destaque('mais_vendido', '⭐ Mais vendidos')
+    return _pagina_destaque('mais_vendido', '⭐ Mais vendidos',
+                            fallback='vendidos')
 
 
 @app.route('/liquida-luqui')

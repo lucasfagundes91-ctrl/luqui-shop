@@ -114,18 +114,6 @@
 </section>
 {% endif %}
 
-<!-- PRODUTOS EM DESTAQUE -->
-<div class="secao"><h2>Produtos em destaque</h2></div>
-<section class="produtos">
-  {% for p in produtos %}
-    {{ card(p) }}
-  {% else %}
-    <div style="grid-column:1/-1;padding:60px;text-align:center;color:var(--mut)">
-      Conectando ao catálogo do PDV Pro... configure <code>PDVPRO_API_KEY</code>.
-    </div>
-  {% endfor %}
-</section>
-
 {% if mais_vendidos %}
 <!-- MAIS VENDIDOS — ranking real de pedidos dos últimos 90 dias -->
 <div class="secao">
@@ -163,6 +151,23 @@
   {% endfor %}
 </section>
 {% endif %}
+
+<!-- PRODUTOS EM DESTAQUE — fica por último: as vitrines com dado real
+     (venda, visita, busca) vendem mais do que uma lista alfabética. -->
+<div class="secao">
+  <h2>✨ Chegou faz pouco</h2>
+  <div class="sub">Os últimos brinquedos que entraram na loja</div>
+  <a class="ver-todos" href="/novidades">ver todas as novidades →</a>
+</div>
+<section class="produtos">
+  {% for p in produtos %}
+    {{ card(p) }}
+  {% else %}
+    <div style="grid-column:1/-1;padding:60px;text-align:center;color:var(--mut)">
+      Conectando ao catálogo do PDV Pro... configure <code>PDVPRO_API_KEY</code>.
+    </div>
+  {% endfor %}
+</section>
 
 <!-- INSTAGRAM -->
 <section style="max-width:1200px;margin:30px auto;padding:0 16px">
