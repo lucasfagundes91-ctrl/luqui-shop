@@ -135,6 +135,7 @@ if(typeof gtag !== 'undefined'){
                    style="width:100%;padding:14px;border:1px solid var(--linha);border-radius:10px;font-size:14px;font-family:monospace">
           </div>
           <div id="cc-erro" style="display:none;background:#FEE2E2;color:#991B1B;padding:12px;border-radius:10px;font-size:13px;font-weight:600"></div>
+          <div id="cc-3ds" style="display:none;background:#EFF6FF;color:#1E40AF;padding:12px;border-radius:10px;font-size:13px;font-weight:600"></div>
           <button id="cc-btn" type="submit" class="btn btn-amarelo btn-block"
                   style="padding:16px;font-size:15px;font-weight:700">
             🔒 Pagar {{ rs(p.total) }}{% if p.parcelas and p.parcelas > 1 %} em {{ p.parcelas }}x{% endif %}
@@ -202,7 +203,30 @@ if(typeof gtag !== 'undefined'){
             // confirmar; polling existente detecta a aprovação.
             if(d.status === '3ds' && d.redirect_3ds){
               btn.innerHTML = '🔐 Confirme com seu banco…';
-              window.open(d.redirect_3ds, '_blank', 'width=420,height=620');
+              // O window.open roda DEPOIS do await, quando o navegador ja
+              // descartou o gesto do usuario: Safari e Chrome no celular
+              // bloqueiam a popup. Sem o link visivel abaixo o cliente ficava
+              // parado nessa mensagem, sem nada abrir e sem como pagar.
+              let janela = null;
+              try {
+                janela = window.open(d.redirect_3ds, '_blank', 'width=420,height=620');
+              } catch(e){ janela = null; }
+              const bloqueada = !janela || janela.closed
+                                || typeof janela.closed === 'undefined';
+              const box = document.getElementById('cc-3ds');
+              box.textContent = bloqueada
+                ? (d.mensagem || 'Confirme com seu banco para autorizar a compra')
+                  + ' — seu navegador bloqueou a janela, toque no botão abaixo:'
+                : 'Abrimos a confirmação do seu banco numa nova janela. Fechou sem querer?';
+              const a3 = document.createElement('a');
+              a3.href = d.redirect_3ds;
+              a3.target = '_blank';
+              a3.rel = 'noopener';
+              a3.className = 'btn btn-amarelo btn-block';
+              a3.style.cssText = 'margin-top:10px;padding:14px;font-weight:700';
+              a3.textContent = '🔐 Confirmar com meu banco';
+              box.appendChild(a3);
+              box.style.display = 'block';
               return;
             }
             // pago / análise — recarrega
