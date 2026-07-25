@@ -659,6 +659,9 @@ def init_db():
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS risco_motivos TEXT",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS risco_em TIMESTAMPTZ",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS risco_liberado_em TIMESTAMPTZ",
+        # Contador de tentativas de cartão POR PEDIDO. Em 24/07 o pedido #48
+        # levou 67 tentativas em 5min30 (uma a cada 5s) — script, não pessoa.
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS tentativas_cartao INT DEFAULT 0",
         "CREATE INDEX IF NOT EXISTS idx_pedidos_ip ON pedidos(ip_cliente, criado_em DESC)",
         "CREATE INDEX IF NOT EXISTS idx_pedidos_risco ON pedidos(risco_score DESC, criado_em DESC)",
         # Cache de reputacao de IP (RDAP). Sem cache, cada checkout pagaria
@@ -6936,6 +6939,7 @@ def enviar_email(para, assunto, html):
 # comprado pelo marido). O que trava e o passo IRREVERSIVEL — a etiqueta
 # automatica. Pedido de risco alto fica pago e parado esperando o Lucas.
 RISCO_LIMITE = 50          # >= isso segura a etiqueta automatica
+MAX_TENTATIVAS_CARTAO = 5  # cartoes distintos por pedido antes de travar
 RISCO_VALOR_ALTO = 800.0
 RISCO_VALOR_MUITO_ALTO = 1500.0
 
@@ -7721,6 +7725,37 @@ def pedido_pagar_cartao(pid):
     if p['status'] != 'aguardando_pagto':
         return jsonify({'erro': f'Pedido com status "{p["status"]}" — '
                                  'não dá pra reprocessar'}), 400
+
+    # ── Freio de teste de cartão ──────────────────────────────────────────
+    # Recusa NÃO muda o status do pedido, então o guard acima não impedia
+    # nada: dava pra reaproveitar o mesmo pedido e mandar cartão atrás de
+    # cartão pra sempre. Em 24/07 o pedido #48 recebeu 67 tentativas em
+    # 5min30. Isso não é prejuízo direto, mas é o excesso de autorização
+    # negada que faz adquirente marcar (e derrubar) conta de lojista.
+    # Cliente legítimo erra o cartão 2 ou 3 vezes, não 67.
+    tentativas = int(p.get('tentativas_cartao') or 0)
+    if tentativas >= MAX_TENTATIVAS_CARTAO:
+        log.warning("pedido %s bloqueado: %s tentativas de cartão", pid, tentativas)
+        return jsonify({
+            'erro': 'Muitas tentativas de pagamento neste pedido. Fale com a '
+                    'loja pelo WhatsApp que a gente finaliza pra você.',
+            'whatsapp': cfg('whatsapp_loja', WHATSAPP_LOJA)}), 429
+    if not rate_limit_ok('cartao_ip', _rl_ip(), 12, 900):
+        log.warning("rate limit de cartão por IP estourado (pedido %s)", pid)
+        return jsonify({
+            'erro': 'Muitas tentativas de pagamento. Aguarde alguns minutos.'}), 429
+    db_execute("UPDATE pedidos SET tentativas_cartao=COALESCE(tentativas_cartao,0)+1 "
+               "WHERE id=%s", [pid])
+    if tentativas + 1 == MAX_TENTATIVAS_CARTAO:
+        try:
+            enviar_whatsapp(ADMIN_WHATSAPP,
+                f"🃏 *Pedido #{pid} travado por tentativas de cartão*\n\n"
+                f"{MAX_TENTATIVAS_CARTAO} cartões diferentes tentados no mesmo "
+                f"pedido — cara de teste de cartão roubado.\n"
+                f"Comprador: {p.get('nome')}\nIP: {p.get('ip_cliente') or '—'}\n\n"
+                f"Não precisa fazer nada: o pedido não aceita mais cartão.")
+        except Exception:
+            pass
 
     d = request.get_json(silent=True) or {}
     num = ''.join(c for c in (d.get('numero') or '') if c.isdigit())
