@@ -356,6 +356,31 @@ gtag('config', '{{ GOOGLE_TAG_ID }}');
 </script>
 {% endif %}
 
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<script>
+/* Anexa o token de CSRF em toda chamada que muda estado. Feito num wrapper do
+   fetch em vez de nos ~27 pontos de chamada: um call site esquecido vira um
+   botao quebrado em producao, e o wrapper nao tem como esquecer.
+   So mexe em requisicao MESMA ORIGEM e nao-GET; requisicao pra fora
+   (viacep, etc) passa intacta. */
+(function(){
+  var tok=(document.querySelector('meta[name="csrf-token"]')||{}).content||'';
+  if(!tok||!window.fetch) return;
+  var orig=window.fetch;
+  window.fetch=function(entrada,init){
+    init=init||{};
+    var metodo=(init.method||(typeof entrada==='object'&&entrada&&entrada.method)||'GET').toUpperCase();
+    var url=(typeof entrada==='string')?entrada:(entrada&&entrada.url)||'';
+    var mesmaOrigem=!/^https?:\/\//i.test(url)||url.indexOf(location.origin)===0;
+    if(mesmaOrigem&&metodo!=='GET'&&metodo!=='HEAD'){
+      var h=new Headers(init.headers||(typeof entrada==='object'&&entrada?entrada.headers:null)||{});
+      if(!h.has('X-CSRF-Token')) h.set('X-CSRF-Token',tok);
+      init.headers=h;
+    }
+    return orig(entrada,init);
+  };
+})();
+</script>
 </head>
 <body>
 

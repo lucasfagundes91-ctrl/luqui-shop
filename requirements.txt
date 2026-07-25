@@ -4,3 +4,4 @@ psycopg2-binary==2.9.9
 requests==2.32.3
 werkzeug==3.0.6
 pillow==11.0.0
+bleach[css]==6.2.0

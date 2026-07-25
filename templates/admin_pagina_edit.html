@@ -11,6 +11,7 @@
   </div>
   <form method="post" action="/admin/paginas/{{ slug }}/restaurar"
         onsubmit="return confirm('Restaurar o texto padrão e descartar o que você editou?')">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <button type="submit" style="background:#fff;border:1px solid #E5E7EB;color:#64748B;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px">
       ↺ Restaurar texto padrão
     </button>
@@ -24,6 +25,7 @@
 {% endif %}
 
 <form method="post" style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:20px">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
   <div style="margin-bottom:16px">
     <label style="display:block;font-weight:600;margin-bottom:6px;font-size:13px">Título da página</label>
     <input type="text" name="titulo" value="{{ titulo }}" required

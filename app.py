@@ -5937,7 +5937,7 @@ def admin_pagina_edit(slug):
     msg = None
     if request.method == 'POST':
         novo_titulo = (request.form.get('titulo') or '').strip()
-        novo_conteudo = (request.form.get('conteudo') or '').strip()
+        novo_conteudo = sanitizar_html((request.form.get('conteudo') or '').strip())
         if not novo_titulo or not novo_conteudo:
             msg = ('erro', 'Preencha título e conteúdo')
         else:
@@ -6351,6 +6351,8 @@ def admin_banners():
         bid = request.form.get('id')
         d = {k: (request.form.get(k) or '').strip() for k in
              ('titulo', 'subtitulo', 'imagem_url', 'link', 'cta_texto', 'cor_fundo')}
+        # subtitulo sai com |safe no hero da home — sanitiza antes de gravar
+        d['subtitulo'] = sanitizar_html(d['subtitulo'])
         ordem = int(request.form.get('ordem') or 0)
         ativo = request.form.get('ativo') == 'on'
         if bid:
@@ -6946,6 +6948,115 @@ _ORG_DATACENTER = (
     'nordvpn', 'surfshark', 'expressvpn', 'mullvad', 'privatelayer', 'packethub',
     'hosting', 'datacenter', 'data center', 'cloud', 'server', 'colo',
 )
+
+
+# ─── Sanitização de HTML do CMS ───────────────────────────────────────────────
+# As páginas do CMS e o subtítulo do banner são renderizados com `|safe`, ou
+# seja, HTML cru direto na loja. Só admin escreve ali — mas "só admin" deixou de
+# ser garantia forte quando se soma a falta de CSRF (corrigida logo abaixo) e um
+# painel que até ontem aceitava tentativa de senha infinita. Se um <script>
+# entrar nessas tabelas, ele roda na página de TODO cliente.
+_TAGS_OK = ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'ul', 'ol', 'li', 'a',
+            'h1', 'h2', 'h3', 'h4', 'blockquote', 'hr', 'span', 'div',
+            'table', 'thead', 'tbody', 'tr', 'th', 'td', 'small', 'img']
+_ATTRS_OK = {'a': ['href', 'title', 'target', 'rel'],
+             'img': ['src', 'alt', 'title', 'width', 'height'],
+             '*': ['style']}
+_PROTOCOLOS_OK = ['http', 'https', 'mailto', 'tel']
+
+
+def sanitizar_html(bruto):
+    """Deixa passar formatação, remove script/onclick/javascript:.
+
+    Se o bleach faltar (deploy quebrado, ambiente sem a lib), NÃO devolve o
+    HTML cru — escapa tudo. Falhar exibindo `<b>` literal é feio; falhar
+    servindo <script> de terceiro na loja inteira é incidente.
+    """
+    if not bruto:
+        return bruto
+    try:
+        import bleach
+        # A partir do bleach 5 o `style` só sobrevive com um CSSSanitizer
+        # (pacote bleach[css]). Sem ele, o bleach descarta o atributo inteiro e
+        # as páginas que o Lucas já escreveu perderiam a formatação na primeira
+        # vez que fossem salvas de novo.
+        css = None
+        try:
+            from bleach.css_sanitizer import CSSSanitizer
+            css = CSSSanitizer(allowed_css_properties=[
+                'color', 'background-color', 'font-size', 'font-weight',
+                'font-style', 'text-align', 'text-decoration', 'line-height',
+                'margin', 'margin-top', 'margin-bottom', 'padding',
+                'border', 'border-radius', 'width', 'max-width', 'height',
+                'display', 'float', 'vertical-align'])
+        except ImportError:
+            log.warning("bleach[css] ausente — style= será removido do CMS")
+        return bleach.clean(bruto, tags=_TAGS_OK, attributes=_ATTRS_OK,
+                            protocols=_PROTOCOLOS_OK, strip=True,
+                            css_sanitizer=css)
+    except ImportError:
+        log.error("bleach ausente — escapando HTML do CMS por precaução")
+        from markupsafe import escape
+        return str(escape(bruto))
+
+
+# ─── CSRF ─────────────────────────────────────────────────────────────────────
+# Sem isso, qualquer site que o Lucas visitasse logado no painel podia disparar
+# POST autenticado no lugar dele — criar cupom, reescrever página, liberar
+# pedido retido pelo antifraude. Mesma coisa pro cliente logado: trocar senha
+# ou cancelar assinatura.
+#
+# A lista é de ADESÃO, não de exclusão. Fluxo de venda (carrinho, checkout,
+# pagar-cartao) fica FORA de propósito: CSRF ali não dá nada pro atacante (ele
+# faria a vítima criar um pedido pra si mesma) e um engano na validação
+# derrubaria faturamento. Webhook, /cron e /api/integracao também ficam fora —
+# são chamadas servidor-a-servidor, autenticadas por token/chave e sem cookie,
+# então CSRF não se aplica.
+_CSRF_PREFIXOS = (
+    '/admin/', '/api/admin/',
+    '/api/clube/',                 # pausar, cancelar, trocar plano
+    '/api/minha-conta/',           # trocar senha — o clássico de account takeover
+    '/api/wishlist/', '/api/listas/', '/minhas-listas/',
+)
+# /admin/login fica de fora: o formulário é servido antes de existir sessão, e
+# CSRF de login é ameaça bem menor que quebrar a porta de entrada do painel.
+_CSRF_ISENTOS = ('/admin/login',)
+
+
+def csrf_token():
+    """Token por sessão. Criado na primeira renderização que precisar dele."""
+    tok = session.get('_csrf')
+    if not tok:
+        tok = secrets.token_urlsafe(32)
+        session['_csrf'] = tok
+    return tok
+
+
+app.jinja_env.globals['csrf_token'] = csrf_token
+
+
+@app.before_request
+def _valida_csrf():
+    if request.method not in ('POST', 'PUT', 'PATCH', 'DELETE'):
+        return None
+    caminho = request.path
+    if caminho in _CSRF_ISENTOS:
+        return None
+    if not caminho.startswith(_CSRF_PREFIXOS):
+        return None
+    esperado = session.get('_csrf') or ''
+    recebido = (request.headers.get('X-CSRF-Token')
+                or request.form.get('_csrf')
+                or (request.get_json(silent=True) or {}).get('_csrf')
+                or '')
+    if esperado and secrets.compare_digest(str(recebido), str(esperado)):
+        return None
+    log.warning("CSRF recusado em %s (origin=%s)", caminho,
+                request.headers.get('Origin') or request.headers.get('Referer'))
+    if caminho.startswith('/api/'):
+        return jsonify({'erro': 'Sessão expirada. Recarregue a página.'}), 403
+    return ('Sessão expirada. Recarregue a página e tente de novo.', 403,
+            {'Content-Type': 'text/plain; charset=utf-8'})
 
 
 @app.after_request

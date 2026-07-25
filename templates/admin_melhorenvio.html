@@ -91,6 +91,7 @@
         {% endif %}
         <form action="/admin/melhorenvio/desconectar" method="post"
               onsubmit="return confirm('Desconectar Melhor Envio? Vai precisar reautorizar pra emitir etiquetas.')">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
           <button type="submit" class="btn-desconectar">Desconectar</button>
         </form>
       </div>
@@ -110,6 +111,7 @@
 {% endif %}
 
 <form method="post">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
 
 <!-- Remetente -->
 <div class="form-card">

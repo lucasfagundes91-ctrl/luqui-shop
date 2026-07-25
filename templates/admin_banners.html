@@ -73,6 +73,7 @@
       <p>Faltam <b>{{ 5 - banners|length }}</b> banner{{ 's' if (5 - banners|length) != 1 else '' }} pra completar o set padrão (PIX 3%, parcele 12x, Retire na loja, Clube Luqui, Novidades).</p>
     </div>
     <form method="post" action="/admin/banners/seed">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
       <button type="submit">✨ Inserir banners padrão</button>
     </form>
   </div>
@@ -81,6 +82,7 @@
 <div class="form-card">
   <h3>{{ '✏️ Editando: ' ~ ed.titulo if ed else '➕ Criar novo banner' }}</h3>
   <form method="post">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     {% if ed %}<input type="hidden" name="id" value="{{ ed.id }}">{% endif %}
     <div class="form-grid">
       <div class="form-field full-width">
@@ -146,6 +148,7 @@
         <div>
           <a href="/admin/banners?edit={{ b.id }}" class="btn-mini editar">✏️ Editar</a>
           <form method="post" action="/admin/banners/{{ b.id }}/excluir" style="display:inline" onsubmit="return confirm('Excluir o banner &quot;{{ b.titulo }}&quot;?')">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
             <button class="btn-mini excluir">🗑️</button>
           </form>
         </div>

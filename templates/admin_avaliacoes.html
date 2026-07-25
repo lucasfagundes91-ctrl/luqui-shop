@@ -74,10 +74,12 @@
         <div style="display:flex;gap:6px">
           {% if not a.aprovado %}
             <form method="post" action="/admin/avaliacoes/{{ a.id }}/aprovar" style="display:inline">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
               <button class="btn-mini btn-aprovar">✓ Aprovar</button>
             </form>
           {% endif %}
           <form method="post" action="/admin/avaliacoes/{{ a.id }}/excluir" style="display:inline" onsubmit="return confirm('Excluir essa avaliação?')">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
             <button class="btn-mini btn-excluir">🗑️ Excluir</button>
           </form>
         </div>

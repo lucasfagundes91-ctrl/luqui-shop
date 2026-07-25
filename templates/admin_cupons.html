@@ -59,6 +59,7 @@
 <div class="form-card">
   <h3>{{ '✏️ Editando: ' ~ ed.codigo if ed else '➕ Criar novo cupom' }}</h3>
   <form method="post">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     {% if ed %}<input type="hidden" name="id" value="{{ ed.id }}">{% endif %}
     <div class="form-grid">
       <div class="form-field">
@@ -131,6 +132,7 @@
         <td>
           <a href="/admin/cupons?edit={{ c.id }}" class="btn-mini editar">✏️ Editar</a>
           <form method="post" action="/admin/cupons/{{ c.id }}/excluir" style="display:inline" onsubmit="return confirm('Excluir o cupom {{ c.codigo }}?')">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
             <button class="btn-mini excluir">🗑️ Excluir</button>
           </form>
         </td>
