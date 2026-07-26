@@ -6951,6 +6951,11 @@ _ORG_DATACENTER = (
     'cloudflare', 'fastly', 'akamai', 'hostinger', 'godaddy', 'namecheap',
     'nordvpn', 'surfshark', 'expressvpn', 'mullvad', 'privatelayer', 'packethub',
     'hosting', 'datacenter', 'data center', 'cloud', 'server', 'colo',
+    # O IP do pedido #52 (149.22.86.243) e da CDNEXT, Lisboa — hospedagem, mas
+    # nenhuma palavra acima batia. Lista de nome de empresa envelhece sozinha;
+    # por isso o sinal de RIR fora da LatAm existe como rede de seguranca.
+    'cdnext', 'cdn', 'telecom italia sparkle', 'g-core', 'stark industries',
+    'flokinet', 'bitlaunch', 'ipxo', 'hivelocity', 'servers.com',
 )
 
 
@@ -7183,12 +7188,19 @@ def ip_reputacao(ip):
                 if campo[0] == 'fn' and campo[3]:
                     org = f'{org} / {campo[3]}'[:200]
                     break
-        port = (d.get('port43') or '')
-        rir = ('lacnic' if 'lacnic' in port else
-               'ripe' if 'ripe' in port else
-               'arin' if 'arin' in port else
-               'apnic' if 'apnic' in port else
-               'afrinic' if 'afrinic' in port else '')[:20]
+        # De onde sai o RIR: `port43` é o caminho normal, mas nem toda resposta
+        # traz (o 149.22.86.243 veio sem, e o IP ficou sem classificação
+        # nenhuma). Os links `self` sempre apontam pro RDAP do RIR — servem de
+        # segunda fonte.
+        pistas = (d.get('port43') or '')
+        for lk in (d.get('links') or []):
+            pistas += ' ' + str(lk.get('href') or '')
+        pistas = pistas.lower()
+        rir = ('lacnic' if 'lacnic' in pistas else
+               'ripe' if 'ripe' in pistas else
+               'arin' if 'arin' in pistas else
+               'apnic' if 'apnic' in pistas else
+               'afrinic' if 'afrinic' in pistas else '')[:20]
         alvo = org.lower()
         dc = any(k in alvo for k in _ORG_DATACENTER)
         db_execute("""INSERT INTO ip_reputacao (ip, rir, org, datacenter, checado_em)
@@ -7284,6 +7296,31 @@ def avaliar_risco_pedido(pid):
         if not p.get('cliente_id'):
             score += 10
             motivos.append('Checkout sem conta (visitante)')
+
+        # 2.5) MESMO ENDEREÇO, outro CPF. O sinal mais forte de todos e o que
+        # faltava: em 25/07 o pedido #52 ("THIAGO CORDERO PIVOTTO", CPF, e-mail,
+        # telefone e IP novos) foi entregue no MESMO endereço dos #38/#39
+        # ("LEONARDO FELIPE FERREIRA GONCALVES") — e pediu o MESMO produto que
+        # aqueles dois tentaram levar. Identidade é barata de trocar; o lugar
+        # pra onde a mercadoria tem que chegar, não.
+        cep = _so_digitos(p.get('cep'))
+        if cep and len(cep) == 8:
+            try:
+                viz = db_execute(
+                    "SELECT DISTINCT cpf, nome FROM pedidos "
+                    "WHERE regexp_replace(COALESCE(cep,''), '\\D', '', 'g')=%s "
+                    "AND COALESCE(numero,'')=COALESCE(%s,'') AND id<>%s "
+                    "AND cpf IS NOT NULL",
+                    [cep, p.get('numero'), pid], fetch='all') or []
+                outros_cpf = {_so_digitos(v['cpf']) for v in viz} - {cpf, ''}
+                if outros_cpf:
+                    score += 40
+                    nomes = ', '.join(sorted({v['nome'] for v in viz
+                                              if _so_digitos(v['cpf']) in outros_cpf})[:2])
+                    motivos.append(f'Mesmo endereço de entrega já usado por '
+                                   f'outro CPF ({nomes})')
+            except Exception:
+                pass
 
         # 3.5) Valor idêntico repetido por identidades diferentes. Assinatura
         # de teste de cartão: quem valida números roubados repete SEMPRE o
