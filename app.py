@@ -7938,8 +7938,15 @@ def pedido_pagar_cartao(pid):
                   WHERE id=%s""",
                [cob_id, link, pid])
     if status_asaas in ('CONFIRMED', 'RECEIVED'):
-        db_execute("UPDATE pedidos SET status='pago', pago_em=NOW() "
-                   "WHERE id=%s AND status='aguardando_pagto'", [pid])
+        # RETURNING pra saber se ESTA chamada foi a que virou o pedido. Se o
+        # webhook chegou primeiro, o UPDATE não pega nada e não processamos de
+        # novo — sem isso, os dois caminhos correriam juntos e o cliente
+        # receberia e-mail dobrado (e a venda entraria duas vezes no PDV).
+        virou = db_execute("UPDATE pedidos SET status='pago', pago_em=NOW() "
+                           "WHERE id=%s AND status='aguardando_pagto' "
+                           "RETURNING id", [pid], fetch='one')
+        if virou:
+            processar_pedido_pago(pid)
         return jsonify({'ok': True, 'status': 'pago'})
     # 3D Secure: quando a conta Asaas tem 3DS ativo, a resposta traz uma URL
     # de autenticação. Abrimos numa popup; webhook confirma depois.
@@ -8266,6 +8273,127 @@ def _capi_registrar(pid, resposta):
         log.error("CAPI registrar pedido=%s: %s", pid, e)
 
 
+def processar_pedido_pago(pid):
+    """Tudo que precisa acontecer UMA vez quando um pedido vira pago.
+
+    Existia só dentro do webhook do Asaas, e o checkout transparente nunca
+    passava por aqui: ao receber CONFIRMED ele mesmo gravava
+    `status='pago', pago_em=NOW()` e devolvia. Quando o webhook chegava logo
+    depois, o guard `if p['pago_em']` via a marca já posta e saía em
+    `ja_processado` — então, pra TODO pedido pago no cartão pela página da
+    loja, não rodava nada disto: Purchase pra Meta, venda no PDV, etiqueta,
+    e-mail e WhatsApp de confirmação, aviso pro admin, e a reavaliação de
+    risco que segura a etiqueta.
+
+    Medido em 27/07: só 2 de 19 pedidos pagos tinham disparado o Purchase —
+    os dois pagos no PIX, onde o webhook chega primeiro. Com a loja rodando
+    campanha, isso é o Meta otimizando às cegas.
+
+    Quem chama é responsável por já ter gravado `pago_em` (é essa marca que
+    garante execução única).
+    """
+    p = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one')
+    if not p:
+        return
+    try:
+        enviar_purchase_capi(p)
+    except Exception as e:
+        log.error("CAPI pedido %s: %s", pid, e)
+    try:
+        _enviar_pedido_pro_pdv(pid)
+    except Exception as e:
+        log.error("PDV pedido %s: %s", pid, e)
+
+    # Antifraude: reavalia AGORA (o titular do cartao so existe depois do
+    # pagamento) e, se o risco for alto, a etiqueta automatica NAO sai. Esse e
+    # o unico passo irreversivel do fluxo.
+    risco_sc = 0
+    try:
+        risco_sc, risco_mt = avaliar_risco_pedido(pid)
+        if risco_sc >= RISCO_LIMITE and not p.get('risco_liberado_em'):
+            alertar_risco(pid, risco_sc, risco_mt,
+                          contexto=' — *PAGO*, retido antes de postar')
+    except Exception as e:
+        log.error("antifraude pedido pago %s: %s", pid, e)
+
+    try:
+        fsid = (p.get('melhorenvio_servico_id') or '').strip()
+        etiq_ja = (p.get('melhorenvio_etiqueta_id') or '').strip()
+        if risco_sc >= RISCO_LIMITE and not p.get('risco_liberado_em'):
+            log.warning("pedido %s retido por antifraude (score=%s) — "
+                        "etiqueta automatica nao gerada", pid, risco_sc)
+        elif fsid and not etiq_ja and me_configurado() and me_token_atual():
+            ok_et, res_et = _gerar_etiqueta_me(
+                pid, fsid, servico_nome=(p.get('frete_servico') or '')[:80])
+            if ok_et:
+                log.info("etiqueta ME gerada auto pra pedido %s "
+                         "(envio=%s rastreio=%s)", pid,
+                         res_et.get('etiqueta_id'), res_et.get('rastreio'))
+            else:
+                try:
+                    enviar_whatsapp(ADMIN_WHATSAPP,
+                        f"⚠️ *Etiqueta ME falhou — pedido #{pid}*\n\n"
+                        f"Motivo: {(res_et.get('erro') or 'erro')[:200]}\n\n"
+                        f"Gera manual: /admin/pedidos")
+                except Exception:
+                    pass
+                log.warning("etiqueta ME falhou pedido %s: %s", pid, res_et)
+    except Exception as e:
+        log.error("etiqueta auto pedido %s: %s", pid, e)
+
+    try:
+        enviar_email(p['email'],
+                     f'Pedido #{pid} confirmado — Luqui Brinquedos',
+                     f"""<p>Olá {p['nome'].split()[0]}! 💛</p>
+<p>Seu pagamento foi <b>confirmado</b> e estamos preparando seu pedido com muito carinho.</p>
+<p><b>Pedido:</b> #{pid}<br>
+<b>Total pago:</b> R$ {p['total']}<br>
+<b>Entrega em:</b> {p['endereco']}, {p['numero']} — {p['cidade']}/{p['uf']}</p>
+<p>Te avisamos quando sair pra entrega! 🚚</p>
+<p><a href="https://www.luquibrinquedos.com.br/pedido/{pid}/acessar?t={p.get('token','')}"
+     style="background:#FFC700;color:#1652C7;padding:12px 24px;border-radius:8px;
+            font-weight:900;text-decoration:none;display:inline-block">
+  👤 Acessar meus pedidos
+</a></p>
+<p style="font-size:13px;color:#64748B">Esse link entra direto na sua conta, sem senha —
+guarda ele só pra você. Lá você acompanha a entrega, baixa a nota fiscal e junta
+pontos do Clube Luqui.</p>
+<p>Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp (45) 99111-9800</a></p>
+<p>Abraço,<br>Luqui Brinquedos 🧸</p>""")
+    except Exception as e:
+        log.error("email confirma: %s", e)
+
+    try:
+        is_retira_p = (p.get('frete_servico') or '').lower().startswith('retirar')
+        if is_retira_p:
+            linha_entrega = "Retirada: na loja (R. Eng. Rebouças, 2053)"
+            linha_fechamento = "Te aviso aqui quando estiver pronto pra retirar!"
+        else:
+            linha_entrega = f"Entrega: {p.get('cidade') or '—'}/{p.get('uf') or '—'}"
+            linha_fechamento = "Te aviso quando sair pra entrega!"
+        enviar_whatsapp(p['telefone'],
+            f"💛 Oi {p['nome'].split()[0]}! Sou a Luqui Brinquedos.\n\n"
+            f"Seu pagamento do *Pedido #{pid}* foi confirmado! 🎉\n"
+            f"Total: *R$ {p['total']}*\n"
+            f"{linha_entrega}\n\n"
+            f"Já estamos preparando tudo com muito carinho 🧸\n"
+            f"{linha_fechamento}")
+    except Exception as e:
+        log.error("WA cliente: %s", e)
+
+    try:
+        enviar_whatsapp(ADMIN_WHATSAPP,
+            f"🛒 *Novo pedido pago #{pid}*\n\n"
+            f"Cliente: {p['nome']}\n"
+            f"Telefone: {p['telefone']}\n"
+            f"Total: *R$ {p['total']}*\n"
+            f"Forma: {p['forma_pagto']}\n"
+            f"Endereço: {p['endereco']}, {p['numero']} - {p['cidade']}/{p['uf']}\n\n"
+            f"Ver: https://www.luquibrinquedos.com.br/admin/pedidos")
+    except Exception as e:
+        log.error("WA admin: %s", e)
+
+
 # ─── Webhook Asaas: confirma pagamento ────────────────────────────────────────
 @app.route('/webhook/asaas', methods=['POST'])
 def webhook_asaas():
@@ -8378,103 +8506,7 @@ Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp
             return jsonify({'ok': True, 'ja_processado': True})
         db_execute("""UPDATE pedidos SET status='pago', pago_em=NOW(),
                       atualizado_em=NOW() WHERE id=%s""", [pid])
-        # Purchase pra Meta pelo SERVIDOR — o guard de pago_em acima ja garante
-        # que isso roda uma vez so por pedido, mesmo com o 2o evento do cartao.
-        enviar_purchase_capi(p)
-        # Dispara venda no PDV Pro
-        _enviar_pedido_pro_pdv(pid)
-        # ─ Gera etiqueta Melhor Envio AUTOMATICAMENTE (se nao for retirada)
-        # Pre-condicoes: tem service_id (cliente escolheu PAC/SEDEX/etc no
-        # checkout) e nao tem etiqueta ainda. Tudo em try/except — falha aqui
-        # nao bloqueia o resto (cliente ja recebe email/WhatsApp do pedido).
-        # Antifraude: reavalia AGORA (o titular do cartao so existe depois do
-        # pagamento) e, se o pedido for de risco alto, a etiqueta automatica
-        # NAO sai. Esse e o unico passo irreversivel do fluxo — depois que a
-        # mercadoria e postada, chargeback vira prejuizo puro.
-        risco_sc = 0
-        try:
-            risco_sc, risco_mt = avaliar_risco_pedido(pid)
-            if risco_sc >= RISCO_LIMITE and not p.get('risco_liberado_em'):
-                alertar_risco(pid, risco_sc, risco_mt,
-                              contexto=' — *PAGO*, retido antes de postar')
-        except Exception as e:
-            log.error("antifraude webhook pedido %s: %s", pid, e)
-        try:
-            fsid = (p.get('melhorenvio_servico_id') or '').strip()
-            etiq_ja = (p.get('melhorenvio_etiqueta_id') or '').strip()
-            if risco_sc >= RISCO_LIMITE and not p.get('risco_liberado_em'):
-                log.warning("pedido %s retido por antifraude (score=%s) — "
-                            "etiqueta automatica nao gerada", pid, risco_sc)
-            elif fsid and not etiq_ja and me_configurado() and me_token_atual():
-                ok_et, res_et = _gerar_etiqueta_me(
-                    pid, fsid, servico_nome=(p.get('frete_servico') or '')[:80])
-                if ok_et:
-                    log.info("etiqueta ME gerada auto pra pedido %s "
-                             "(envio=%s rastreio=%s)", pid,
-                             res_et.get('etiqueta_id'), res_et.get('rastreio'))
-                else:
-                    # Avisa admin via WhatsApp pra ele gerar manual
-                    try:
-                        enviar_whatsapp(ADMIN_WHATSAPP,
-                            f"⚠️ *Etiqueta ME falhou — pedido #{pid}*\n\n"
-                            f"Motivo: {(res_et.get('erro') or 'erro') [:200]}\n\n"
-                            f"Gera manual: /admin/pedidos")
-                    except Exception: pass
-                    log.warning("etiqueta ME falhou pedido %s: %s", pid, res_et)
-        except Exception as e:
-            log.error("etiqueta auto pedido %s: %s", pid, e)
-        # Email de confirmação
-        try:
-            enviar_email(p['email'],
-                         f'Pedido #{pid} confirmado — Luqui Brinquedos',
-                         f"""<p>Olá {p['nome'].split()[0]}! 💛</p>
-<p>Seu pagamento foi <b>confirmado</b> e estamos preparando seu pedido com muito carinho.</p>
-<p><b>Pedido:</b> #{pid}<br>
-<b>Total pago:</b> R$ {p['total']}<br>
-<b>Entrega em:</b> {p['endereco']}, {p['numero']} — {p['cidade']}/{p['uf']}</p>
-<p>Te avisamos quando sair pra entrega! 🚚</p>
-<p><a href="https://www.luquibrinquedos.com.br/pedido/{pid}/acessar?t={p.get('token','')}"
-     style="background:#FFC700;color:#1652C7;padding:12px 24px;border-radius:8px;
-            font-weight:900;text-decoration:none;display:inline-block">
-  👤 Acessar meus pedidos
-</a></p>
-<p style="font-size:13px;color:#64748B">Esse link entra direto na sua conta, sem senha —
-guarda ele só pra você. Lá você acompanha a entrega, baixa a nota fiscal e junta
-pontos do Clube Luqui.</p>
-<p>Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp (45) 99111-9800</a></p>
-<p>Abraço,<br>Luqui Brinquedos 🧸</p>""")
-        except Exception as e:
-            log.error("email confirma: %s", e)
-        # WhatsApp pro CLIENTE
-        try:
-            is_retira_p = (p.get('frete_servico') or '').lower().startswith('retirar')
-            if is_retira_p:
-                linha_entrega = "Retirada: na loja (R. Eng. Rebouças, 2053)"
-                linha_fechamento = "Te aviso aqui quando estiver pronto pra retirar!"
-            else:
-                linha_entrega = f"Entrega: {p.get('cidade') or '—'}/{p.get('uf') or '—'}"
-                linha_fechamento = "Te aviso quando sair pra entrega!"
-            enviar_whatsapp(p['telefone'],
-                f"💛 Oi {p['nome'].split()[0]}! Sou a Luqui Brinquedos.\n\n"
-                f"Seu pagamento do *Pedido #{pid}* foi confirmado! 🎉\n"
-                f"Total: *R$ {p['total']}*\n"
-                f"{linha_entrega}\n\n"
-                f"Já estamos preparando tudo com muito carinho 🧸\n"
-                f"{linha_fechamento}")
-        except Exception as e:
-            log.error("WA cliente: %s", e)
-        # WhatsApp pro ADMIN (você)
-        try:
-            enviar_whatsapp(ADMIN_WHATSAPP,
-                f"🛒 *Novo pedido pago #{pid}*\n\n"
-                f"Cliente: {p['nome']}\n"
-                f"Telefone: {p['telefone']}\n"
-                f"Total: *R$ {p['total']}*\n"
-                f"Forma: {p['forma_pagto']}\n"
-                f"Endereço: {p['endereco']}, {p['numero']} - {p['cidade']}/{p['uf']}\n\n"
-                f"Ver: https://www.luquibrinquedos.com.br/admin/pedidos")
-        except Exception as e:
-            log.error("WA admin: %s", e)
+        processar_pedido_pago(pid)
     elif event in ('PAYMENT_OVERDUE',):
         db_execute("UPDATE pedidos SET status='atrasado' WHERE id=%s", [pid])
     elif event in ('PAYMENT_DELETED', 'PAYMENT_REFUNDED'):
