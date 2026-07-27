@@ -8155,6 +8155,13 @@ def _enviar_pedido_pro_pdv(pid):
         'juros': float(p.get('juros_valor') or 0),
         'forma_pagto': p['forma_pagto'],
         'frete_servico': p.get('frete_servico') or '',
+        # A venda entra no PDV (baixa estoque, conta no relatório), mas a NF-e
+        # NÃO sai sozinha. O pedido #52 — pago com cartão de terceiro — ganhou
+        # NF-e 55 autorizada na SEFAZ antes de qualquer conferência, e sobrou
+        # cancelar nota de uma venda que não deveria existir. Agora o Lucas
+        # confere e emite pelo painel do PDV (/api/nfe/emitir/<venda_id>),
+        # no mesmo momento em que decide gerar a etiqueta.
+        'emitir_nfe': False,
     }
     try:
         # Incrementa tentativas ANTES de tentar — assim mesmo se travar a
