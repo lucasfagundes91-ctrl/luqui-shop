@@ -4,6 +4,7 @@ Stack Flask+PG. Produtos/estoque/promoções são puxados do PDV Pro em tempo re
 via API (X-API-Key). Quando um pedido é pago, dispara webhook que cria a venda
 no PDV Pro automaticamente.
 """
+import difflib
 import hashlib
 import io
 import json
@@ -7143,27 +7144,39 @@ def _nome_norm(v):
     return ' '.join(v.split())
 
 
-def nomes_batem(a, b):
-    """True se os dois nomes sao plausivelmente da mesma pessoa.
+def semelhanca_nomes(a, b):
+    """Quanto os dois nomes parecem ser da mesma pessoa: None | 0.0 a 1.0.
 
-    A fatura do cartao vem abreviada e as vezes sem nome do meio
-    ("MARIA A DA SILVA" x "Maria Aparecida da Silva"), entao comparar string
-    crua da falso positivo demais. Regra: primeiro nome igual E ultimo
-    sobrenome igual — o resto do miolo pode faltar.
+    A versão anterior exigia primeiro nome E último sobrenome iguais e errava
+    feio. Medido nos pedidos reais de 27/07, ela reprovou 6 de 10 nomes que
+    eram da MESMA pessoa: "JAELZIN FORLIN" x "Jaelzinho forlin" (a fatura
+    corta), "DIESON GESTEIRA" x "Dielson Gesteira" (o cliente errou uma
+    letra), "JOÃO LUIZ" x "Joao Luis" (Luiz/Luis), "THIAGO CORDERO" x "THIAGO
+    CORDERO PIVOTTO" (nome do meio ausente).
+
+    Marcar cliente de verdade é o pior erro que um antifraude comete: some com
+    a confiança de quem lê o alerta, e aí o alerta que importa também é
+    ignorado. Similaridade separa os dois grupos com folga no dado real —
+    mesma pessoa ficou entre 0,61 e 0,97; pessoa diferente, entre 0,08 e 0,26.
     """
-    pa, pb = _nome_norm(a).split(), _nome_norm(b).split()
-    if not pa or not pb:
+    na, nb = _nome_norm(a), _nome_norm(b)
+    if not na or not nb:
         return None                       # sem dado pra comparar
-    if pa == pb:
-        return True
-    # inicial abreviada: "MARIA A SILVA" casa com "MARIA APARECIDA SILVA"
+    if na == nb:
+        return 1.0
+    pa, pb = na.split(), nb.split()
+
     def _casa(x, y):
-        return x == y or (len(x) == 1 and y.startswith(x)) or (len(y) == 1 and x.startswith(y))
-    if not _casa(pa[0], pb[0]):
-        return False
-    if len(pa) == 1 or len(pb) == 1:
-        return True                       # so o primeiro nome, nao da pra negar
-    return _casa(pa[-1], pb[-1])
+        # inicial abreviada ou nome cortado: JAELZIN <-> JAELZINHO
+        return (x == y or (len(x) == 1 and y.startswith(x))
+                or (len(y) == 1 and x.startswith(y))
+                or x.startswith(y) or y.startswith(x))
+
+    # Primeiro nome e sobrenome batendo já resolve, mesmo com miolo diferente.
+    if _casa(pa[0], pb[0]) and (len(pa) == 1 or len(pb) == 1
+                                or _casa(pa[-1], pb[-1])):
+        return 1.0
+    return difflib.SequenceMatcher(None, na, nb).ratio()
 
 
 def ip_reputacao(ip):
@@ -7243,11 +7256,18 @@ def avaliar_risco_pedido(pid):
             if _so_digitos(p['titular_cpf']) != cpf:
                 score += 40
                 motivos.append('CPF do titular do cartão ≠ CPF do comprador')
-            bate = nomes_batem(p.get('titular_nome'), p.get('nome'))
-            if bate is False:
+            # Pontuação graduada. "Diferente" e "escrito diferente" não são a
+            # mesma coisa: fatura corta nome, cliente erra letra, Luiz vira
+            # Luis. Só cai a régua inteira quando é outra pessoa mesmo.
+            sem = semelhanca_nomes(p.get('titular_nome'), p.get('nome'))
+            if sem is not None and sem < 0.45:
                 score += 40
                 motivos.append(f"Titular do cartão \"{p['titular_nome']}\" "
-                               f"≠ comprador \"{p['nome']}\"")
+                               f"é outra pessoa (comprador: \"{p['nome']}\")")
+            elif sem is not None and sem < 0.75:
+                score += 15
+                motivos.append(f"Titular do cartão \"{p['titular_nome']}\" "
+                               f"só parece com o comprador \"{p['nome']}\"")
 
         # 2) Mesmo IP, outra identidade. Foi assim que os 5 pedidos de
         #    Brasilia se denunciaram: dois CPFs saindo do mesmo endereco.
