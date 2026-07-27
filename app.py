@@ -33,6 +33,19 @@ log = logging.getLogger('luquishop')
 SP_TZ = ZoneInfo('America/Sao_Paulo')
 
 app = Flask(__name__)
+
+def _cron_token_ok():
+    """Confere o ?token= das rotas de cron. Fail-closed.
+
+    Antes era os.environ.get('CRON_TOKEN', 'troque') repetido em 6 rotas: sem a
+    env, o token virava a string publica 'troque' e qualquer um disparava
+    disparo de WhatsApp/e-mail em massa. Nao ha default — sem CRON_TOKEN no
+    ambiente, nenhuma passa."""
+    esperado = os.environ.get('CRON_TOKEN', '')
+    recebido = request.args.get('token', '') or request.headers.get('X-Cron-Token', '')
+    return bool(esperado and secrets.compare_digest(recebido, esperado))
+
+
 app.secret_key = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 # Cookie de sessão: HttpOnly tira do alcance de JS (XSS não rouba a sessão do
@@ -3011,7 +3024,7 @@ def admin_avaliacao_excluir(aid):
 @app.route('/cron/aniversariantes')
 def cron_aniversariantes():
     """Gera cupom personalizado pros aniversariantes do dia + WA + email."""
-    if request.args.get('token') != os.environ.get('CRON_TOKEN', 'troque'):
+    if not _cron_token_ok():
         return 'unauthorized', 401
     if not CUPOM_ANIVERSARIO_ATIVO:
         return jsonify({'ok': True, 'desligado': True, 'gerados': 0})
@@ -3063,7 +3076,7 @@ def cupom_primeira_compra():
 @app.route('/cron/carrinho-abandonado')
 def cron_carrinho_abandonado():
     """Pedidos aguardando_pagto há 24-48h: dispara WhatsApp/email lembrando."""
-    if request.args.get('token') != os.environ.get('CRON_TOKEN', 'troque'):
+    if not _cron_token_ok():
         return 'unauthorized', 401
     rows = db_execute("""
         SELECT * FROM pedidos
@@ -3121,7 +3134,7 @@ def cron_recuperar_pedidos_parados():
       3. Pula quem já tem qualquer pedido pago — cliente que voltou e comprou
          por outro caminho não pode ser cobrado de novo.
     """
-    if request.args.get('token') != os.environ.get('CRON_TOKEN', 'troque'):
+    if not _cron_token_ok():
         return 'unauthorized', 401
     hoje = datetime.now(SP_TZ).date().isoformat()
     marca_hoje = f'[recuperacao-enviada:{hoje}]'
@@ -3298,7 +3311,7 @@ def avise_me():
 @app.route('/cron/email-pos-compra')
 def cron_email_pos_compra():
     """Roda diário: pedidos pagos há ~7 dias e ainda sem email de avaliação."""
-    if request.args.get('token') != os.environ.get('CRON_TOKEN', 'troque'):
+    if not _cron_token_ok():
         return 'unauthorized', 401
     candidatos = db_execute("""
         SELECT * FROM pedidos
@@ -3339,7 +3352,7 @@ def cron_avise_me():
     avise_me, checa o estoque no PDV. Se voltou (estoque > 0), dispara
     email (Resend) + WhatsApp (Z-API) pra todos cadastrados naquele
     produto e marca notificado_em=NOW()."""
-    if request.args.get('token') != os.environ.get('CRON_TOKEN', 'troque'):
+    if not _cron_token_ok():
         return 'unauthorized', 401
     # Pega produto_ids únicos com cadastro pendente
     pendentes_prods = db_execute("""
@@ -8086,7 +8099,7 @@ def cron_reconciliar_pedidos_site():
     o pedido fica 'pago' sem 'pdv_venda_id'. Esse cron pega esses casos a
     cada 5 min, re-tenta o envio. Após 3 falhas seguidas, manda WhatsApp
     pro admin pra investigar manualmente."""
-    if request.args.get('token') != os.environ.get('CRON_TOKEN', 'troque'):
+    if not _cron_token_ok():
         return 'forbidden', 403
     pendentes = db_execute("""
         SELECT id, total, pdv_tentativas, pago_em
