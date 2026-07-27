@@ -6849,6 +6849,20 @@ def asaas_criar_cobranca_cartao(customer_id, valor, descricao, parcelas,
         return 0, {'errors': [{'description': str(e)}]}
 
 
+def asaas_buscar_cobranca(payment_id):
+    """Objeto completo da cobrança. Serve pra ler `creditCard` (bandeira + 4
+    últimos) de quem pagou pela fatura hospedada, onde o site nunca vê o
+    cartão."""
+    try:
+        r = requests.get(f'{ASAAS_BASE}/payments/{payment_id}',
+                         headers=_asaas_headers(), timeout=10)
+        if r.status_code == 200:
+            return r.json()
+    except Exception as e:
+        log.error("asaas buscar cobranca %s: %s", payment_id, e)
+    return {}
+
+
 def asaas_buscar_pix_qr(payment_id):
     """Pega payload + QR code base64 do PIX."""
     try:
@@ -8351,6 +8365,24 @@ def processar_pedido_pago(pid):
     p = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one')
     if not p:
         return
+    # Final do cartao pela API. O checkout transparente ja grava a partir da
+    # propria resposta, mas quem paga pela FATURA HOSPEDADA do Asaas nunca
+    # passava por la — e a fatura hospedada e o caminho que mais aprova. Sem
+    # buscar aqui, a regra de "mesmo cartao, outro CPF" ficava cega justamente
+    # onde o dinheiro entra.
+    if not p.get('cartao_final') and p.get('asaas_cobranca_id'):
+        try:
+            cob = asaas_buscar_cobranca(p['asaas_cobranca_id']) or {}
+            cc = cob.get('creditCard') or {}
+            if cc.get('creditCardNumber'):
+                db_execute("UPDATE pedidos SET cartao_final=%s, cartao_bandeira=%s "
+                           "WHERE id=%s",
+                           [str(cc['creditCardNumber'])[:4],
+                            (cc.get('creditCardBrand') or '')[:20], pid])
+                p = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid],
+                               fetch='one') or p
+        except Exception as e:
+            log.warning("buscar cartao da cobranca %s: %s", pid, e)
     try:
         enviar_purchase_capi(p)
     except Exception as e:
