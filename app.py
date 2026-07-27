@@ -676,6 +676,14 @@ def init_db():
         # Contador de tentativas de cartão POR PEDIDO. Em 24/07 o pedido #48
         # levou 67 tentativas em 5min30 (uma a cada 5s) — script, não pessoa.
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS tentativas_cartao INT DEFAULT 0",
+        # 4 ultimos digitos + bandeira do cartao que PAGOU (o Asaas devolve
+        # isso na confirmacao; o numero completo nunca e guardado, e nem pode).
+        # Em 27/07 o cartao VISA final 2746 pagou dois pedidos de CPFs, nomes,
+        # e-mails e ESTADOS diferentes — Natal/RN e Salvador/BA. Sem guardar o
+        # final, esse sinal, que e o mais forte de todos, era invisivel.
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cartao_final VARCHAR(4)",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cartao_bandeira VARCHAR(20)",
+        "CREATE INDEX IF NOT EXISTS idx_pedidos_cartao ON pedidos(cartao_final, criado_em DESC)",
         "CREATE INDEX IF NOT EXISTS idx_pedidos_ip ON pedidos(ip_cliente, criado_em DESC)",
         "CREATE INDEX IF NOT EXISTS idx_pedidos_risco ON pedidos(risco_score DESC, criado_em DESC)",
         # Cache de reputacao de IP (RDAP). Sem cache, cada checkout pagaria
@@ -7330,6 +7338,31 @@ def avaliar_risco_pedido(pid):
             score += 10
             motivos.append('Checkout sem conta (visitante)')
 
+        # 2.2) MESMO CARTÃO, outro CPF. O sinal mais forte que existe: nome,
+        # e-mail, telefone, IP e até endereço o golpista troca de graça; o
+        # cartão que ele conseguiu, não. Em 27/07 o VISA final 2746 pagou o
+        # #56 (Natal/RN) e o #59 (Salvador/BA) — CPFs e nomes diferentes,
+        # 1.400 km de distância, 4 minutos de intervalo. Os dois passaram
+        # limpos pela régua anterior (score 0 e 15) porque ela não via cartão.
+        if p.get('cartao_final'):
+            try:
+                mesmos = db_execute(
+                    "SELECT DISTINCT cpf, nome, id FROM pedidos "
+                    "WHERE cartao_final=%s AND cartao_bandeira IS NOT DISTINCT FROM %s "
+                    "AND id<>%s AND cpf IS NOT NULL "
+                    "AND criado_em > NOW() - interval '60 days'",
+                    [p['cartao_final'], p.get('cartao_bandeira'), pid],
+                    fetch='all') or []
+                outros = {_so_digitos(m['cpf']) for m in mesmos} - {cpf, ''}
+                if outros:
+                    score += 50
+                    quem = ', '.join(sorted({m['nome'] for m in mesmos
+                                             if _so_digitos(m['cpf']) in outros})[:2])
+                    motivos.append(f'Cartão final {p["cartao_final"]} também foi '
+                                   f'usado por outro CPF ({quem})')
+            except Exception:
+                pass
+
         # 2.5) MESMO ENDEREÇO, outro CPF. O sinal mais forte de todos e o que
         # faltava: em 25/07 o pedido #52 ("THIAGO CORDERO PIVOTTO", CPF, e-mail,
         # telefone e IP novos) foi entregue no MESMO endereço dos #38/#39
@@ -7467,6 +7500,14 @@ def checkout_finalizar():
             return jsonify({'erro': f'Campo {c} obrigatório'}), 400
     if d['forma_pagto'] not in ('pix', 'cartao', 'boleto'):
         return jsonify({'erro': 'Forma de pagamento inválida'}), 400
+    # Chave de emergência: desliga SÓ o cartão e mantém a loja vendendo no PIX.
+    # PIX não tem estorno, então zera a exposição a chargeback sem colocar o
+    # site em manutenção — que derrubaria o faturamento inteiro junto.
+    # Liga/desliga em site_config (`cartao_ativo` = 0/1), sem deploy.
+    if d['forma_pagto'] == 'cartao' and cfg('cartao_ativo', '1') != '1':
+        return jsonify({'erro': 'Pagamento no cartão temporariamente indisponível. '
+                                'Finalize no PIX e ganhe desconto — a confirmação '
+                                'é na hora.'}), 400
     # CPF tem que ser VÁLIDO (dígitos verificadores), não só ter 11 dígitos.
     # Sem isso um CPF digitado errado passa aqui e só é recusado no Asaas com
     # "CPF/CNPJ inválido" — a cliente trava sem entender e a venda se perde.
@@ -7803,6 +7844,10 @@ def pedido_pagar_cartao(pid):
     # 5min30. Isso não é prejuízo direto, mas é o excesso de autorização
     # negada que faz adquirente marcar (e derrubar) conta de lojista.
     # Cliente legítimo erra o cartão 2 ou 3 vezes, não 67.
+    if cfg('cartao_ativo', '1') != '1':
+        return jsonify({'erro': 'Pagamento no cartão temporariamente '
+                                'indisponível. Fale com a loja pelo WhatsApp.',
+                        'whatsapp': cfg('whatsapp_loja', WHATSAPP_LOJA)}), 503
     tentativas = int(p.get('tentativas_cartao') or 0)
     if tentativas >= MAX_TENTATIVAS_CARTAO:
         log.warning("pedido %s bloqueado: %s tentativas de cartão", pid, tentativas)
@@ -7933,6 +7978,17 @@ def pedido_pagar_cartao(pid):
 
     cob_id = resp.get('id')
     link = resp.get('invoiceUrl') or ''
+    # Guarda os 4 últimos + bandeira que o Asaas devolve. É o que permite ver
+    # o mesmo cartão pagando com identidades diferentes.
+    try:
+        cc_resp = resp.get('creditCard') or {}
+        if cc_resp.get('creditCardNumber'):
+            db_execute("UPDATE pedidos SET cartao_final=%s, cartao_bandeira=%s "
+                       "WHERE id=%s",
+                       [str(cc_resp.get('creditCardNumber'))[:4],
+                        (cc_resp.get('creditCardBrand') or '')[:20], pid])
+    except Exception as e:
+        log.warning("guardar final do cartao pedido %s: %s", pid, e)
     status_asaas = resp.get('status', '')  # CONFIRMED, RECEIVED, PENDING, AWAITING_RISK_ANALYSIS
     db_execute("""UPDATE pedidos SET asaas_cobranca_id=%s, asaas_link=%s
                   WHERE id=%s""",
