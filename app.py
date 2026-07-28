@@ -4,6 +4,7 @@ Stack Flask+PG. Produtos/estoque/promoções são puxados do PDV Pro em tempo re
 via API (X-API-Key). Quando um pedido é pago, dispara webhook que cria a venda
 no PDV Pro automaticamente.
 """
+import base64
 import difflib
 import hashlib
 import io
@@ -7837,6 +7838,260 @@ def admin_asaas_conta():
     return jsonify(asaas_status_conta())
 
 
+# ─── Pagar.me — cartão com 3DS ───────────────────────────────────────────────
+# Por que existe: o Asaas não oferece 3DS ("não disponibilizamos o protocolo 3D
+# Secure como funcionalidade configurável", suporte em 28/07/2026) e o antifraude
+# deles aprovou, em 27/07, o MESMO cartão para dois CPFs em estados diferentes
+# com 4 minutos de intervalo. Sem autenticação do emissor não existe
+# transferência de responsabilidade — todo chargeback sobra pro lojista.
+#
+# PIX e boleto continuam no Asaas: na conta Pagar.me eles ainda não estão
+# habilitados ("Sem ambiente configurado para este tipo de transação").
+#
+# O token do 3DS NÃO fica na API da Pagar.me — fica num host da Stone. Perder
+# isso custa uma hora batendo 404 em /core/v5/tds-token.
+PAGARME_BASE = 'https://api.pagar.me/core/v5'
+PAGARME_TDS = {
+    'teste':    ('https://3ds-sdx.stone.com.br/v2/tds-token',
+                 'https://3ds-nx-js.stone.com.br/test/v2/3ds2.min.js'),
+    'producao': ('https://3ds.stone.com.br/v2/tds-token',
+                 'https://3ds-nx-js.stone.com.br/live/v2/3ds2.min.js'),
+}
+
+
+def pagarme_cfg():
+    """(secret, public, url_do_token_3ds, url_da_lib_js) conforme o ambiente."""
+    amb = (os.environ.get('PAGARME_AMBIENTE') or 'teste').strip().lower()
+    if amb not in PAGARME_TDS:
+        amb = 'teste'
+    suf = 'TEST' if amb == 'teste' else 'PROD'
+    tds_url, js_url = PAGARME_TDS[amb]
+    return (os.environ.get(f'PAGARME_SECRET_KEY_{suf}') or '',
+            os.environ.get(f'PAGARME_PUBLIC_KEY_{suf}') or '',
+            tds_url, js_url)
+
+
+def _pagarme_headers():
+    sk, _, _, _ = pagarme_cfg()
+    basic = base64.b64encode(f'{sk}:'.encode()).decode()
+    return {'Authorization': f'Basic {basic}',
+            'Content-Type': 'application/json',
+            'User-Agent': 'LuquiShop/1.0'}
+
+
+def pagarme_configurado():
+    return bool(pagarme_cfg()[0])
+
+
+@app.route('/api/pagarme/tds-token')
+def pagarme_tds_token():
+    """Entrega ao navegador um token de 3DS. Vale ~20s, então é pedido na hora.
+
+    A chave secreta NUNCA vai pro browser — por isso este proxy existe.
+    """
+    if not pagarme_configurado():
+        return jsonify({'erro': 'pagarme não configurado'}), 503
+    if not rate_limit_ok('tds_token', _rl_ip(), 30, 900):
+        return jsonify({'erro': 'muitas tentativas'}), 429
+    _, _, tds_url, _ = pagarme_cfg()
+    try:
+        r = requests.get(tds_url, headers=_pagarme_headers(), timeout=12)
+        if r.status_code != 200:
+            log.error("tds-token %s: %s", r.status_code, r.text[:200])
+            return jsonify({'erro': 'falha ao iniciar autenticação'}), 502
+        return jsonify({'tds_token': (r.json() or {}).get('tds_token')})
+    except Exception as e:
+        log.error("tds-token: %s", e)
+        return jsonify({'erro': 'falha ao iniciar autenticação'}), 502
+
+
+def _pagarme_endereco(p):
+    num = (p.get('numero') or 'S/N')
+    rua = (p.get('endereco') or 'Nao informado')
+    bairro = (p.get('bairro') or '')
+    return {
+        'country': 'BR',
+        'state': (p.get('uf') or 'PR')[:2].upper(),
+        'city': (p.get('cidade') or 'Cascavel')[:64],
+        'zip_code': _so_digitos(p.get('cep')) or '85812130',
+        'line_1': f'{num}, {rua}, {bairro}'.strip(' ,')[:256],
+    }
+
+
+def _pagarme_cliente(p):
+    tel = _so_digitos(p.get('telefone'))
+    ddd, numero = (tel[:2], tel[2:]) if len(tel) >= 10 else ('45', '991119800')
+    return {
+        'name': (p.get('nome') or 'Cliente')[:64],
+        'email': (p.get('email') or '')[:64],
+        'document': _so_digitos(p.get('cpf')),
+        'document_type': 'CPF',
+        'type': 'individual',
+        'phones': {'mobile_phone': {'country_code': '55',
+                                    'area_code': ddd, 'number': numero}},
+        'address': _pagarme_endereco(p),
+    }
+
+
+def _pagarme_itens(pid, p):
+    itens = db_execute("SELECT * FROM pedido_itens WHERE pedido_id=%s",
+                       [pid], fetch='all') or []
+    out = []
+    for i in itens:
+        out.append({'amount': int(round(float(i['preco_unitario']) * 100)),
+                    'description': (i['descricao'] or 'Produto')[:64],
+                    'quantity': int(float(i['quantidade']) or 1),
+                    'code': str(i.get('produto_pdv_id') or i['id'])})
+    # A Pagar.me confere itens x total. Frete, juros e desconto entram como
+    # linhas próprias pra soma fechar — senão a cobrança nasce com valor
+    # diferente do que o cliente viu na tela.
+    soma = sum(x['amount'] * x['quantity'] for x in out)
+    alvo = int(round(float(p['total']) * 100))
+    if alvo != soma:
+        dif = alvo - soma
+        out.append({'amount': dif, 'quantity': 1, 'code': 'ajuste',
+                    'description': 'Frete/juros' if dif > 0 else 'Desconto'})
+    return out
+
+
+def pagarme_dados_3ds(pid):
+    """Payload que o navegador manda pra biblioteca de 3DS. Não inclui CVV nem
+    número do cartão — quem preenche isso é o próprio formulário, no browser."""
+    p = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one')
+    if not p:
+        return None
+    return {
+        'customer': _pagarme_cliente(p),
+        'items': [{'description': i['description'], 'code': i['code']}
+                  for i in _pagarme_itens(pid, p)],
+        'shipping': {'recipient_name': (p.get('nome') or 'Cliente')[:64],
+                     'address': _pagarme_endereco(p)},
+        'requestor_url': SITE_URL,
+        'valor_centavos': int(round(float(p['total']) * 100)),
+        'parcelas': int(p.get('parcelas') or 1),
+        'billing_address': _pagarme_endereco(p),
+    }
+
+
+def pagarme_criar_cobranca(pid, cartao, tds_trans_id=None):
+    """Cria o pedido+cobrança na Pagar.me. Devolve (http_status, dict)."""
+    p = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one')
+    if not p:
+        return 404, {'erro': 'pedido não encontrado'}
+    cc = {
+        'installments': int(p.get('parcelas') or 1),
+        'statement_descriptor': 'LUQUIBRINQ',
+        'card': {
+            'number': cartao['numero'],
+            'holder_name': cartao['titular_nome'][:64],
+            'exp_month': int(cartao['mes']),
+            'exp_year': int(cartao['ano']),
+            'cvv': cartao['ccv'],
+            'billing_address': _pagarme_endereco(p),
+        },
+    }
+    # É ESTE campo que amarra a autenticação do emissor à cobrança. Sem ele a
+    # transação vira uma compra comum e a responsabilidade continua sua.
+    if tds_trans_id:
+        cc['transaction_id'] = tds_trans_id
+    body = {
+        'items': _pagarme_itens(pid, p),
+        'customer': _pagarme_cliente(p),
+        'payments': [{'payment_method': 'credit_card', 'credit_card': cc}],
+        'code': f'pedido-{pid}',
+        'closed': True,
+    }
+    try:
+        r = requests.post(f'{PAGARME_BASE}/orders', json=body,
+                          headers=_pagarme_headers(), timeout=45)
+        try:
+            d = r.json()
+        except Exception:
+            d = {'raw': r.text[:400]}
+        return r.status_code, d
+    except Exception as e:
+        log.error("pagarme criar cobranca pedido %s: %s", pid, e)
+        return 502, {'erro': str(e)[:200]}
+
+
+def _pagar_cartao_pagarme(pid, p, cartao, tds):
+    """Cobra pela Pagar.me exigindo (ou não) autenticação do emissor.
+
+    Tudo ajustável por site_config, sem deploy:
+      cartao_provedor     asaas | pagarme
+      tds_ativo           1 = pede autenticação; 0 = cobra direto
+      tds_status_aceitos  quais respostas do emissor valem (padrão só 'Y')
+      tds_obrigatorio     1 = sem autenticação boa, recusa a compra
+
+    Sobre os status: 'Y' é o único que GARANTE transferência de
+    responsabilidade. 'A' é tentativa de autenticação (o emissor não
+    participou) e costuma transferir também, mas depende da bandeira — por
+    isso fica de fora do padrão e o Lucas liga se quiser mais aprovação.
+    """
+    tds = tds or {}
+    trans_id = (tds.get('tds_server_trans_id') or '').strip() or None
+    status_3ds = (tds.get('trans_status') or '').strip().upper()
+    aceitos = [s.strip().upper() for s in
+               cfg('tds_status_aceitos', 'Y').split(',') if s.strip()]
+    exige = cfg('tds_ativo', '1') == '1'
+    obrigatorio = cfg('tds_obrigatorio', '1') == '1'
+
+    autenticado = bool(trans_id) and status_3ds in aceitos
+    if exige and obrigatorio and not autenticado:
+        if tds.get('challenge_canceled'):
+            msg = ('Você cancelou a confirmação do banco. Tente de novo e '
+                   'conclua a verificação para finalizar a compra.')
+        elif status_3ds:
+            msg = ('Seu banco não confirmou esta compra (código '
+                   f'{status_3ds}). Tente outro cartão ou finalize no PIX.')
+        else:
+            msg = ('Não foi possível confirmar a compra com o seu banco. '
+                   'Tente de novo ou finalize no PIX.')
+        log.warning("pedido %s recusado no 3DS: status=%s trans_id=%s",
+                    pid, status_3ds or '-', bool(trans_id))
+        return jsonify({'erro': msg, 'sem_3ds': True}), 402
+
+    st, d = pagarme_criar_cobranca(pid, cartao,
+                                   trans_id if autenticado else None)
+    charges = (d or {}).get('charges') or []
+    ch = charges[0] if charges else {}
+    tx = ch.get('last_transaction') or {}
+    status_ch = (ch.get('status') or '').lower()
+
+    if st not in (200, 201) or status_ch in ('failed', 'refused', ''):
+        motivo = ''
+        try:
+            errs = (tx.get('gateway_response') or {}).get('errors') or []
+            motivo = (errs[0].get('message') if errs else '') or ''
+            motivo = motivo.split('|')[-1].strip()
+        except Exception:
+            pass
+        motivo = motivo or (d or {}).get('message') or 'Transação não autorizada'
+        log.warning("pedido %s pagarme recusado: http=%s status=%s msg=%s",
+                    pid, st, status_ch, motivo[:160])
+        return jsonify({'erro': f'Pagamento não autorizado. {motivo[:140]}'}), 402
+
+    # Pago. Guarda o rastro do cartão e da autenticação antes de seguir.
+    card = tx.get('card') or {}
+    try:
+        db_execute("""UPDATE pedidos SET asaas_cobranca_id=%s, cartao_final=%s,
+                      cartao_bandeira=%s WHERE id=%s""",
+                   [str(ch.get('id') or d.get('id') or '')[:60],
+                    str(card.get('last_four_digits') or '')[:4],
+                    (card.get('brand') or '')[:20], pid])
+    except Exception as e:
+        log.warning("gravar cartao pagarme pedido %s: %s", pid, e)
+    log.info("pedido %s PAGO na pagarme (3ds=%s status=%s charge=%s)",
+             pid, status_3ds or 'off', status_ch, ch.get('id'))
+
+    virou = db_execute("UPDATE pedidos SET status='pago', pago_em=NOW() "
+                       "WHERE id=%s AND status='aguardando_pagto' RETURNING id",
+                       [pid], fetch='one')
+    if virou:
+        processar_pedido_pago(pid)
+    return jsonify({'ok': True, 'status': 'pago'})
+
+
 @app.route('/api/pedido/<int:pid>/pagar-cartao', methods=['POST'])
 def pedido_pagar_cartao(pid):
     """Checkout transparente — cliente preenche cartão na própria página da
@@ -7909,6 +8164,27 @@ def pedido_pagar_cartao(pid):
     if len(holder_cpf) not in (11, 14):
         return jsonify({'erro': 'CPF/CNPJ do titular obrigatório'}), 400
 
+    # Guarda quem pagou ANTES de escolher o provedor — o antifraude usa isso
+    # nos dois caminhos.
+    try:
+        db_execute("""UPDATE pedidos SET titular_nome=%s, titular_cpf=%s,
+                      ip_cliente=COALESCE(ip_cliente,%s) WHERE id=%s""",
+                   [holder_nome, holder_cpf, _rl_ip(), pid])
+        sc, mt = avaliar_risco_pedido(pid)
+        alertar_risco(pid, sc, mt, contexto=' — cartão sendo processado agora')
+        reavaliar_vizinhos(pid, p.get('ip_cliente') or _rl_ip())
+    except Exception as e:
+        log.error("antifraude cartao pedido %s: %s", pid, e)
+
+    # ── Qual provedor cobra este cartão ───────────────────────────────────
+    # PIX e boleto seguem no Asaas; só o cartão migra, porque só o cartão tem
+    # chargeback e só a Pagar.me oferece 3DS.
+    if cfg('cartao_provedor', 'asaas') == 'pagarme' and pagarme_configurado():
+        return _pagar_cartao_pagarme(pid, p, {
+            'numero': num, 'mes': mes, 'ano': ano, 'ccv': ccv,
+            'titular_nome': holder_nome, 'titular_cpf': holder_cpf,
+        }, (d.get('tds') or {}))
+
     # Reusa customer criado no /finalizar (guardado como "customer:<id>" no link)
     customer_id = None
     link_atual = (p.get('asaas_link') or '')
@@ -7938,20 +8214,8 @@ def pedido_pagar_cartao(pid):
     remote_ip = (request.headers.get('X-Forwarded-For')
                  or request.remote_addr or '0.0.0.0').split(',')[0].strip()
 
-    # Guarda QUEM pagou antes de mandar pro gateway. O numero do cartao nao
-    # e persistido (e nem pode ser), mas nome e CPF do titular sim: sem eles,
-    # quando o chargeback chega nao existe como provar que o comprador e o
-    # dono do cartao — nem como perceber, na hora, que nao e.
-    try:
-        db_execute("""UPDATE pedidos SET titular_nome=%s, titular_cpf=%s,
-                      ip_cliente=COALESCE(ip_cliente,%s) WHERE id=%s""",
-                   [holder_nome, holder_cpf, _rl_ip(), pid])
-        sc, mt = avaliar_risco_pedido(pid)
-        alertar_risco(pid, sc, mt, contexto=' — cartão sendo processado agora')
-        reavaliar_vizinhos(pid, p.get('ip_cliente') or _rl_ip())
-    except Exception as e:
-        log.error("antifraude cartao pedido %s: %s", pid, e)
-
+    # (o antifraude e a gravação do titular já rodaram acima, antes de
+    # escolher o provedor)
     code, resp = asaas_criar_cobranca_cartao(
         customer_id, p['total'],
         f'Luqui Brinquedos — Pedido #{pid}',
@@ -8060,10 +8324,22 @@ def pedido_pagamento(pid):
     itens = db_execute(
         "SELECT * FROM pedido_itens WHERE pedido_id=%s ORDER BY id",
         [pid], fetch='all') or []
+    # Dados pro 3DS. Só monta quando o cartão está indo pela Pagar.me — se o
+    # provedor for o Asaas, a página segue exatamente como era.
+    usa_pagarme = (p.get('forma_pagto') == 'cartao'
+                   and cfg('cartao_provedor', 'asaas') == 'pagarme'
+                   and pagarme_configurado())
+    tds_js = tds_dados = None
+    if usa_pagarme:
+        tds_js = pagarme_cfg()[3]
+        tds_dados = pagarme_dados_3ds(pid)
     return render_template('pedido_pagamento.html',
                            p=p, itens=itens,
                            categorias=listar_categorias(),
                            cliente=cliente_logado(),
+                           usa_pagarme=usa_pagarme,
+                           tds_js=tds_js, tds_dados=tds_dados,
+                           tds_ativo=(cfg('tds_ativo', '1') == '1'),
                            carrinho=carrinho_ler())
 
 
