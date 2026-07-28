@@ -203,6 +203,70 @@
     }
   }
 
+  /* Valor em dinheiro não pode quebrar: "R$ 78.505,87" virando "78.505," numa
+     linha e "87" na outra é o pior jeito de mostrar um número. Em vez de
+     quebrar, o valor encolhe a fonte até caber (limite de ~38% menor; se nem
+     assim couber, deixa quebrar — melhor ilegível pequeno do que cortado). */
+  var RE_VALOR = /^[-+]?[R$\s]*[-+]?[\d][\d.,]*\s*(%|kWh|km|un|x)?$/i;
+  function ajustarValores() {
+    if (!MOBILE()) return;
+    var els = document.querySelectorAll('div, span, td, b, strong, h1, h2, h3, p, small');
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      if (el.dataset.mkVal || el.children.length) continue;
+      var t = (el.textContent || '').trim();
+      if (t.length < 5 || t.length > 22 || !RE_VALOR.test(t)) continue;
+      var cw = el.clientWidth;
+      if (!cw) continue;
+      var fsOrig = parseFloat(getComputedStyle(el).fontSize);
+      el.style.setProperty('white-space', 'nowrap', 'important');
+      var fs = fsOrig, min = fsOrig * 0.62, n = 0;
+      while (el.scrollWidth > cw + 1 && fs > min && n < 14) {
+        fs -= 1; el.style.setProperty('font-size', fs + 'px', 'important'); n++;
+      }
+      if (el.scrollWidth > cw + 1) {           // nem encolhendo coube
+        el.style.removeProperty('white-space');
+        el.style.setProperty('font-size', fsOrig + 'px', 'important');
+      }
+      el.dataset.mkVal = '1';
+    }
+  }
+
+  /* Fila de cartões de indicador (KPI) espremida: 4 cartões numa linha de
+     390px dão ~60px cada e "atrasadas" quebra no meio. Passa a 2 por linha. */
+  function alargarCartoes() {
+    if (window.innerWidth > 600) return;
+    var els = document.querySelectorAll('div, ul, section');
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      if (el.dataset.mkKpi) continue;
+      var cs = getComputedStyle(el);
+      if (cs.display.indexOf('flex') === -1) continue;
+      var filhos = el.children;
+      if (filhos.length < 3) continue;
+      // barra de botões de ação não é fila de indicador: forçar 50% em cada
+      // corta o rótulo ("📋 Encargos" em 56px). Só cartão mesmo.
+      var temControle = false;
+      for (var b0 = 0; b0 < filhos.length; b0++) {
+        var tg = filhos[b0].tagName;
+        if (tg === 'BUTTON' || tg === 'A' || tg === 'INPUT' || tg === 'SELECT' || tg === 'LABEL') { temControle = true; break; }
+      }
+      if (temControle) continue;
+      var estreitos = 0;
+      for (var f = 0; f < filhos.length; f++) {
+        var w = filhos[f].getBoundingClientRect().width;
+        if (w > 0 && w < 90) estreitos++;
+      }
+      if (estreitos < 3) continue;
+      el.style.setProperty('flex-wrap', 'wrap', 'important');
+      for (var f2 = 0; f2 < filhos.length; f2++) {
+        filhos[f2].style.setProperty('flex', '1 1 calc(50% - 8px)', 'important');
+        filhos[f2].style.setProperty('min-width', '0', 'important');
+      }
+      el.dataset.mkKpi = '1';
+    }
+  }
+
   /* Rede de segurança: o que ainda estiver passando da borda da tela é contido
      no lugar. Dois casos que as regras por classe não pegam: um <b> com nome de
      arquivo gigante sem espaço dentro de um <div style="display:flex"> (sem
@@ -304,7 +368,7 @@
     if (agendado) return;
     agendado = setTimeout(function () {
       agendado = null;
-      aplicar(); reforcarCampos(); quebrarLinhas(); destravarTextoCortado(); conterEstouros();
+      aplicar(); reforcarCampos(); quebrarLinhas(); destravarTextoCortado(); alargarCartoes(); ajustarValores(); conterEstouros();
       MOBILE() ? montarGaveta() : desmontarGaveta();
     }, 250);
   }
@@ -315,6 +379,8 @@
     quebrarLinhas();
     destravarTextoCortado();
     montarGaveta();
+    alargarCartoes();
+    ajustarValores();
     conterEstouros();
     // as telas são SPA: o conteúdo troca sem recarregar a página
     try {
