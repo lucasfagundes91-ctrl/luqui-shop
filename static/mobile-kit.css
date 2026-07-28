@@ -78,6 +78,12 @@
   [style*="width:"][style*="px"], [style*="width: "][style*="px"] {
     max-width: 100% !important;
   }
+  /* Item de grid/flex nasce com min-width:auto, então uma tabela larga dentro
+     de um card estica a COLUNA inteira além da tela (e o card sai pela borda,
+     mesmo tendo rolagem interna). min-width:0 é a correção canônica. */
+  [class*="grid"] > *, [class*="flex"] > *, .row > *, .g2 > *, .g3 > *, .g4 > * {
+    min-width: 0;
+  }
   /* tabela solta ganha rolagem própria em vez de esticar a página */
   .mk-scroll {
     display: block; width: 100%; max-width: 100%;

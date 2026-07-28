@@ -689,6 +689,16 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_pedidos_risco ON pedidos(risco_score DESC, criado_em DESC)",
         # Cache de reputacao de IP (RDAP). Sem cache, cada checkout pagaria
         # uma consulta externa; com cache e ~1 por IP novo.
+        # Coordenadas de CEP, pra medir distância até a loja. Cache porque a
+        # consulta é externa e o mesmo CEP se repete muito.
+        """CREATE TABLE IF NOT EXISTS cep_geo (
+            cep VARCHAR(8) PRIMARY KEY,
+            lat DOUBLE PRECISION,
+            lng DOUBLE PRECISION,
+            cidade VARCHAR(120),
+            uf VARCHAR(2),
+            checado_em TIMESTAMPTZ DEFAULT NOW()
+        )""",
         """CREATE TABLE IF NOT EXISTS ip_reputacao (
             ip VARCHAR(45) PRIMARY KEY,
             rir VARCHAR(20),
@@ -4208,11 +4218,20 @@ def checkout_cep():
         d = r.json()
         if d.get('erro'):
             return jsonify({'erro': 'CEP não encontrado'}), 404
+        # Avisa já aqui se o cartão vale pra esse CEP, pra a pessoa escolher a
+        # forma de pagamento certa antes de preencher tudo — descobrir isso só
+        # no botão final é o jeito mais rápido de perder a venda.
+        try:
+            lib, km, _ = cartao_liberado_para(cep, False)
+        except Exception:
+            lib, km = True, None
         return jsonify({'ok': True,
                         'endereco': d.get('logradouro'),
                         'bairro': d.get('bairro'),
                         'cidade': d.get('localidade'),
-                        'uf': d.get('uf')})
+                        'uf': d.get('uf'),
+                        'cartao_liberado': bool(lib),
+                        'distancia_km': round(km) if km is not None else None})
     except Exception as e:
         return jsonify({'erro': str(e)}), 500
 
@@ -7523,6 +7542,17 @@ def checkout_finalizar():
         return jsonify({'erro': 'Pagamento no cartão temporariamente indisponível. '
                                 'Finalize no PIX e ganhe desconto — a confirmação '
                                 'é na hora.'}), 400
+    # Cartão só para a região da loja. Fora do raio, PIX.
+    if d['forma_pagto'] == 'cartao':
+        ok_raio, km_raio, motivo_raio = cartao_liberado_para(d.get('cep'), is_retira)
+        if not ok_raio:
+            log.info("cartao barrado por distancia: cep=%s %s",
+                     _so_digitos(d.get('cep')), motivo_raio)
+            return jsonify({
+                'erro': 'Para entregas fora de Cascavel e região aceitamos '
+                        'PIX (com desconto) e boleto. É só trocar a forma de '
+                        'pagamento aqui em cima — a confirmação do PIX é na hora.',
+                'fora_do_raio': True}), 400
     # CPF tem que ser VÁLIDO (dígitos verificadores), não só ter 11 dígitos.
     # Sem isso um CPF digitado errado passa aqui e só é recusado no Asaas com
     # "CPF/CNPJ inválido" — a cliente trava sem entender e a venda se perde.
@@ -7838,6 +7868,97 @@ def admin_asaas_conta():
     return jsonify(asaas_status_conta())
 
 
+# ─── Cartão só perto da loja ─────────────────────────────────────────────────
+# Decisão do Lucas em 28/07/2026, depois da semana de fraude: cartão só para
+# Cascavel e região; o resto do Brasil compra no PIX. A razão está nos dados —
+# TODA a fraude veio de longe (Brasília, Natal, Salvador, Rio, Fortaleza),
+# enquanto cliente da região é gente que ele alcança, que retira na loja e que
+# tem nome a zelar na cidade. PIX não tem estorno, então venda pra fora do raio
+# continua acontecendo sem risco de chargeback.
+CEP_LOJA_PADRAO = '85812130'   # R. Eng. Rebouças, 2053 — Cascavel/PR
+
+
+def _haversine_km(lat1, lon1, lat2, lon2):
+    r = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (math.sin(dlat / 2) ** 2
+         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
+         * math.sin(dlon / 2) ** 2)
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+def cep_coordenadas(cep):
+    """(lat, lng) do CEP, com cache no banco. None quando não dá pra resolver."""
+    c = _so_digitos(cep)
+    if len(c) != 8:
+        return None
+    try:
+        row = db_execute("SELECT lat, lng FROM cep_geo WHERE cep=%s", [c],
+                         fetch='one')
+        if row and row.get('lat') is not None:
+            return (float(row['lat']), float(row['lng']))
+        if row:
+            return None          # já consultado e não tem coordenada
+    except Exception:
+        return None
+    try:
+        r = requests.get(f'https://cep.awesomeapi.com.br/json/{c}',
+                         headers={'User-Agent': 'LuquiShop/1.0'}, timeout=8)
+        d = r.json() if r.status_code == 200 else {}
+    except Exception as e:
+        log.info("cep_coordenadas %s falhou: %s", c, e)
+        return None              # não grava: erro de rede merece nova tentativa
+    lat, lng = d.get('lat'), d.get('lng')
+    try:
+        db_execute("""INSERT INTO cep_geo (cep, lat, lng, cidade, uf, checado_em)
+                      VALUES (%s,%s,%s,%s,%s,NOW())
+                      ON CONFLICT (cep) DO UPDATE SET lat=EXCLUDED.lat,
+                        lng=EXCLUDED.lng, cidade=EXCLUDED.cidade,
+                        uf=EXCLUDED.uf, checado_em=NOW()""",
+                   [c, float(lat) if lat else None, float(lng) if lng else None,
+                    (d.get('city') or '')[:120], (d.get('state') or '')[:2]])
+    except Exception:
+        pass
+    return (float(lat), float(lng)) if lat and lng else None
+
+
+def distancia_da_loja_km(cep):
+    """Distância em km do CEP até a loja. None se não der pra calcular."""
+    destino = cep_coordenadas(cep)
+    if not destino:
+        return None
+    origem = cep_coordenadas(cfg('cartao_cep_loja', CEP_LOJA_PADRAO))
+    if not origem:
+        return None
+    return _haversine_km(origem[0], origem[1], destino[0], destino[1])
+
+
+def cartao_liberado_para(cep, is_retira=False):
+    """(liberado, distancia_km, motivo).
+
+    Retirada na loja sempre libera: a pessoa aparece no balcão, com o rosto e
+    o documento. É o oposto do perfil que nos atacou.
+
+    CEP que não resolve, RECUSA. Falhar fechado aqui custa uma venda no
+    cartão — o cliente ainda paga no PIX; falhar aberto custa a mercadoria.
+    """
+    if cfg('cartao_raio_ativo', '1') != '1':
+        return True, None, ''
+    if is_retira:
+        return True, 0.0, 'retirada na loja'
+    try:
+        raio = float(cfg('cartao_raio_km', '120'))
+    except ValueError:
+        raio = 120.0
+    km = distancia_da_loja_km(cep)
+    if km is None:
+        return False, None, 'não foi possível confirmar a região do CEP'
+    if km <= raio:
+        return True, km, f'{km:.0f} km da loja'
+    return False, km, f'{km:.0f} km da loja (limite {raio:.0f} km)'
+
+
 # ─── Pagar.me — cartão com 3DS ───────────────────────────────────────────────
 # Por que existe: o Asaas não oferece 3DS ("não disponibilizamos o protocolo 3D
 # Secure como funcionalidade configurável", suporte em 28/07/2026) e o antifraude
@@ -8117,6 +8238,16 @@ def pedido_pagar_cartao(pid):
         return jsonify({'erro': 'Pagamento no cartão temporariamente '
                                 'indisponível. Fale com a loja pelo WhatsApp.',
                         'whatsapp': cfg('whatsapp_loja', WHATSAPP_LOJA)}), 503
+    # Mesma trava do checkout, repetida aqui de propósito: pedido antigo pode
+    # ter nascido antes da regra, e esta rota é chamável direto.
+    _retira = (p.get('frete_servico') or '').lower().startswith('retirar')
+    _ok_raio, _, _mot = cartao_liberado_para(p.get('cep'), _retira)
+    if not _ok_raio:
+        log.info("pagar-cartao barrado por distancia: pedido %s (%s)", pid, _mot)
+        return jsonify({'erro': 'Para a sua região aceitamos PIX e boleto. '
+                                'Fale com a loja que a gente te ajuda a '
+                                'finalizar.',
+                        'whatsapp': cfg('whatsapp_loja', WHATSAPP_LOJA)}), 403
     tentativas = int(p.get('tentativas_cartao') or 0)
     if tentativas >= MAX_TENTATIVAS_CARTAO:
         log.warning("pedido %s bloqueado: %s tentativas de cartão", pid, tentativas)
