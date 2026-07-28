@@ -4208,32 +4208,67 @@ def checkout_buscar_cliente_cpf():
     return jsonify(dados)
 
 
+def _busca_cep_provedores(cep):
+    """Endereço do CEP, tentando mais de uma fonte.
+
+    Em 28/07/2026 o ViaCEP parou de responder DE DENTRO do container:
+    "Network is unreachable" (Errno 101). O IPv6 dele é da DigitalOcean
+    (2604:a880::) e o Railway não roteia pra lá; o que está atrás da
+    Cloudflare (2606:4700::) funciona normalmente — por isso Asaas e
+    Pagar.me seguiram OK enquanto o autopreenchimento do checkout quebrava
+    calado. Uma fonte só, hospedada fora da Cloudflare, virou ponto único
+    de falha bem no meio do funil de venda.
+    """
+    fontes = [
+        ('viacep', f'https://viacep.com.br/ws/{cep}/json/',
+         lambda d: None if d.get('erro') else {
+             'endereco': d.get('logradouro'), 'bairro': d.get('bairro'),
+             'cidade': d.get('localidade'), 'uf': d.get('uf')}),
+        ('brasilapi', f'https://brasilapi.com.br/api/cep/v1/{cep}',
+         lambda d: {'endereco': d.get('street'), 'bairro': d.get('neighborhood'),
+                    'cidade': d.get('city'), 'uf': d.get('state')}
+         if d.get('city') else None),
+        ('awesomeapi', f'https://cep.awesomeapi.com.br/json/{cep}',
+         lambda d: {'endereco': d.get('address'), 'bairro': d.get('district'),
+                    'cidade': d.get('city'), 'uf': d.get('state')}
+         if d.get('city') else None),
+    ]
+    erros = []
+    for nome, url, extrai in fontes:
+        try:
+            r = requests.get(url, headers={'User-Agent': 'LuquiShop/1.0'},
+                             timeout=6)
+            if r.status_code != 200:
+                erros.append(f'{nome}:{r.status_code}')
+                continue
+            out = extrai(r.json() or {})
+            if out:
+                return out, nome
+            erros.append(f'{nome}:nao_encontrado')
+        except Exception as e:
+            erros.append(f'{nome}:{type(e).__name__}')
+    log.warning("CEP %s falhou em todas as fontes: %s", cep, ', '.join(erros))
+    return None, ','.join(erros)
+
+
 @app.route('/api/checkout/cep')
 def checkout_cep():
     cep = (request.args.get('cep') or '').replace('-', '').replace('.', '')
     if len(cep) != 8 or not cep.isdigit():
         return jsonify({'erro': 'CEP inválido'}), 400
+    d, fonte = _busca_cep_provedores(cep)
+    if not d:
+        return jsonify({'erro': 'CEP não encontrado'}), 404
+    # Avisa já aqui se o cartão vale pra esse CEP, pra a pessoa escolher a
+    # forma de pagamento certa antes de preencher tudo — descobrir isso só
+    # no botão final é o jeito mais rápido de perder a venda.
     try:
-        r = requests.get(f'https://viacep.com.br/ws/{cep}/json/', timeout=6)
-        d = r.json()
-        if d.get('erro'):
-            return jsonify({'erro': 'CEP não encontrado'}), 404
-        # Avisa já aqui se o cartão vale pra esse CEP, pra a pessoa escolher a
-        # forma de pagamento certa antes de preencher tudo — descobrir isso só
-        # no botão final é o jeito mais rápido de perder a venda.
-        try:
-            lib, km, _ = cartao_liberado_para(cep, False)
-        except Exception:
-            lib, km = True, None
-        return jsonify({'ok': True,
-                        'endereco': d.get('logradouro'),
-                        'bairro': d.get('bairro'),
-                        'cidade': d.get('localidade'),
-                        'uf': d.get('uf'),
-                        'cartao_liberado': bool(lib),
-                        'distancia_km': round(km) if km is not None else None})
-    except Exception as e:
-        return jsonify({'erro': str(e)}), 500
+        lib, km, _ = cartao_liberado_para(cep, False)
+    except Exception:
+        lib, km = True, None
+    return jsonify({'ok': True, **d, 'fonte': fonte,
+                    'cartao_liberado': bool(lib),
+                    'distancia_km': round(km) if km is not None else None})
 
 
 def _slots_entrega_local():
