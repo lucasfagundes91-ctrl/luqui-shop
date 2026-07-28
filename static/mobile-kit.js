@@ -150,6 +150,24 @@
         el.dataset.mkWrap = '1';
       }
     }
+    // Grid espremido: 4-5 colunas em 390px deixam ~40px por coluna e cada
+    // palavra do rótulo ("Disponíveis", "pendentes") quebra no meio. Com
+    // coluna abaixo de 90px, passa a 2 colunas.
+    if (window.innerWidth <= 600) {
+      var todos = document.querySelectorAll('*');
+      for (var t = 0; t < todos.length; t++) {
+        var g = todos[t];
+        if (g.dataset.mkGridN) continue;
+        var cg = getComputedStyle(g);
+        if (cg.display.indexOf('grid') === -1) continue;
+        var cols = cg.gridTemplateColumns.split(' ').filter(Boolean);
+        if (cols.length < 3) continue;
+        var estreita = cols.some(function (c) { var v = parseFloat(c); return v && v < 90; });
+        if (!estreita) continue;
+        g.style.setProperty('grid-template-columns', 'repeat(2, minmax(0, 1fr))', 'important');
+        g.dataset.mkGridN = '1';
+      }
+    }
     // grid com colunas fixas em px (ex: "1fr 170px 170px 180px 200px" numa
     // linha de filtros) que nao cabe: vira uma coluna no celular, e no iPad
     // em pe quebra em quantas couberem. Vitrine com minmax()/auto-fill nao
