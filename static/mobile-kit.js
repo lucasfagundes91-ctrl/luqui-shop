@@ -70,6 +70,17 @@
       var tb = tabelas[i];
       try {
         rotularTabela(tb);
+        // Tabela com muita coluna em tela estreita: espremer 6 colunas em
+        // 390px deixa ~30px por coluna e o texto quebra letra a letra. Vira
+        // lista de cards (o rótulo de cada valor já foi posto acima).
+        var pl = tb.querySelector('tr');
+        var nCols = pl ? pl.children.length : 0;
+        var apertada = nCols >= 4 || tb.scrollWidth > window.innerWidth + 2;
+        if (window.innerWidth <= 600 && apertada) {
+          tb.classList.add('mk-card-tbl');
+        } else {
+          tb.classList.remove('mk-card-tbl');
+        }
         // tabela sem nenhum container rolável e mais larga que a tela
         if (!temScrollerAcima(tb) && tb.getBoundingClientRect().width > window.innerWidth + 2) {
           var pai = tb.parentElement;
@@ -155,14 +166,41 @@
     }
   }
 
+  /* Texto que o CSS mandou não quebrar (white-space:nowrap) e que não cabe:
+     no desktop sobra largura, no celular ele some cortado na borda. Volta a
+     quebrar linha — só nos que estão realmente cortados. */
+  function destravarTextoCortado() {
+    if (!MOBILE()) return;
+    var els = document.querySelectorAll('div, span, td, th, p, li, button, a, label, h1, h2, h3');
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      if (el.dataset.mkWs) continue;
+      var cs = getComputedStyle(el);
+      if (cs.whiteSpace !== 'nowrap' && cs.whiteSpace !== 'pre') continue;
+      if (cs.overflowX === 'auto' || cs.overflowX === 'scroll') continue;
+      if (el.scrollWidth > el.clientWidth + 2 && el.clientWidth > 0) {
+        el.style.setProperty('white-space', 'normal', 'important');
+        el.dataset.mkWs = '1';
+      }
+    }
+  }
+
   /* Menu gaveta: tira a coluna de ícones sem nome e devolve o menu completo
      atrás de um ☰. Só liga se o sistema tiver barra lateral fixa. */
   function montarGaveta() {
     if (!MOBILE() || document.querySelector('.mk-topbar')) return;
-    var sb = document.querySelector('.sidebar');
+    var sb = document.querySelector('.sidebar, aside.sidebar, aside[class*="sidebar"], nav.sidebar, #sidebar');
     if (!sb) return;
-    var pos = getComputedStyle(sb).position;
-    if (pos !== 'fixed' && pos !== 'absolute') return;
+    var cs0 = getComputedStyle(sb);
+    var largura = sb.getBoundingClientRect().width;
+    // Vale a gaveta quando a barra é flutuante (fixed/absolute) OU quando ela é
+    // uma coluna do layout que come a largura da tela — o caso do
+    // ContabilidadePro: 260px de menu em 390px de tela deixavam ~130px pro
+    // conteúdo e o texto saía uma letra por linha.
+    var flutua = cs0.position === 'fixed' || cs0.position === 'absolute';
+    var comeATela = largura >= window.innerWidth * 0.28;
+    if (!flutua && !comeATela) return;
+    if (!flutua) sb.dataset.mkFixar = '1';
 
     var barra = document.createElement('div');
     barra.className = 'mk-topbar';
@@ -181,6 +219,7 @@
     document.body.appendChild(barra);
     document.body.appendChild(fundo);
     document.body.classList.add('mk-gaveta');
+    if (sb.dataset.mkFixar) document.body.classList.add('mk-gaveta-fixar');
 
     var abrir = function () { document.body.classList.add('mk-aberta'); };
     var fechar = function () { document.body.classList.remove('mk-aberta'); };
@@ -201,7 +240,7 @@
     var b = document.querySelector('.mk-topbar'), f = document.querySelector('.mk-fundo');
     if (b) b.remove();
     if (f) f.remove();
-    document.body.classList.remove('mk-gaveta', 'mk-aberta');
+    document.body.classList.remove('mk-gaveta', 'mk-aberta', 'mk-gaveta-fixar');
   }
 
   var agendado = null;
@@ -209,7 +248,7 @@
     if (agendado) return;
     agendado = setTimeout(function () {
       agendado = null;
-      aplicar(); reforcarCampos(); quebrarLinhas();
+      aplicar(); reforcarCampos(); quebrarLinhas(); destravarTextoCortado();
       MOBILE() ? montarGaveta() : desmontarGaveta();
     }, 250);
   }
@@ -218,6 +257,7 @@
     aplicar();
     reforcarCampos();
     quebrarLinhas();
+    destravarTextoCortado();
     montarGaveta();
     // as telas são SPA: o conteúdo troca sem recarregar a página
     try {

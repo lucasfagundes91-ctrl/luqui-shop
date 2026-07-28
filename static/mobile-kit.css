@@ -74,9 +74,13 @@
   code, pre, samp { white-space: pre-wrap; word-break: break-word; max-width: 100%; }
   /* select com opção de texto longo cresce além do container */
   select, input, textarea { max-width: 100% !important; box-sizing: border-box; }
-  /* nome de arquivo/e-mail/código longo quebra em vez de empurrar a página */
-  td, th, .card, li, p, h1, h2, h3, b, strong, small, label, .sub {
-    overflow-wrap: anywhere;
+  /* Nome comprido quebra ENTRE as palavras. `anywhere` (e o antigo
+     word-break:break-word) parte no meio da palavra — "Conformi/dade",
+     "FAGUND/ES" — mesmo quando cabia inteira na linha de baixo. break-word só
+     parte quando a palavra sozinha não cabe (um e-mail, uma URL). */
+  td, th, .card, li, p, h1, h2, h3, b, strong, small, label, .sub, div, span, a {
+    overflow-wrap: break-word;
+    word-break: normal;
   }
   /* width fixo em px escrito no style= não vence a tela do celular */
   [style*="width:"][style*="px"], [style*="width: "][style*="px"] {
@@ -85,14 +89,44 @@
   /* Item de grid/flex nasce com min-width:auto, então uma tabela larga dentro
      de um card estica a COLUNA inteira além da tela (e o card sai pela borda,
      mesmo tendo rolagem interna). min-width:0 é a correção canônica. */
-  [class*="grid"] > *, [class*="flex"] > *, .row > *, .g2 > *, .g3 > *, .g4 > * {
+  [class*="grid"] > *:not(button):not(a):not(input):not(select):not(label),
+  [class*="flex"] > *:not(button):not(a):not(input):not(select):not(label),
+  .row > *:not(button):not(a):not(input):not(select):not(label),
+  .g2 > *, .g3 > *, .g4 > * {
     min-width: 0;
   }
+  /* botão nunca encolhe abaixo do próprio texto: senão vira "Dashbo…" cortado
+     (ou pior, cortado sem reticência nenhuma) */
+  button, .btn, a.btn { flex-shrink: 0; }
+  /* tabela w-full dentro de card com padding ainda passava alguns px */
+  table { max-width: 100% !important; }
   /* tabela solta ganha rolagem própria em vez de esticar a página */
   .mk-scroll {
     display: block; width: 100%; max-width: 100%;
     overflow-x: auto; -webkit-overflow-scrolling: touch;
   }
+
+  /* Tabela apertada demais vira lista de cards. Com 5+ colunas em 390px cada
+     coluna fica com ~30px e o texto quebra letra a letra ("D/a/s/h"). Aqui
+     cada linha vira um card e cada valor leva o nome da coluna na frente. */
+  table.mk-card-tbl { display: block !important; width: 100% !important; min-width: 0 !important; }
+  table.mk-card-tbl thead { display: none !important; }
+  table.mk-card-tbl tbody, table.mk-card-tbl tr, table.mk-card-tbl td {
+    display: block !important; width: auto !important; max-width: 100% !important;
+  }
+  table.mk-card-tbl tr {
+    border: 1px solid rgba(128,128,128,.25) !important; border-radius: 10px !important;
+    padding: 10px 12px !important; margin-bottom: 8px !important;
+  }
+  table.mk-card-tbl td {
+    padding: 3px 0 !important; border: none !important; text-align: left !important;
+    white-space: normal !important;
+  }
+  table.mk-card-tbl td:first-child { font-weight: 700 !important; padding-bottom: 6px !important;
+    border-bottom: 1px solid rgba(128,128,128,.2) !important; margin-bottom: 5px !important; }
+  table.mk-card-tbl td.mk-acoes { display: flex !important; flex-wrap: wrap !important;
+    gap: 6px !important; padding-top: 8px !important; margin-top: 6px !important;
+    border-top: 1px solid rgba(128,128,128,.2) !important; }
 
   /* 5) Modal ocupa a tela — em 390px não sobra espaço pra margem */
   .modal, .modal-content, [class*="modal"]:not([class*="modal-bg"]):not([class*="modal-overlay"]) {
@@ -117,6 +151,19 @@
     box-shadow: 4px 0 24px rgba(0,0,0,.18);
   }
   body.mk-gaveta.mk-aberta .sidebar { transform: translateX(0); }
+  /* barra que era coluna do layout (position:sticky/static) precisa sair do
+     fluxo, senão continua ocupando 260px da largura mesmo escondida */
+  body.mk-gaveta-fixar .sidebar {
+    position: fixed !important; top: 0 !important; bottom: 0 !important; left: 0 !important;
+    height: 100dvh !important; overflow-y: auto !important; flex-shrink: 0 !important;
+  }
+  /* Com a barra fora do fluxo, o conteúdo já reocupa a largura sozinho — não
+     dá pra mandar "todo filho do body ocupar 100%": botão flutuante também é
+     filho do body e viraria uma faixa de ponta a ponta. */
+  body.mk-gaveta-fixar main, body.mk-gaveta-fixar .conteudo,
+  body.mk-gaveta-fixar .content, body.mk-gaveta-fixar .main {
+    width: auto !important; max-width: 100% !important; margin-left: 0 !important;
+  }
   /* dentro da gaveta o menu volta a ter texto */
   body.mk-gaveta .sidebar .sb-nav button {
     justify-content: flex-start !important;
