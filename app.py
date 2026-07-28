@@ -7923,39 +7923,75 @@ def _haversine_km(lat1, lon1, lat2, lon2):
     return 2 * r * math.asin(math.sqrt(a))
 
 
-def cep_coordenadas(cep):
-    """(lat, lng) do CEP, com cache no banco. None quando não dá pra resolver."""
+def cep_info(cep):
+    """{'lat','lng','cidade','uf'} do CEP. Campos podem vir vazios.
+
+    Duas correções sobre a primeira versão, que barrou até o CEP da própria
+    loja em 28/07:
+
+    1) Ela gravava no cache MESMO sem coordenada, e depois lia esse registro
+       como "já consultei, não existe" — uma resposta ruim virava veredito
+       permanente. Agora só entra no cache o que tem coordenada.
+    2) Uma fonte só. Agora tenta AwesomeAPI e BrasilAPI; a UF costuma vir
+       mesmo quando a coordenada não vem, e a UF já resolve o caso comum.
+    """
     c = _so_digitos(cep)
     if len(c) != 8:
-        return None
+        return {}
     try:
-        row = db_execute("SELECT lat, lng FROM cep_geo WHERE cep=%s", [c],
-                         fetch='one')
+        row = db_execute("SELECT lat, lng, cidade, uf FROM cep_geo WHERE cep=%s",
+                         [c], fetch='one')
         if row and row.get('lat') is not None:
-            return (float(row['lat']), float(row['lng']))
-        if row:
-            return None          # já consultado e não tem coordenada
-    except Exception:
-        return None
-    try:
-        r = requests.get(f'https://cep.awesomeapi.com.br/json/{c}',
-                         headers={'User-Agent': 'LuquiShop/1.0'}, timeout=8)
-        d = r.json() if r.status_code == 200 else {}
-    except Exception as e:
-        log.info("cep_coordenadas %s falhou: %s", c, e)
-        return None              # não grava: erro de rede merece nova tentativa
-    lat, lng = d.get('lat'), d.get('lng')
-    try:
-        db_execute("""INSERT INTO cep_geo (cep, lat, lng, cidade, uf, checado_em)
-                      VALUES (%s,%s,%s,%s,%s,NOW())
-                      ON CONFLICT (cep) DO UPDATE SET lat=EXCLUDED.lat,
-                        lng=EXCLUDED.lng, cidade=EXCLUDED.cidade,
-                        uf=EXCLUDED.uf, checado_em=NOW()""",
-                   [c, float(lat) if lat else None, float(lng) if lng else None,
-                    (d.get('city') or '')[:120], (d.get('state') or '')[:2]])
+            return {'lat': float(row['lat']), 'lng': float(row['lng']),
+                    'cidade': row.get('cidade'), 'uf': row.get('uf')}
     except Exception:
         pass
-    return (float(lat), float(lng)) if lat and lng else None
+    out = {}
+    tentativas = [
+        (f'https://cep.awesomeapi.com.br/json/{c}',
+         lambda d: {'lat': d.get('lat'), 'lng': d.get('lng'),
+                    'cidade': d.get('city'), 'uf': d.get('state')}),
+        (f'https://brasilapi.com.br/api/cep/v2/{c}',
+         lambda d: {'lat': ((d.get('location') or {}).get('coordinates') or {}).get('latitude'),
+                    'lng': ((d.get('location') or {}).get('coordinates') or {}).get('longitude'),
+                    'cidade': d.get('city'), 'uf': d.get('state')}),
+    ]
+    for url, extrai in tentativas:
+        try:
+            r = requests.get(url, headers={'User-Agent': 'LuquiShop/1.0'},
+                             timeout=8)
+            if r.status_code != 200:
+                log.info("cep_info %s: %s devolveu %s", c, url.split('/')[2],
+                         r.status_code)
+                continue
+            d = extrai(r.json() or {})
+        except Exception as e:
+            log.info("cep_info %s em %s: %s", c, url.split('/')[2], e)
+            continue
+        out = {k: v for k, v in d.items() if v}
+        if out.get('lat') and out.get('lng'):
+            break
+    if not out:
+        return {}
+    if out.get('lat') and out.get('lng'):
+        try:
+            db_execute("""INSERT INTO cep_geo (cep, lat, lng, cidade, uf, checado_em)
+                          VALUES (%s,%s,%s,%s,%s,NOW())
+                          ON CONFLICT (cep) DO UPDATE SET lat=EXCLUDED.lat,
+                            lng=EXCLUDED.lng, cidade=EXCLUDED.cidade,
+                            uf=EXCLUDED.uf, checado_em=NOW()""",
+                       [c, float(out['lat']), float(out['lng']),
+                        (out.get('cidade') or '')[:120], (out.get('uf') or '')[:2]])
+        except Exception:
+            pass
+        out['lat'] = float(out['lat'])
+        out['lng'] = float(out['lng'])
+    return out
+
+
+def cep_coordenadas(cep):
+    d = cep_info(cep)
+    return (d['lat'], d['lng']) if d.get('lat') and d.get('lng') else None
 
 
 def distancia_da_loja_km(cep):
@@ -7986,12 +8022,25 @@ def cartao_liberado_para(cep, is_retira=False):
         raio = float(cfg('cartao_raio_km', '120'))
     except ValueError:
         raio = 120.0
-    km = distancia_da_loja_km(cep)
-    if km is None:
-        return False, None, 'não foi possível confirmar a região do CEP'
-    if km <= raio:
-        return True, km, f'{km:.0f} km da loja'
-    return False, km, f'{km:.0f} km da loja (limite {raio:.0f} km)'
+    info = cep_info(cep)
+    origem = cep_coordenadas(cfg('cartao_cep_loja', CEP_LOJA_PADRAO))
+    if info.get('lat') and origem:
+        km = _haversine_km(origem[0], origem[1], info['lat'], info['lng'])
+        if km <= raio:
+            return True, km, f'{km:.0f} km da loja'
+        return False, km, f'{km:.0f} km da loja (limite {raio:.0f} km)'
+
+    # Sem coordenada, decide pela UF. Bloquear tudo quando o geocode falha já
+    # aconteceu (28/07: barrou o CEP da própria loja) e o custo é alto — deixa
+    # a loja sem vender no cartão por causa de uma API de terceiro. A UF é
+    # aproximação grosseira, mas exclui 100% da fraude que a gente viu, que
+    # veio de DF, RN, BA, RJ, CE, PE, MA e SP.
+    uf = (info.get('uf') or '').upper()
+    if uf == (cfg('cartao_uf_loja', 'PR') or 'PR').upper():
+        return True, None, f'sem coordenada, mas UF {uf} — liberado pela UF'
+    if uf:
+        return False, None, f'sem coordenada e UF {uf} é de fora'
+    return False, None, 'não foi possível confirmar a região do CEP'
 
 
 # ─── Pagar.me — cartão com 3DS ───────────────────────────────────────────────
