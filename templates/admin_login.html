@@ -8,7 +8,11 @@
   input{width:100%;padding:12px;border:1px solid #E2E8F0;border-radius:8px;margin-bottom:10px;font-size:14px;box-sizing:border-box}
   button{width:100%;background:#FFC700;color:#1652C7;padding:14px;border:0;border-radius:8px;font-weight:900;cursor:pointer;font-size:14px}
   .erro{background:#FEE2E2;color:#991B1B;padding:10px;border-radius:8px;margin-bottom:14px;font-size:13px}
-</style></head><body>
+</style>  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Kit mobile Luqsys: só age em tela ≤900px (celular e iPad em pé) -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='mobile-kit.css') }}?v=3">
+  <script defer src="{{ url_for('static', filename='mobile-kit.js') }}?v=3"></script>
+</head><body>
 <div class="box">
   <img src="/static/logo.png" alt="Luqui Brinquedos"
        style="height:64px;width:auto;display:block;margin:0 auto 14px">

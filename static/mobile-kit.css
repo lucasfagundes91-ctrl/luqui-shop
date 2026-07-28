@@ -1,0 +1,143 @@
+/* ════════════════════════════════════════════════════════════════════════
+   Kit mobile Luqsys — v1
+   Só age em celular e iPad em pé (≤900px). Desktop fica intocado.
+   Resolve o que aparece em todos os sistemas quando abertos no telefone:
+     1. zoom automático do iOS ao tocar num campo (fonte < 16px)
+     2. botão pequeno demais pro dedo
+     3. tabela em card sem dizer que número é o quê
+     4. gráfico/imagem/arquivo de nome longo estourando a largura da tela
+     5. modal apertado
+   ════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+
+  /* 1) iOS dá zoom em qualquer campo com fonte < 16px, e o layout "pula".
+        16px é o mínimo pra ele não mexer. */
+  input:not([type=checkbox]):not([type=radio]):not([type=range]),
+  select, textarea {
+    font-size: 16px !important;
+  }
+
+  /* 2) Alvo de toque: o mínimo confortável é ~40px de altura.
+        Botão-ícone (só emoji) fica quadrado, não esticado. */
+  button, .btn, a.btn, input[type=submit], input[type=button] {
+    min-height: 40px;
+  }
+  .btn.sm, button.sm, td .btn, td button {
+    min-height: 36px !important;
+    padding: 8px 12px !important;
+    font-size: 13px !important;
+  }
+  input[type=checkbox], input[type=radio] {
+    width: 20px !important; height: 20px !important;
+  }
+
+  /* 3) Tabela virando card: cada valor ganha o nome da coluna na frente.
+        O rótulo vem do <th> e é copiado pro data-mk pelo mobile-kit.js. */
+  .mk-cards td[data-mk]::before {
+    content: attr(data-mk);
+    display: block;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    opacity: .55;
+    margin-bottom: 1px;
+  }
+  /* primeira célula (título do card) e célula de ações não levam rótulo */
+  .mk-cards td:first-child::before,
+  .mk-cards td.mk-acoes::before { content: none; }
+  /* célula vazia some do card em vez de virar um rótulo solto */
+  .mk-cards td.mk-vazio { display: none !important; }
+
+  /* 4) Nada passa da largura da tela */
+  canvas, .chart-wrap, .chart, [class*="chart"] {
+    max-width: 100% !important;
+  }
+  img, video, iframe, svg { max-width: 100%; height: auto; }
+  /* nome de arquivo/e-mail/código longo quebra em vez de empurrar a página */
+  td, th, .card, li, p, h1, h2, h3, b, strong, small, label, .sub {
+    overflow-wrap: anywhere;
+  }
+  /* width fixo em px escrito no style= não vence a tela do celular */
+  [style*="width:"][style*="px"], [style*="width: "][style*="px"] {
+    max-width: 100% !important;
+  }
+  /* tabela solta ganha rolagem própria em vez de esticar a página */
+  .mk-scroll {
+    display: block; width: 100%; max-width: 100%;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+  }
+
+  /* 5) Modal ocupa a tela — em 390px não sobra espaço pra margem */
+  .modal, .modal-content, [class*="modal"]:not([class*="modal-bg"]):not([class*="modal-overlay"]) {
+    max-width: 100% !important;
+    box-sizing: border-box;
+  }
+
+  /* 6) Filtros e barras de ação empilham em vez de cortar */
+  .filtros, .filters, .row.filtros { flex-wrap: wrap !important; }
+  .filtros > *, .filters > * { min-width: 0; }
+
+  /* ── 7) MENU GAVETA ──────────────────────────────────────────────────
+     No celular a barra lateral vira uma coluna de ícones sem nome: ocupa
+     ~15% da largura e o operador tem que adivinhar o que cada símbolo faz.
+     Com o kit ela some e volta como gaveta, COM os nomes, no botão ☰.
+     Só liga quando o mobile-kit.js encontra uma barra lateral fixa. */
+  body.mk-gaveta .sidebar {
+    width: 250px !important;
+    transform: translateX(-100%);
+    transition: transform .25s ease;
+    z-index: 100000 !important;
+    box-shadow: 4px 0 24px rgba(0,0,0,.18);
+  }
+  body.mk-gaveta.mk-aberta .sidebar { transform: translateX(0); }
+  /* dentro da gaveta o menu volta a ter texto */
+  body.mk-gaveta .sidebar .sb-nav button {
+    justify-content: flex-start !important;
+    padding: 13px 16px !important;
+    font-size: 15px !important;
+    min-height: 46px;
+  }
+  body.mk-gaveta .sidebar .sb-nav button span { display: inline !important; font-size: 15px !important; }
+  body.mk-gaveta .sidebar .sb-logo { font-size: 18px !important; padding: 16px 16px 8px !important; }
+  body.mk-gaveta .sidebar .sb-logo::before { content: none !important; }
+  body.mk-gaveta .sidebar .sb-user { font-size: 13px !important; padding: 10px 14px 16px !important; text-align: left !important; }
+  body.mk-gaveta .sidebar .sb-user button { width: auto !important; padding: 8px 14px !important; font-size: 13px !important; }
+  body.mk-gaveta .sidebar .sb-user button::before { content: none !important; }
+  body.mk-gaveta .sidebar .sb-acoes .lbl { display: inline !important; }
+  /* assinatura do rodapé só ocupa espaço no celular */
+  body.mk-gaveta .sb-sign { display: none !important; }
+
+  /* conteúdo ocupa a tela inteira — não sobra faixa de ícones */
+  body.mk-gaveta .main {
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-top: 8px !important;
+  }
+  body.mk-gaveta { padding-top: 46px !important; }
+
+  /* barra do topo com o ☰ (fica abaixo de um banner de aviso, se houver) */
+  .mk-topbar {
+    position: fixed; top: var(--pedh, 0px); left: 0; right: 0; height: 46px;
+    display: flex; align-items: center; gap: 10px; padding: 0 12px;
+    background: var(--panel, #fff); border-bottom: 1px solid var(--border, #e5e7eb);
+    z-index: 99; box-sizing: border-box;
+  }
+  .mk-topbar button {
+    background: none; border: none; font-size: 22px; line-height: 1;
+    padding: 6px 8px; cursor: pointer; color: inherit; min-height: 40px;
+  }
+  .mk-topbar .mk-tit { font-weight: 800; font-size: 15px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .mk-fundo {
+    position: fixed; inset: 0; background: rgba(15,23,42,.45);
+    z-index: 99999; opacity: 0; pointer-events: none; transition: opacity .25s;
+  }
+  body.mk-aberta .mk-fundo { opacity: 1; pointer-events: auto; }
+}
+
+/* fora do celular a gaveta não existe */
+@media (min-width: 901px) {
+  .mk-topbar, .mk-fundo { display: none !important; }
+}
