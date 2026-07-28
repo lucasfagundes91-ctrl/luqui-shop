@@ -70,6 +70,10 @@
     max-width: 100% !important;
   }
   img, video, iframe, svg { max-width: 100%; height: auto; }
+  /* exemplo de CSV/JSON num <code> não quebra sozinho e empurra a página */
+  code, pre, samp { white-space: pre-wrap; word-break: break-word; max-width: 100%; }
+  /* select com opção de texto longo cresce além do container */
+  select, input, textarea { max-width: 100% !important; box-sizing: border-box; }
   /* nome de arquivo/e-mail/código longo quebra em vez de empurrar a página */
   td, th, .card, li, p, h1, h2, h3, b, strong, small, label, .sub {
     overflow-wrap: anywhere;
