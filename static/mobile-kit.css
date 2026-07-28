@@ -40,6 +40,8 @@
   nav button, header button, .navbar button, .topbar button, .menu button {
     min-width: 40px;
   }
+  /* botão de sair / fechar modal costuma ser só um ícone de 18-20px de largura */
+  [class*="logout"], [class*="modal-close"], [class*="btn-close"], .close { min-width: 40px; }
   /* campo de data/mês tem largura própria e costuma passar da tela */
   input[type=date], input[type=month], input[type=datetime-local], input[type=time] {
     max-width: 100% !important;

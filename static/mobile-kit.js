@@ -116,8 +116,15 @@
       if (cs.flexWrap !== 'nowrap') continue;
       // barra que já rola de propósito (abas) fica como está
       if (cs.overflowX === 'auto' || cs.overflowX === 'scroll') continue;
-      if (el.scrollWidth > el.clientWidth + 2) {
+      var r = el.getBoundingClientRect();
+      // três jeitos de não caber: conteúdo maior que o próprio elemento, o
+      // elemento passando da borda da tela, ou o elemento sendo mais largo
+      // que o espaço que o pai tem pra dar.
+      var naoCabe = el.scrollWidth > el.clientWidth + 2 || r.right > window.innerWidth + 2;
+      if (!naoCabe && el.parentElement) naoCabe = r.width > el.parentElement.clientWidth + 2;
+      if (naoCabe) {
         el.style.setProperty('flex-wrap', 'wrap', 'important');
+        el.style.setProperty('max-width', '100%', 'important');
         el.dataset.mkWrap = '1';
       }
     }
