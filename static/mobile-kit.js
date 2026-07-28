@@ -211,6 +211,12 @@
     } catch (e) {}
     window.addEventListener('resize', agendar);
     window.addEventListener('orientationchange', agendar);
+    /* Em vários sistemas a troca de tela não cria elemento nenhum: as telas já
+       estão no HTML e a navegação só alterna display. Aí o observador acima
+       não vê nada — por isso reavalia também depois de cada toque. */
+    document.addEventListener('click', agendar, true);
+    /* telas que só aparecem depois do fetch */
+    setTimeout(aplicar, 1500); setTimeout(agendar, 3500);
   }
 
   if (document.readyState === 'loading') {

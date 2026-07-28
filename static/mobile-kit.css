@@ -30,6 +30,20 @@
   input[type=checkbox], input[type=radio] {
     width: 20px !important; height: 20px !important;
   }
+  /* link de menu/aba: com 16-32px de altura o dedo erra o alvo */
+  nav a, header a, .nav a, .navbar a, .menu a, .tabs a, .topbar a,
+  [class*="nav"] > a, [class*="menu"] > a {
+    min-height: 40px;
+    display: inline-flex; align-items: center;
+  }
+  /* botão só de ícone numa barra: garante largura de dedo também */
+  nav button, header button, .navbar button, .topbar button, .menu button {
+    min-width: 40px;
+  }
+  /* campo de data/mês tem largura própria e costuma passar da tela */
+  input[type=date], input[type=month], input[type=datetime-local], input[type=time] {
+    max-width: 100% !important;
+  }
 
   /* 3) Tabela virando card: cada valor ganha o nome da coluna na frente.
         O rótulo vem do <th> e é copiado pro data-mk pelo mobile-kit.js. */
