@@ -123,8 +123,19 @@
       var naoCabe = el.scrollWidth > el.clientWidth + 2 || r.right > window.innerWidth + 2;
       if (!naoCabe && el.parentElement) naoCabe = r.width > el.parentElement.clientWidth + 2;
       if (naoCabe) {
-        el.style.setProperty('flex-wrap', 'wrap', 'important');
-        el.style.setProperty('max-width', '100%', 'important');
+        // Barra de navegação (fila de ícones/abas): quebrar em várias linhas
+        // vira uma coluna gigante ocupando meia tela. Melhor deixar em uma
+        // linha só, rolando de lado.
+        var clic = el.querySelectorAll(':scope > a, :scope > button').length;
+        if (clic >= 4 && clic >= el.children.length - 1) {
+          el.style.setProperty('overflow-x', 'auto', 'important');
+          el.style.setProperty('flex-wrap', 'nowrap', 'important');
+          el.style.setProperty('max-width', '100%', 'important');
+          el.style.setProperty('-webkit-overflow-scrolling', 'touch');
+        } else {
+          el.style.setProperty('flex-wrap', 'wrap', 'important');
+          el.style.setProperty('max-width', '100%', 'important');
+        }
         el.dataset.mkWrap = '1';
       }
     }
