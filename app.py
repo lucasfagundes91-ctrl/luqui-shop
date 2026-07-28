@@ -7912,6 +7912,48 @@ def admin_asaas_conta():
 # continua acontecendo sem risco de chargeback.
 CEP_LOJA_PADRAO = '85812130'   # R. Eng. Rebouças, 2053 — Cascavel/PR
 
+# Os 84 municípios do PR a até 120 km da loja, PRECOMPUTADOS.
+#
+# A primeira versão geocodificava o CEP na hora, e não funcionou: a AwesomeAPI
+# devolve HTTP 429 pro IP do Railway (compartilhado, sempre quente) e a
+# BrasilAPI não traz coordenada. Resultado: a régua caiu pra "qualquer CEP do
+# PR", o que deixaria Curitiba (500 km) passar.
+#
+# Lista gerada a partir dos 141 municípios das mesorregiões Oeste, Sudoeste,
+# Centro-Ocidental e Centro-Sul, geocodificados pelo Nominatim e medidos em
+# haversine até -24.9506788,-53.4487927. Zero falhas na geração.
+# Mais perto: Cascavel (0,9 km). Mais longe que entrou: Saudade do Iguaçu
+# (117,3 km). Primeiro que ficou de fora: Pinhal de São Bento (120,4 km).
+# Foz do Iguaçu NÃO entra — fica a ~140 km.
+#
+# Pra mudar o raio, é preciso gerar a lista de novo; não adianta só mexer num
+# número. Em troca, a decisão não depende de nenhuma API em tempo real.
+CIDADES_RAIO_CARTAO = frozenset({
+    'ALTAMIRA DO PARANA', 'AMPERE', 'ANAHY', 'ASSIS CHATEAUBRIAND',
+    'BELA VISTA DA CAROBA', 'BOA ESPERANCA', 'BOA ESPERANCA DO IGUACU',
+    'BOA VISTA DA APARECIDA', 'BRAGANEY', 'CAFELANDIA', 'CAMPINA DA LAGOA',
+    'CAMPO BONITO', 'CAPANEMA', 'CAPITAO LEONIDAS MARQUES', 'CASCAVEL',
+    'CATANDUVAS', 'CEU AZUL', 'CORBELIA', 'CRUZEIRO DO IGUACU',
+    'DIAMANTE D OESTE', 'DIAMANTE DO SUL', 'DOIS VIZINHOS', 'ENEAS MARQUES',
+    'ENTRE RIOS DO OESTE', 'ESPIGAO ALTO DO IGUACU', 'FORMOSA DO OESTE',
+    'GOIOERE', 'GUARANIACU', 'IBEMA', 'IGUATU', 'IRACEMA DO OESTE',
+    'ITAIPULANDIA', 'JANIOPOLIS', 'JESUITAS', 'JURANDA', 'LARANJAL',
+    'LARANJEIRAS DO SUL', 'LINDOESTE', 'MAMBORE', 'MARECHAL CANDIDO RONDON',
+    'MARIPA', 'MATELANDIA', 'MEDIANEIRA', 'MERCEDES', 'MISSAL',
+    'MOREIRA SALES', 'NOVA AURORA', 'NOVA CANTU',
+    'NOVA ESPERANCA DO SUDOESTE', 'NOVA LARANJEIRAS', 'NOVA PRATA DO IGUACU',
+    'NOVA SANTA ROSA', 'OURO VERDE DO OESTE', 'PALOTINA', 'PATO BRAGADO',
+    'PEROLA D OESTE', 'PLANALTO', 'QUARTO CENTENARIO', 'QUATRO PONTES',
+    'QUEDAS DO IGUACU', 'RAMILANDIA', 'RANCHO ALEGRE D OESTE', 'REALEZA',
+    'RIO BONITO DO IGUACU', 'SALTO DO LONTRA', 'SANTA HELENA',
+    'SANTA IZABEL DO OESTE', 'SANTA LUCIA', 'SANTA TEREZA DO OESTE',
+    'SANTA TEREZINHA DE ITAIPU', 'SAO JORGE D OESTE', 'SAO JOSE DAS PALMEIRAS',
+    'SAO MIGUEL DO IGUACU', 'SAO PEDRO DO IGUACU', 'SAUDADE DO IGUACU',
+    'SERRANOPOLIS DO IGUACU', 'SULINA', 'TERRA ROXA', 'TOLEDO',
+    'TRES BARRAS DO PARANA', 'TUPASSI', 'UBIRATA', 'VERA CRUZ DO OESTE',
+    'VERE',
+})
+
 
 def _haversine_km(lat1, lon1, lat2, lon2):
     r = 6371.0
@@ -8022,25 +8064,21 @@ def cartao_liberado_para(cep, is_retira=False):
         raio = float(cfg('cartao_raio_km', '120'))
     except ValueError:
         raio = 120.0
+    # A decisão sai da LISTA precomputada, não de geocodificação em tempo real:
+    # a API de coordenadas devolve 429 pro IP do Railway. A cidade vem da
+    # consulta de CEP, que tem três fontes e é confiável.
     info = cep_info(cep)
-    origem = cep_coordenadas(cfg('cartao_cep_loja', CEP_LOJA_PADRAO))
-    if info.get('lat') and origem:
-        km = _haversine_km(origem[0], origem[1], info['lat'], info['lng'])
-        if km <= raio:
-            return True, km, f'{km:.0f} km da loja'
-        return False, km, f'{km:.0f} km da loja (limite {raio:.0f} km)'
-
-    # Sem coordenada, decide pela UF. Bloquear tudo quando o geocode falha já
-    # aconteceu (28/07: barrou o CEP da própria loja) e o custo é alto — deixa
-    # a loja sem vender no cartão por causa de uma API de terceiro. A UF é
-    # aproximação grosseira, mas exclui 100% da fraude que a gente viu, que
-    # veio de DF, RN, BA, RJ, CE, PE, MA e SP.
     uf = (info.get('uf') or '').upper()
-    if uf == (cfg('cartao_uf_loja', 'PR') or 'PR').upper():
-        return True, None, f'sem coordenada, mas UF {uf} — liberado pela UF'
-    if uf:
-        return False, None, f'sem coordenada e UF {uf} é de fora'
-    return False, None, 'não foi possível confirmar a região do CEP'
+    cidade = _nome_norm(info.get('cidade'))
+    if not cidade:
+        return False, None, 'não foi possível confirmar a cidade do CEP'
+    uf_loja = (cfg('cartao_uf_loja', 'PR') or 'PR').upper()
+    if uf and uf != uf_loja:
+        return False, None, f'{info.get("cidade")}/{uf} é de fora da região'
+    if cidade in CIDADES_RAIO_CARTAO:
+        return True, None, f'{info.get("cidade")}/{uf} está na região'
+    return False, None, (f'{info.get("cidade")}/{uf} fica a mais de '
+                         f'{raio:.0f} km da loja')
 
 
 # ─── Pagar.me — cartão com 3DS ───────────────────────────────────────────────
