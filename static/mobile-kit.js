@@ -185,6 +185,44 @@
     }
   }
 
+  /* Rede de segurança: o que ainda estiver passando da borda da tela é contido
+     no lugar. Dois casos que as regras por classe não pegam: um <b> com nome de
+     arquivo gigante sem espaço dentro de um <div style="display:flex"> (sem
+     classe, então nenhum seletor de flex casa) e um <select> com opção longa
+     dentro de um label que já estourava. */
+  function conterEstouros() {
+    if (!MOBILE()) return;
+    var vw = window.innerWidth;
+    var els = document.querySelectorAll('body *');
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      if (el.dataset.mkFix) continue;
+      if (el.closest('.sidebar') || el.classList.contains('mk-topbar')) continue;
+      var r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) continue;
+      if (r.right <= vw + 2) continue;
+      var p = el.parentElement, dentroScroller = false;
+      while (p && p !== document.body) {
+        var ov = getComputedStyle(p).overflowX;
+        if (ov === 'auto' || ov === 'scroll') { dentroScroller = true; break; }
+        p = p.parentElement;
+      }
+      if (dentroScroller) continue;           // rola de propósito, deixa
+      el.style.setProperty('max-width', '100%', 'important');
+      el.style.setProperty('overflow-wrap', 'break-word', 'important');
+      el.dataset.mkFix = '1';
+      // ancestral flex/grid precisa de min-width:0, senão o filho nunca encolhe
+      var q = el.parentElement, n = 0;
+      while (q && q !== document.body && n < 6) {
+        var cs = getComputedStyle(q);
+        if (cs.display.indexOf('flex') >= 0 || cs.display.indexOf('grid') >= 0) {
+          q.style.setProperty('min-width', '0', 'important');
+        }
+        q = q.parentElement; n++;
+      }
+    }
+  }
+
   /* Menu gaveta: tira a coluna de ícones sem nome e devolve o menu completo
      atrás de um ☰. Só liga se o sistema tiver barra lateral fixa. */
   function montarGaveta() {
@@ -248,7 +286,7 @@
     if (agendado) return;
     agendado = setTimeout(function () {
       agendado = null;
-      aplicar(); reforcarCampos(); quebrarLinhas(); destravarTextoCortado();
+      aplicar(); reforcarCampos(); quebrarLinhas(); destravarTextoCortado(); conterEstouros();
       MOBILE() ? montarGaveta() : desmontarGaveta();
     }, 250);
   }
@@ -259,6 +297,7 @@
     quebrarLinhas();
     destravarTextoCortado();
     montarGaveta();
+    conterEstouros();
     // as telas são SPA: o conteúdo troca sem recarregar a página
     try {
       new MutationObserver(function (muts) {
