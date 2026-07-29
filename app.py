@@ -8335,9 +8335,19 @@ def _pagar_cartao_pagarme(pid, p, cartao, tds):
 
     autenticado = bool(trans_id) and status_3ds in aceitos
     if exige and obrigatorio and not autenticado:
+        # A mensagem muda conforme o motivo, porque a AÇÃO do cliente muda:
+        # em 'U' insistir no mesmo cartão não adianta (o emissor não participa
+        # do 3DS), enquanto num desafio cancelado basta refazer.
         if tds.get('challenge_canceled'):
             msg = ('Você cancelou a confirmação do banco. Tente de novo e '
                    'conclua a verificação para finalizar a compra.')
+        elif status_3ds in ('U', 'R'):
+            msg = ('O banco deste cartão não oferece a confirmação de '
+                   'segurança que exigimos. Finalize no PIX (com desconto e '
+                   'confirmação na hora) ou no boleto — é só clicar abaixo.')
+        elif status_3ds == 'N':
+            msg = ('Seu banco não reconheceu esta compra como sua. Confira os '
+                   'dados do cartão ou finalize no PIX.')
         elif status_3ds:
             msg = ('Seu banco não confirmou esta compra (código '
                    f'{status_3ds}). Tente outro cartão ou finalize no PIX.')
