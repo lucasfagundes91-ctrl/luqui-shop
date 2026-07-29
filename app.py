@@ -4251,6 +4251,32 @@ def _busca_cep_provedores(cep):
     return None, ','.join(erros)
 
 
+@app.route('/api/checkout/cartao-regiao')
+def checkout_cartao_regiao():
+    """O cartão vale pra esse CEP? Usado pela tela pra esconder a opção ANTES
+    de a pessoa preencher tudo.
+
+    Endpoint próprio (e não o /cep) porque a tela passou a consultar o ViaCEP
+    direto do navegador — o backend deixou de ser chamado no caminho normal e
+    o aviso de região nunca chegava ao cliente.
+    """
+    cep = _so_digitos(request.args.get('cep'))
+    retira = (request.args.get('retira') or '') in ('1', 'true', 'sim')
+    if cfg('cartao_ativo', '1') != '1':
+        return jsonify({'liberado': False,
+                        'motivo': 'Cartão temporariamente indisponível.'})
+    if not retira and len(cep) != 8:
+        return jsonify({'liberado': True, 'indefinido': True})
+    try:
+        lib, _, _ = cartao_liberado_para(cep, retira)
+    except Exception as e:
+        log.warning("cartao-regiao %s: %s", cep, e)
+        return jsonify({'liberado': True, 'indefinido': True})
+    info = {} if retira else cep_info(cep)
+    return jsonify({'liberado': bool(lib),
+                    'cidade': info.get('cidade'), 'uf': info.get('uf')})
+
+
 @app.route('/api/checkout/cep')
 def checkout_cep():
     cep = (request.args.get('cep') or '').replace('-', '').replace('.', '')

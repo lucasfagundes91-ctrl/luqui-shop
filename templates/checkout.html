@@ -283,7 +283,7 @@
             <div style="font-size:24px">📱</div><b>PIX</b>
             <div style="font-size:11px;color:var(--verde);font-weight:700">-{{ desconto_pix_pct|int }}% off</div>
           </label>
-          <label class="forma" style="border:2px solid var(--linha);padding:14px;border-radius:10px;cursor:pointer;text-align:center">
+          <label class="forma" id="forma-cartao" style="border:2px solid var(--linha);padding:14px;border-radius:10px;cursor:pointer;text-align:center">
             <input type="radio" name="forma_pagto" value="cartao" onchange="aoTrocarForma()" style="display:none">
             <div style="font-size:24px">💳</div><b>Cartão</b>
             <div style="font-size:11px;color:var(--mut)">até {{ parcelamento_max }}x</div>
@@ -293,6 +293,9 @@
             <div style="font-size:24px">📄</div><b>Boleto</b>
             <div style="font-size:11px;color:var(--verde);font-weight:700">-{{ desconto_boleto_pct|int }}% off</div>
           </label>
+        </div>
+        <div id="aviso-cartao-regiao" style="display:none;margin-top:12px;background:#EFF6FF;
+             border:1px solid #BFDBFE;color:#1E40AF;padding:12px;border-radius:10px;font-size:12.5px;line-height:1.5">
         </div>
         <div id="parcelas-bloco" style="margin-top:14px;display:none">
           <label style="font-size:13px;color:var(--mut);font-weight:600">Parcelas</label>
@@ -447,6 +450,49 @@ async function buscarCep(cep){
   document.getElementById('cidade').value   = d.localidade || d.cidade || '';
   document.getElementById('uf').value       = d.uf || '';
   buscarFrete();
+  atualizarCartaoRegiao();
+}
+
+// Mostra ou esconde o cartão conforme a região de ENTREGA. A loja aceita
+// cartão só em Cascavel e arredores; pro resto do Brasil, PIX e boleto.
+// Fazer isso aqui (e não só no servidor) é o que impede a pessoa de preencher
+// o checkout inteiro pra descobrir no último clique que não podia.
+async function atualizarCartaoRegiao(){
+  const lbl   = document.getElementById('forma-cartao');
+  const aviso = document.getElementById('aviso-cartao-regiao');
+  const radio = lbl ? lbl.querySelector('input') : null;
+  if(!lbl || !radio) return;
+  const cep    = (document.getElementById('cep')?.value || '').replace(/\D/g,'');
+  const retira = MODO_ENTREGA === 'retirar';
+  if(!retira && cep.length !== 8) return;   // ainda não dá pra saber
+  let d;
+  try {
+    const r = await fetch(`/api/checkout/cartao-regiao?cep=${cep}&retira=${retira?1:0}`);
+    d = await r.json();
+  } catch(e){ return; }                     // na dúvida, não mexe na tela
+  if(d.indefinido) return;
+
+  if(d.liberado){
+    lbl.style.display = '';
+    lbl.style.opacity = '';
+    lbl.style.pointerEvents = '';
+    radio.disabled = false;
+    aviso.style.display = 'none';
+    return;
+  }
+  // Some com a opção e explica. Se o cartão já estava escolhido, volta pro PIX
+  // pra pessoa não ficar sem forma de pagamento selecionada.
+  lbl.style.display = 'none';
+  radio.disabled = true;
+  if(radio.checked){
+    const pix = document.querySelector('input[name="forma_pagto"][value="pix"]');
+    if(pix){ pix.checked = true; aoTrocarForma(); }
+  }
+  const onde = d.cidade ? `${d.cidade}${d.uf ? '/'+d.uf : ''}` : 'sua região';
+  aviso.innerHTML = `💳 <b>Cartão disponível só em Cascavel e região.</b><br>`
+    + `Para entregas em ${onde} aceitamos <b>PIX</b> (com desconto e confirmação `
+    + `na hora) e <b>boleto</b>. É só escolher aqui em cima.`;
+  aviso.style.display = 'block';
 }
 let SLOTS_LOCAL = [];
 let MODO_ENTREGA = '';  // 'retirar' | 'entrega' | ''
@@ -476,6 +522,8 @@ document.querySelectorAll('.card-frete-macro').forEach(card=>{
   card.addEventListener('click', ()=>{
     const modo = card.dataset.modo;
     MODO_ENTREGA = modo;
+    // Retirada libera cartão em qualquer caso — a pessoa vem ao balcão.
+    atualizarCartaoRegiao();
     // visual cards
     document.querySelectorAll('.card-frete-macro').forEach(c=>{
       const sel = c.dataset.modo === modo;
