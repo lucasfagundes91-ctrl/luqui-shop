@@ -819,7 +819,12 @@ function recalcular(){
   // Asaas exige R$ 5,00 minimo — desabilita botao + mostra aviso quando
   // descontos derrubam o total abaixo disso. Sem aviso, cliente clica e
   // recebe erro feio. Com aviso, ele entende que tem que ajustar.
-  const ASAAS_MIN = 5;
+  // O mínimo é de QUEM COBRA, não da loja: Asaas (PIX/boleto) exige
+  // R$ 5,00; a Pagar.me, que passou a processar o cartão, aprova a partir
+  // de R$ 1,00. Um valor fixo aqui recusava no cartão venda que o gateway
+  // aceita — e travava o botão sem a pessoa entender por quê.
+  const _formaSel = document.querySelector('input[name="forma_pagto"]:checked')?.value;
+  const ASAAS_MIN = (_formaSel === 'cartao') ? {{ minimo_cartao }} : {{ minimo_outros }};
   // Escopado no #form-checkout: o PRIMEIRO button[type=submit] da página é
   // o da busca (🔍). Sem o escopo, o alerta de valor mínimo desabilitava a
   // lupa do topo e deixava o botão de pagar intocado.
@@ -834,7 +839,8 @@ function recalcular(){
       if(resumo && resumo.parentNode) resumo.parentNode.insertBefore(alertaMin, btnPagar);
     }
     const falta = (ASAAS_MIN - total).toFixed(2).replace('.',',');
-    alertaMin.innerHTML = '⚠️ <b>Valor mínimo R$ 5,00.</b> Faltam R$ ' + falta + ' — adicione mais um item ou use menos pontos do Clube.';
+    alertaMin.innerHTML = '⚠️ <b>Valor mínimo R$ ' + ASAAS_MIN.toFixed(2).replace('.',',')
+      + '.</b> Faltam R$ ' + falta + ' — adicione mais um item ou use menos pontos do Clube.';
     if(btnPagar){ btnPagar.disabled = true; btnPagar.style.opacity = '0.6'; btnPagar.style.cursor = 'not-allowed'; }
   } else {
     if(alertaMin) alertaMin.remove();

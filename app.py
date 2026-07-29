@@ -4157,6 +4157,8 @@ def checkout_view():
                            parcelas_sem_juros_max=int(cfg('parcelas_sem_juros_max', '1')),
                            parcela_minima=float(cfg('parcela_minima', '50')),
                            juros_parcelamento_am=float(cfg('juros_parcelamento_am', '2.49')),
+                           minimo_cartao=valor_minimo_para('cartao'),
+                           minimo_outros=valor_minimo_para('pix'),
                            pontos_info=pontos_info)
     # Sem cache: garante que o cliente veja sempre a versao mais nova do
     # checkout (sem isso, Safari/PWA pode segurar HTML antigo por horas).
@@ -7740,13 +7742,14 @@ def checkout_finalizar():
         parcela_valor = round(base * fator, 2)
         total = round(parcela_valor * parcelas, 2)
         juros_valor = round(total - base, 2)
-    # Asaas exige R$ 5,00 minimo por cobranca. Se desconto (PIX/cupom/pontos)
-    # derruba abaixo disso, recusa o checkout ANTES de criar pedido com
-    # mensagem clara sugerindo aumentar carrinho ou reduzir desconto.
-    ASAAS_MINIMO = 5.0
-    if total < ASAAS_MINIMO:
-        falta = round(ASAAS_MINIMO - total, 2)
-        msg = (f'Valor mínimo de R$ {ASAAS_MINIMO:.2f} pra fechar a compra. '
+    # Mínimo por cobrança — depende de QUEM cobra, não do site.
+    # O R$ 5,00 é regra do Asaas, que hoje só processa PIX e boleto. O cartão
+    # migrou pra Pagar.me, que aceita bem menos (testado no sandbox: R$ 1,00
+    # aprova). Manter os R$ 5 no cartão recusaria venda que o gateway aceita.
+    minimo = valor_minimo_para(d['forma_pagto'])
+    if total < minimo:
+        falta = round(minimo - total, 2)
+        msg = (f'Valor mínimo de R$ {minimo:.2f} pra fechar a compra. '
                f'Faltam R$ {falta:.2f} — adicione mais um item ou use menos pontos '
                f'do Clube.').replace('.', ',')
         return jsonify({'erro': msg}), 400
@@ -8126,6 +8129,26 @@ PAGARME_TDS = {
     'producao': ('https://3ds.stone.com.br/v2/tds-token',
                  'https://3ds-nx-js.stone.com.br/live/v2/3ds2.min.js'),
 }
+
+
+def valor_minimo_para(forma_pagto):
+    """Menor valor que o gateway daquela forma de pagamento aceita.
+
+    Não é regra da loja: é de quem processa. O Asaas exige R$ 5,00 e continua
+    respondendo por PIX e boleto. O cartão foi pra Pagar.me, que aprova a
+    partir de R$ 1,00 (verificado no sandbox). Deixar os R$ 5 valendo pro
+    cartão recusaria venda que o gateway aceitaria.
+    """
+    if (forma_pagto == 'cartao'
+            and cfg('cartao_provedor', 'asaas') == 'pagarme'):
+        try:
+            return float(cfg('valor_minimo_cartao', '1'))
+        except ValueError:
+            return 1.0
+    try:
+        return float(cfg('valor_minimo_asaas', '5'))
+    except ValueError:
+        return 5.0
 
 
 def pagarme_cfg():
