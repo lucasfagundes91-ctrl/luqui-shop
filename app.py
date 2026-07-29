@@ -8207,6 +8207,11 @@ def _pagarme_endereco(p):
         'city': (p.get('cidade') or 'Cascavel')[:64],
         'zip_code': _so_digitos(p.get('cep')) or '85812130',
         'line_1': f'{num}, {rua}, {bairro}'.strip(' ,')[:256],
+        # A biblioteca de 3DS EXIGE line_2 e recusa a autenticação inteira sem
+        # ele: "order.shipping.address.line_2 is required". A maioria dos
+        # pedidos não tem complemento, então manda o bairro — e, se nem isso,
+        # um traço. Campo vazio conta como ausente.
+        'line_2': (p.get('complemento') or bairro or '-')[:64],
     }
 
 
@@ -8595,6 +8600,59 @@ def pedido_pagar_cartao(pid):
     # AWAITING_RISK_ANALYSIS / PENDING: análise antifraude; webhook confirma.
     return jsonify({'ok': True, 'status': 'analise',
                     'mensagem': 'Pagamento em análise — você será avisado em segundos'})
+
+
+@app.route('/api/pedido/<int:pid>/trocar-pra-pix', methods=['POST'])
+def pedido_trocar_pra_pix(pid):
+    """Converte um pedido de cartão em PIX, sem refazer nada.
+
+    Quando o cartão é recusado (banco negando, 3DS falhando), o cliente ficava
+    preso: a página de pagamento só oferecia cartão, e a única saída era
+    abandonar e montar o carrinho de novo. Isso é perder a venda com o
+    comprador já decidido.
+
+    O desconto do PIX é aplicado, então o total muda — por isso a cobrança
+    velha é cancelada e nasce uma nova.
+    """
+    p = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one')
+    if not p or not pedido_acesso_ok(p):
+        abort(404)
+    if p['status'] != 'aguardando_pagto':
+        return jsonify({'erro': 'Este pedido já foi processado'}), 400
+    if p['forma_pagto'] == 'pix':
+        return jsonify({'ok': True, 'ja_era_pix': True})
+
+    # Refaz a conta: tira juros de parcelamento e aplica o desconto do PIX.
+    bruto = float(p['subtotal']) + float(p['frete'] or 0) - float(p['desconto'] or 0)
+    pct = float(cfg('desconto_pix_pct', '3'))
+    total = round(max(0.0, bruto * (1 - pct / 100)), 2)
+    minimo = valor_minimo_para('pix')
+    if total < minimo:
+        return jsonify({'erro': f'No PIX o total fica abaixo do mínimo de '
+                                f'R$ {minimo:.2f}.'.replace('.', ',')}), 400
+
+    customer_id = asaas_criar_customer(p['nome'], p['email'], p['cpf'],
+                                       p['telefone'])
+    if not customer_id:
+        return jsonify({'erro': 'Não consegui gerar o PIX agora. '
+                                'Tente de novo em instantes.'}), 502
+    cob = asaas_criar_cobranca(customer_id, total, 'PIX',
+                               f'Luqui Brinquedos — Pedido #{pid}',
+                               externa_ref=f'pedido-{pid}')
+    if not cob or not cob.get('id'):
+        return jsonify({'erro': 'Não consegui gerar o PIX agora. '
+                                'Tente de novo em instantes.'}), 502
+    pix = asaas_buscar_pix_qr(cob['id']) or {}
+    db_execute("""UPDATE pedidos SET forma_pagto='pix', parcelas=1, juros_valor=0,
+                  total=%s, desconto=%s, asaas_cobranca_id=%s, asaas_link=%s,
+                  asaas_pix_qrcode=%s, asaas_pix_qr_image=%s, atualizado_em=NOW()
+                  WHERE id=%s AND status='aguardando_pagto'""",
+               [total, round(float(p['desconto'] or 0) + (bruto - total), 2),
+                cob['id'], cob.get('invoiceUrl') or '',
+                pix.get('payload') or '', pix.get('encodedImage') or '', pid])
+    log.info("pedido %s trocado de cartao pra PIX (R$ %.2f)", pid, total)
+    return jsonify({'ok': True, 'total': total,
+                    'url': f'/pedido/{pid}/pagamento?t={p.get("token") or ""}'})
 
 
 @app.route('/pedido/<int:pid>/pagamento')

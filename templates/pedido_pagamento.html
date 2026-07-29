@@ -264,6 +264,26 @@ if(typeof gtag !== 'undefined'){
                 erroBox.appendChild(p2);
                 erroBox.appendChild(a);
               }
+              // Saída pro PIX: cartão recusado com o comprador já decidido é
+              // venda perdida à toa. Converte o pedido sem refazer nada.
+              const bp = document.createElement('button');
+              bp.type = 'button';
+              bp.className = 'btn btn-block';
+              bp.style.cssText = 'margin-top:12px;padding:14px;font-weight:800;'
+                + 'background:#16A34A;color:#fff;border:0;border-radius:10px;cursor:pointer';
+              bp.textContent = '📱 Pagar no PIX (com desconto)';
+              bp.onclick = async () => {
+                bp.disabled = true; bp.textContent = 'Gerando PIX…';
+                try {
+                  const rp = await fetch('/api/pedido/{{ p.id }}/trocar-pra-pix'
+                    + location.search, {method:'POST'});
+                  const dp = await rp.json();
+                  if(dp.erro){ bp.disabled=false; bp.textContent='📱 Pagar no PIX (com desconto)';
+                               alert(dp.erro); return; }
+                  location.href = dp.url || location.pathname + location.search;
+                } catch(e){ bp.disabled=false; bp.textContent='📱 Pagar no PIX (com desconto)'; }
+              };
+              erroBox.appendChild(bp);
               erroBox.style.display = 'block';
               btn.disabled = false;
               btn.innerHTML = '🔒 Pagar {{ rs(p.total) }}';
