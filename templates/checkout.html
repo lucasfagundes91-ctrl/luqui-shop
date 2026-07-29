@@ -464,7 +464,9 @@ async function atualizarCartaoRegiao(){
   if(!lbl || !radio) return;
   const cep    = (document.getElementById('cep')?.value || '').replace(/\D/g,'');
   const retira = MODO_ENTREGA === 'retirar';
-  if(!retira && cep.length !== 8) return;   // ainda não dá pra saber
+  // Sem early-return por CEP em branco: manutenção do cartão precisa aparecer
+  // assim que a página abre, antes de a pessoa preencher qualquer coisa. O
+  // servidor responde `indefinido` quando é só o CEP que falta.
   let d;
   try {
     const r = await fetch(`/api/checkout/cartao-regiao?cep=${cep}&retira=${retira?1:0}`);
@@ -488,10 +490,17 @@ async function atualizarCartaoRegiao(){
     const pix = document.querySelector('input[name="forma_pagto"][value="pix"]');
     if(pix){ pix.checked = true; aoTrocarForma(); }
   }
-  const onde = d.cidade ? `${d.cidade}${d.uf ? '/'+d.uf : ''}` : 'sua região';
-  aviso.innerHTML = `💳 <b>Cartão disponível só em Cascavel e região.</b><br>`
-    + `Para entregas em ${onde} aceitamos <b>PIX</b> (com desconto e confirmação `
-    + `na hora) e <b>boleto</b>. É só escolher aqui em cima.`;
+  if(d.tipo === 'manutencao'){
+    aviso.innerHTML = d.motivo || (`🔧 <b>Pagamento no cartão em manutenção.</b><br>`
+      + `Estamos trocando de operadora pra deixar a compra mais segura. `
+      + `Enquanto isso aceitamos <b>PIX</b> (com desconto e confirmação na hora) `
+      + `e <b>boleto</b> — é só escolher aqui em cima.`);
+  } else {
+    const onde = d.cidade ? `${d.cidade}${d.uf ? '/'+d.uf : ''}` : 'sua região';
+    aviso.innerHTML = `💳 <b>Cartão disponível só em Cascavel e região.</b><br>`
+      + `Para entregas em ${onde} aceitamos <b>PIX</b> (com desconto e confirmação `
+      + `na hora) e <b>boleto</b>. É só escolher aqui em cima.`;
+  }
   aviso.style.display = 'block';
 }
 let SLOTS_LOCAL = [];
@@ -516,6 +525,9 @@ async function carregarInfoRetirada(){
   } catch(e){}
 }
 carregarInfoRetirada();
+// Estado do cartão já na abertura: se estiver em manutenção, a opção some
+// antes de a pessoa preencher qualquer coisa.
+atualizarCartaoRegiao();
 
 // Click nos cards macro (Retirar vs Receber em casa)
 document.querySelectorAll('.card-frete-macro').forEach(card=>{

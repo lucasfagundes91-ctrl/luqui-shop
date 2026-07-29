@@ -4264,9 +4264,12 @@ def checkout_cartao_regiao():
     """
     cep = _so_digitos(request.args.get('cep'))
     retira = (request.args.get('retira') or '') in ('1', 'true', 'sim')
+    # `tipo` diz POR QUE está bloqueado — a tela mostra textos diferentes.
+    # Dizer "só atendemos Cascavel" pra quem é de Cascavel, quando na verdade
+    # o cartão está em manutenção, é pior que não explicar nada.
     if cfg('cartao_ativo', '1') != '1':
-        return jsonify({'liberado': False,
-                        'motivo': 'Cartão temporariamente indisponível.'})
+        return jsonify({'liberado': False, 'tipo': 'manutencao',
+                        'motivo': cfg('cartao_aviso_manutencao', '')})
     if not retira and len(cep) != 8:
         return jsonify({'liberado': True, 'indefinido': True})
     try:
@@ -4275,7 +4278,7 @@ def checkout_cartao_regiao():
         log.warning("cartao-regiao %s: %s", cep, e)
         return jsonify({'liberado': True, 'indefinido': True})
     info = {} if retira else cep_info(cep)
-    return jsonify({'liberado': bool(lib),
+    return jsonify({'liberado': bool(lib), 'tipo': 'regiao' if not lib else '',
                     'cidade': info.get('cidade'), 'uf': info.get('uf')})
 
 
