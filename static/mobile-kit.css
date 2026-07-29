@@ -79,8 +79,8 @@
      "FAGUND/ES" — mesmo quando cabia inteira na linha de baixo. break-word só
      parte quando a palavra sozinha não cabe (um e-mail, uma URL). */
   td, th, .card, li, p, h1, h2, h3, b, strong, small, label, .sub, div, span, a {
-    overflow-wrap: break-word;
-    word-break: normal;
+    overflow-wrap: break-word !important;
+    word-break: normal !important;
   }
   /* width fixo em px escrito no style= não vence a tela do celular */
   [style*="width:"][style*="px"], [style*="width: "][style*="px"] {

@@ -213,20 +213,41 @@
     var els = document.querySelectorAll('div, span, td, b, strong, h1, h2, h3, p, small');
     for (var i = 0; i < els.length; i++) {
       var el = els[i];
-      if (el.dataset.mkVal || el.children.length) continue;
+      // Já ajustado antes: se o cartão alargou depois (o kit muda o grid na
+      // mesma passada), devolve a fonte original e mede de novo — senão o
+      // valor fica miúdo à toa num espaço que agora cabe.
+      if (el.dataset.mkVal) {
+        if (!el.dataset.mkFs0) continue;
+        var f0 = parseFloat(el.dataset.mkFs0);
+        el.style.setProperty('font-size', f0 + 'px', 'important');
+        el.style.setProperty('white-space', 'nowrap', 'important');
+        if (el.scrollWidth <= el.clientWidth + 1) { el.style.removeProperty('font-size'); continue; }
+        delete el.dataset.mkVal;
+      }
+      if (el.children.length > 2) continue;
+      var soInline = true;
+      for (var k = 0; k < el.children.length; k++) {
+        var d = getComputedStyle(el.children[k]).display;
+        if (d !== 'inline' && d !== 'inline-block') { soInline = false; break; }
+      }
+      if (!soInline) continue;
       var t = (el.textContent || '').trim();
       if (t.length < 5 || t.length > 22 || !RE_VALOR.test(t)) continue;
       var cw = el.clientWidth;
       if (!cw) continue;
-      var fsOrig = parseFloat(getComputedStyle(el).fontSize);
+      var fsOrig = parseFloat(el.dataset.mkFs0 || getComputedStyle(el).fontSize);
+      el.dataset.mkFs0 = fsOrig;
       el.style.setProperty('white-space', 'nowrap', 'important');
-      var fs = fsOrig, min = fsOrig * 0.62, n = 0;
+      var fs = fsOrig, min = fsOrig * 0.55, n = 0;
       while (el.scrollWidth > cw + 1 && fs > min && n < 14) {
         fs -= 1; el.style.setProperty('font-size', fs + 'px', 'important'); n++;
       }
-      if (el.scrollWidth > cw + 1) {           // nem encolhendo coube
-        el.style.removeProperty('white-space');
-        el.style.setProperty('font-size', fsOrig + 'px', 'important');
+      if (el.scrollWidth > cw + 1) {
+        // Nem encolhendo coube: deixa quebrar (mantendo a fonte menor). Tem
+        // que ser 'normal' explícito — só tirar o inline devolve o nowrap que
+        // veio da folha de estilo do sistema, e aí o valor fica CORTADO na
+        // borda do cartão, que é pior que quebrar em duas linhas.
+        el.style.setProperty('white-space', 'normal', 'important');
       }
       el.dataset.mkVal = '1';
     }
@@ -397,7 +418,7 @@
        não vê nada — por isso reavalia também depois de cada toque. */
     document.addEventListener('click', agendar, true);
     /* telas que só aparecem depois do fetch */
-    setTimeout(aplicar, 1500); setTimeout(agendar, 3500);
+    setTimeout(agendar, 1200); setTimeout(agendar, 3000);
   }
 
   if (document.readyState === 'loading') {
