@@ -203,6 +203,25 @@
     }
   }
 
+  /* word-break:break-all na folha do sistema parte QUALQUER palavra no meio
+     ("Shop/ping"), e às vezes vence o kit por especificidade. Onde o texto é
+     uma frase (tem espaço), desliga no próprio elemento — inline com
+     !important ganha de qualquer seletor. Hash/URL sem espaço fica como está. */
+  function soltarBreakAll() {
+    if (!MOBILE()) return;
+    var els = document.querySelectorAll('td, th, div, span, p, li, b, strong, small, label, a');
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      if (el.dataset.mkWb || el.children.length) continue;
+      if (getComputedStyle(el).wordBreak !== 'break-all') continue;
+      var t = (el.textContent || '').trim();
+      if (t.length < 4 || t.indexOf(' ') === -1) continue;   // sem espaço: pode ser hash/URL
+      el.style.setProperty('word-break', 'normal', 'important');
+      el.style.setProperty('overflow-wrap', 'break-word', 'important');
+      el.dataset.mkWb = '1';
+    }
+  }
+
   /* Valor em dinheiro não pode quebrar: "R$ 78.505,87" virando "78.505," numa
      linha e "87" na outra é o pior jeito de mostrar um número. Em vez de
      quebrar, o valor encolhe a fonte até caber (limite de ~38% menor; se nem
@@ -389,7 +408,7 @@
     if (agendado) return;
     agendado = setTimeout(function () {
       agendado = null;
-      aplicar(); reforcarCampos(); quebrarLinhas(); destravarTextoCortado(); alargarCartoes(); ajustarValores(); conterEstouros();
+      aplicar(); reforcarCampos(); quebrarLinhas(); destravarTextoCortado(); soltarBreakAll(); alargarCartoes(); ajustarValores(); conterEstouros();
       MOBILE() ? montarGaveta() : desmontarGaveta();
     }, 250);
   }
@@ -399,6 +418,7 @@
     reforcarCampos();
     quebrarLinhas();
     destravarTextoCortado();
+    soltarBreakAll();
     montarGaveta();
     alargarCartoes();
     ajustarValores();
