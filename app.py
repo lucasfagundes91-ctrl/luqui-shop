@@ -251,6 +251,19 @@ def _track_visita():
         ua_low = ua.lower()
         is_bot = any(b in ua_low for b in _BOT_HINTS)
         cid = session.get('cliente_id')
+
+        # Bot não vira linha crua. Em julho/2026 o crawler passou de 20 mil pra
+        # 130 mil hits/dia e site_visitas chegou a 910 MB — 75% lixo de robô,
+        # que nenhuma consulta de analytics usa (todas filtram NOT is_bot).
+        # Guardamos só a contagem diária, que é o único sinal que interessa.
+        if is_bot:
+            db_execute(
+                """INSERT INTO site_visitas_bots_diario (dia, visitas)
+                   VALUES (CURRENT_DATE, 1)
+                   ON CONFLICT (dia) DO UPDATE
+                   SET visitas = site_visitas_bots_diario.visitas + 1""")
+            return
+
         db_execute(
             """INSERT INTO site_visitas
                (path, referer, user_agent, ip_hash, is_bot, cliente_id)
@@ -605,6 +618,11 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_site_visitas_ts ON site_visitas(ts DESC)",
         "CREATE INDEX IF NOT EXISTS idx_site_visitas_path ON site_visitas(path, ts DESC)",
         "CREATE INDEX IF NOT EXISTS idx_site_visitas_ip ON site_visitas(ip_hash, ts DESC)",
+        # Crawler não vira linha crua (ver _track_visita) — só esta contagem.
+        """CREATE TABLE IF NOT EXISTS site_visitas_bots_diario (
+            dia DATE PRIMARY KEY,
+            visitas BIGINT NOT NULL DEFAULT 0
+        )""",
         # O que as pessoas procuram (busca do site + Luquizinha). Alimenta a
         # vitrine "Bombando nas buscas" da home e o relatório do admin.
         """CREATE TABLE IF NOT EXISTS site_buscas (
@@ -3039,6 +3057,30 @@ def admin_avaliacao_aprovar(aid):
 def admin_avaliacao_excluir(aid):
     db_execute("DELETE FROM avaliacoes WHERE id=%s", [aid])
     return redirect(url_for('admin_avaliacoes'))
+
+
+RETENCAO_VISITAS_DIAS = int(os.environ.get('RETENCAO_VISITAS_DIAS', '90'))
+
+
+@app.route('/cron/limpeza-visitas')
+def cron_limpeza_visitas():
+    """Apaga pageview cru com mais de RETENCAO_VISITAS_DIAS dias.
+
+    A contagem diária de bot (site_visitas_bots_diario) NÃO é apagada — ela é
+    minúscula e é o histórico longo. O que sai é linha crua de humano, que só
+    serve pras consultas de janela curta do dashboard.
+    """
+    if not _cron_token_ok():
+        return 'unauthorized', 401
+    corte = RETENCAO_VISITAS_DIAS
+    antes = db_execute('SELECT COUNT(*) AS n FROM site_visitas', fetch='one') or {}
+    db_execute("DELETE FROM site_visitas WHERE ts < NOW() - %s::interval",
+               [f'{corte} days'])
+    depois = db_execute('SELECT COUNT(*) AS n FROM site_visitas', fetch='one') or {}
+    apagadas = (antes.get('n') or 0) - (depois.get('n') or 0)
+    app.logger.info('limpeza-visitas: %s linhas apagadas (corte %sd)', apagadas, corte)
+    return jsonify({'ok': True, 'apagadas': apagadas,
+                    'restantes': depois.get('n') or 0, 'corte_dias': corte})
 
 
 @app.route('/cron/aniversariantes')
@@ -6123,11 +6165,18 @@ def admin_analytics():
     resumo = db_execute("""
         SELECT
           COUNT(*) FILTER (WHERE ts >= NOW() - %s::interval AND NOT is_bot) AS humanos,
-          COUNT(*) FILTER (WHERE ts >= NOW() - %s::interval AND is_bot) AS bots,
           COUNT(DISTINCT ip_hash) FILTER (WHERE ts >= NOW() - %s::interval AND NOT is_bot) AS unicos,
           COUNT(*) FILTER (WHERE ts >= NOW() - INTERVAL '1 day' AND NOT is_bot) AS humanos_24h
         FROM site_visitas""",
-        [intervalo, intervalo, intervalo], fetch='one') or {}
+        [intervalo, intervalo], fetch='one') or {}
+
+    # Bot não tem linha crua desde 30/07/2026 — a contagem vem da tabela diária.
+    bots = db_execute("""
+        SELECT COALESCE(SUM(visitas), 0) AS bots
+          FROM site_visitas_bots_diario
+         WHERE dia >= CURRENT_DATE - %s::int""", [dias], fetch='one') or {}
+    resumo = dict(resumo)
+    resumo['bots'] = bots.get('bots') or 0
 
     por_dia = db_execute("""
         SELECT DATE(ts AT TIME ZONE 'America/Sao_Paulo') AS dia,
