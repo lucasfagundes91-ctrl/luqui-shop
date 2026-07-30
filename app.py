@@ -256,7 +256,23 @@ def _track_visita():
         # 130 mil hits/dia e site_visitas chegou a 910 MB — 75% lixo de robô,
         # que nenhuma consulta de analytics usa (todas filtram NOT is_bot).
         # Guardamos só a contagem diária, que é o único sinal que interessa.
-        if is_bot:
+        # Scraper que se passa por navegador: em 30/07/2026 eram 104.069 hits em
+        # /categoria/ vindos de 95.539 IPs distintos num dia — uma pagina por
+        # "visitante", numa loja com 112 pedidos no total. O User-Agent e de
+        # navegador real, entao _BOT_HINTS nao pega.
+        #
+        # Assinatura: pagina de categoria + sem referer + sem cookie de sessao.
+        # Os dois sinais sao confiaveis aqui — a politica de referer do site e a
+        # padrao (navegacao interna manda referer) e toda resposta ja crava
+        # cookie de sessao, entao quem volta sempre traz um. No mesmo dia,
+        # /categoria/ COM referer deu 91 hits: a proporcao e de mil pra um.
+        #
+        # Paliativo ate a regra no edge (Cloudflare) — aqui a CPU e a banda ja
+        # foram gastas; so evita poluir o analytics e inchar a tabela.
+        sem_rastro = (not ref and not request.cookies.get('session')
+                      and p.startswith('/categoria/'))
+
+        if is_bot or sem_rastro:
             db_execute(
                 """INSERT INTO site_visitas_bots_diario (dia, visitas)
                    VALUES (CURRENT_DATE, 1)
