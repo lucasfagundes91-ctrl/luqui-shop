@@ -3211,6 +3211,12 @@ def cron_recuperar_pedidos_parados():
          pedido de maior valor, e os irmãos são marcados junto.
       3. Pula quem já tem qualquer pedido pago — cliente que voltou e comprou
          por outro caminho não pode ser cobrado de novo.
+      4. Pula pedido com risco >= RISCO_LIMITE que ninguém liberou. Sem isso o
+         cron ia buscar de volta justamente o que o antifraude marcou: em
+         31/07/2026 ele ressuscitou o pedido #96 (Rio de Janeiro, "6x no
+         cartão" + mesmo endereço de entrega de outro CPF), feito na rajada de
+         27/07 e parado desde então. Pedido liberado na mão (risco_liberado_em)
+         volta a ser recuperável — a decisão humana manda.
     """
     if not _cron_token_ok():
         return 'unauthorized', 401
@@ -3223,8 +3229,12 @@ def cron_recuperar_pedidos_parados():
     if restam <= 0:
         return jsonify({'ok': True, 'enviados': 0, 'motivo': 'limite diário'})
 
-    cands = db_execute("""
-        SELECT * FROM pedidos p
+    # Filtro de risco: mesmo limiar que segura a etiqueta automática, pra não
+    # existirem dois critérios de "pedido suspeito" divergindo com o tempo.
+    _RISCO_SQL = (" AND (COALESCE(p.risco_score,0) < %s"
+                  "      OR p.risco_liberado_em IS NOT NULL)")
+    _BASE_SQL = """
+          FROM pedidos p
          WHERE p.status='aguardando_pagto'
            AND p.criado_em < NOW() - INTERVAL '48 hours'
            AND COALESCE(p.observacao,'') NOT LIKE %s
@@ -3233,9 +3243,16 @@ def cron_recuperar_pedidos_parados():
                   WHERE regexp_replace(COALESCE(q.telefone,''), '\\D', '', 'g')
                       = regexp_replace(COALESCE(p.telefone,''), '\\D', '', 'g')
                     AND regexp_replace(COALESCE(p.telefone,''), '\\D', '', 'g') <> ''
-                    AND q.status IN """ + _SQL_PAGOS + """)
-         ORDER BY p.total DESC""",
-        ['%[recuperacao-enviada%'], fetch='all') or []
+                    AND q.status IN """ + _SQL_PAGOS
+    cands = db_execute("SELECT *" + _BASE_SQL + _RISCO_SQL + " ORDER BY p.total DESC",
+                       ['%[recuperacao-enviada%', RISCO_LIMITE], fetch='all') or []
+    # Quantos ficaram de fora POR RISCO. Vai na resposta pro log do cron mostrar
+    # — filtro que corta em silêncio vira "não tinha ninguém pra recuperar".
+    _pulados = db_execute(
+        "SELECT COUNT(*) AS n" + _BASE_SQL
+        + " AND COALESCE(p.risco_score,0) >= %s AND p.risco_liberado_em IS NULL",
+        ['%[recuperacao-enviada%', RISCO_LIMITE], fetch='one') or {}
+    pulados_risco = int(_pulados.get('n') or 0)
 
     vistos, enviados, detalhe = set(), 0, []
     for p in cands:
@@ -3300,8 +3317,12 @@ vezes é o banco barrando a compra pela internet — não é problema no seu car
                 time.sleep(12)
         except Exception as e:
             log.error("recuperacao %s: %s", p['id'], e)
+    if pulados_risco:
+        log.info("recuperacao: %s pedido(s) fora por risco >= %s (nao liberados)",
+                 pulados_risco, RISCO_LIMITE)
     return jsonify({'ok': True, 'enviados': enviados,
-                    'restantes_hoje': restam - enviados, 'detalhe': detalhe})
+                    'restantes_hoje': restam - enviados,
+                    'pulados_risco': pulados_risco, 'detalhe': detalhe})
 
 
 @app.route('/promocoes')
