@@ -4,6 +4,24 @@ Stack Flask+PG. Produtos/estoque/promoções são puxados do PDV Pro em tempo re
 via API (X-API-Key). Quando um pedido é pago, dispara webhook que cria a venda
 no PDV Pro automaticamente.
 """
+# ── Fuso horário da aplicação ────────────────────────────────────────────────
+# O container roda em UTC. Sem isto, date.today() e datetime.now() devolvem a
+# data e a hora de Londres: das 21h à meia-noite em Brasília o UTC já virou o
+# dia seguinte, e todo "hoje" do sistema apontava pro dia errado.
+# Precisa vir ANTES de qualquer import que leia a hora.
+import os as _os_tz, time as _time_tz
+_os_tz.environ.setdefault('TZ', 'America/Sao_Paulo')
+try:
+    _time_tz.tzset()
+except AttributeError:            # Windows não tem tzset
+    pass
+if _time_tz.tzname[0] in ('UTC', 'GMT'):
+    # Imagem sem tzdata: o TZ acima não pega e as datas voltam a sair em UTC.
+    # Falhar em silêncio aqui viraria relatório torto semanas depois.
+    print('AVISO: fuso nao aplicado (falta tzdata na imagem) - datas em UTC',
+          flush=True)
+# ─────────────────────────────────────────────────────────────────────────────
+
 import base64
 import difflib
 import hashlib
