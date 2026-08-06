@@ -13,7 +13,7 @@
 <section class="produtos">
   {% for p in sugestoes %}
     <div class="prod-card">
-      <a href="/produto/{{ p.id }}">
+      <a href="{{ url_produto(p) }}">
         <div class="foto">
           {% if p.foto_url %}<img src="{{ p.foto_url }}">{% else %}<span class="ph">📦</span>{% endif %}
         </div>

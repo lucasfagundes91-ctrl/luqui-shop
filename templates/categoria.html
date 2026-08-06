@@ -1,5 +1,11 @@
 {% extends "base.html" %}
-{% block titulo %}{{ categoria_nome }} — Luqui Brinquedos{% endblock %}
+{% block titulo %}{{ categoria_nome }}{% if pagina > 1 %} — página {{ pagina }}{% endif %} | Comprar {{ categoria_nome|lower }} online — Luqui Brinquedos{% endblock %}
+{% block descricao %}{{ categoria_nome }} na Luqui Brinquedos: {{ total }} produtos com entrega pra todo o Brasil, parcelado em até 12x e retirada na loja em Cascavel/PR.{% endblock %}
+{# Filtro e ordenação criam URL nova com o mesmo conteúdo — essas saem do
+   índice e apontam pra categoria limpa. Paginação continua indexável (com
+   canonical própria), senão o produto que só aparece na página 3 some. #}
+{% block meta_robots %}{% if filtros_ativos or so_promo or (ordem and ordem != 'destaque') %}noindex, follow{% else %}index, follow, max-image-preview:large{% endif %}{% endblock %}
+{% block canonical %}{{ SITE_URL }}/categoria/{{ categoria_slug }}{% if pagina > 1 and not (filtros_ativos or so_promo or (ordem and ordem != 'destaque')) %}?p={{ pagina }}{% endif %}{% endblock %}
 {% block conteudo %}
 
 {% macro link_filtro(chave, slug, label, qtd) -%}
@@ -61,7 +67,7 @@
 <div style="max-width:1200px;margin:20px auto;padding:0 16px">
   <a href="/" style="color:var(--mut);font-size:13px">← Voltar pra loja</a>
 </div>
-<div class="secao"><h2>{{ categoria_nome }}</h2></div>
+<div class="secao"><h1>{{ categoria_nome }}</h1></div>
 
 <!-- ordenação + promo (linha fina em cima) -->
 <div style="max-width:1200px;margin:0 auto 14px;padding:0 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
@@ -138,7 +144,7 @@
       {% for p in produtos %}
         <div class="prod-card">
           {% if p.preco_promo %}<span class="selo promo">PROMO</span>{% endif %}
-          <a href="/produto/{{ p.id }}">
+          <a href="{{ url_produto(p) }}">
             <div class="foto">
               {% if p.foto_url %}<img src="{{ p.foto_url }}" alt="">
               {% else %}<span class="ph">📦</span>{% endif %}

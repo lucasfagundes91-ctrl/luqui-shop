@@ -146,7 +146,7 @@
       {% for p in produtos %}
         <div class="prod-card">
           {% if p.preco_promo %}<span class="selo promo">PROMO</span>{% endif %}
-          <a href="/produto/{{ p.id }}">
+          <a href="{{ url_produto(p) }}">
             <div class="foto">
               {% if p.foto_url %}<img src="{{ p.foto_url }}" alt="">
               {% else %}<span class="ph">📦</span>{% endif %}

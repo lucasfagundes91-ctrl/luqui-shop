@@ -121,7 +121,32 @@ CUPOM_PRIMEIRA_COMPRA_ATIVO = os.environ.get('CUPOM_PRIMEIRA_COMPRA_ATIVO', '0')
 def _ctx_flags():
     return {'clube_ativo': CLUBE_LUQUI_ATIVO,
             'cupom_aniversario_ativo': CUPOM_ANIVERSARIO_ATIVO,
-            'cupom_primeira_compra_ativo': CUPOM_PRIMEIRA_COMPRA_ATIVO}
+            'cupom_primeira_compra_ativo': CUPOM_PRIMEIRA_COMPRA_ATIVO,
+            'SITE_URL': SITE_URL}
+
+
+SITE_HOST = SITE_URL.split('//', 1)[-1].strip('/')     # www.luquibrinquedos.com.br
+
+
+@app.before_request
+def _forca_host_canonico():
+    """301 do apex pro www.
+
+    O dominio nu e o www respondiam 200 os DOIS, sem redirect: pro Google eram
+    dois sites com o mesmo conteudo. Pior, o buscador tinha indexado o apex
+    enquanto sitemap, feed.xml, og:url e JSON-LD apontavam pro www — link
+    externo caia num, sinal de ranking ia pro outro. So GET/HEAD: redirecionar
+    POST perderia o corpo do webhook.
+    """
+    if request.method not in ('GET', 'HEAD'):
+        return None
+    host = (request.host or '').lower().split(':')[0]
+    if not host or host == SITE_HOST or host.endswith('.railway.app'):
+        return None
+    if host != SITE_HOST.replace('www.', ''):
+        return None                       # dominio desconhecido: nao mexe
+    destino = SITE_URL + request.full_path.rstrip('?')
+    return redirect(destino, code=301)
 
 
 @app.before_request
@@ -1927,6 +1952,30 @@ def pdv_get(path, params=None, ttl=60):
 _FILTROS_VALIDOS = ('departamento', 'grupo', 'subgrupo', 'marca', 'faixa_etaria', 'destaque')
 
 
+def slug_produto(descricao):
+    """'BONECA BABY ALIVE COMIDINHA' -> 'boneca-baby-alive-comidinha'.
+
+    Vai no fim da URL do produto. /produto/1234 nao dizia nada pro buscador;
+    /produto/1234-boneca-baby-alive-comidinha carrega a palavra que a pessoa
+    digita. O id continua na frente, entao a rota nao depende do texto — se a
+    descricao mudar no PDV, a URL velha so redireciona pra nova.
+    """
+    txt = unicodedata.normalize('NFKD', (descricao or '').lower())
+    txt = txt.encode('ascii', 'ignore').decode('ascii')
+    txt = re.sub(r'[^a-z0-9]+', '-', txt).strip('-')
+    return txt[:70].rstrip('-')
+
+
+def url_produto(p):
+    """URL canonica do produto. Usada nos links, no sitemap e no JSON-LD."""
+    pid = p.get('id') or p.get('produto_id')
+    s = slug_produto(p.get('descricao'))
+    return f"/produto/{pid}-{s}" if s else f"/produto/{pid}"
+
+
+app.jinja_env.globals['url_produto'] = url_produto
+
+
 def listar_produtos(busca=None, categoria=None, limite=24, offset=0, ordem=None,
                     **filtros):
     """`categoria` ainda é aceito como alias de `departamento` pra compat.
@@ -3497,7 +3546,7 @@ def cron_avise_me():
              WHERE produto_pdv_id=%s AND notificado_em IS NULL""",
             [pid], fetch='all') or []
         nome = prod.get('descricao') or f'Produto #{pid}'
-        url = f"https://www.luquibrinquedos.com.br/produto/{pid}"
+        url = SITE_URL + url_produto(prod)
         preco = float(prod.get('preco_promo') or prod.get('preco_venda') or 0)
         for c in cadastros:
             try:
@@ -3592,23 +3641,15 @@ def pag_termos():
 
 @app.route('/robots.txt')
 def robots_txt():
-    # Bloqueia AI scrapers (treinam LLM, não trazem cliente) e SEO scrapers
-    # de concorrente (Ahrefs/Semrush/etc). Os bots de busca legítimos
-    # (Googlebot/Bingbot/Applebot) continuam livres.
-    txt = """# AI Crawlers — bloqueados (treinam LLM, não trazem cliente)
+    # Duas categorias diferentes que antes estavam no mesmo balaio:
+    #  - TREINO de LLM: raspa, não devolve visita. Continua bloqueado.
+    #  - BUSCA COM CITAÇÃO (ChatGPT/Perplexity/Claude respondendo pergunta e
+    #    linkando a fonte): manda clique de gente real procurando brinquedo.
+    #    Bloquear isso era abrir mão de um canal inteiro. Liberado.
+    txt = """# Treino de LLM — bloqueado (raspa e não traz cliente)
 User-agent: GPTBot
 Disallow: /
-User-agent: ChatGPT-User
-Disallow: /
-User-agent: OAI-SearchBot
-Disallow: /
-User-agent: ClaudeBot
-Disallow: /
 User-agent: anthropic-ai
-Disallow: /
-User-agent: PerplexityBot
-Disallow: /
-User-agent: Perplexity-User
 Disallow: /
 User-agent: Google-Extended
 Disallow: /
@@ -3617,8 +3658,6 @@ Disallow: /
 User-agent: meta-externalagent
 Disallow: /
 User-agent: meta-externalfetcher
-Disallow: /
-User-agent: FacebookBot
 Disallow: /
 User-agent: Amazonbot
 Disallow: /
@@ -3634,6 +3673,20 @@ User-agent: Omgilibot
 Disallow: /
 User-agent: Omgili
 Disallow: /
+
+# Busca com citação — LIBERADO: aparece na resposta com link pra loja
+User-agent: OAI-SearchBot
+Allow: /
+User-agent: ChatGPT-User
+Allow: /
+User-agent: PerplexityBot
+Allow: /
+User-agent: Perplexity-User
+Allow: /
+User-agent: ClaudeBot
+Allow: /
+User-agent: FacebookBot
+Allow: /
 
 # SEO scrapers de concorrente
 User-agent: AhrefsBot
@@ -3651,26 +3704,44 @@ Disallow: /
 User-agent: YandexBot
 Disallow: /
 
-# Regras gerais — buscas legítimas (Google/Bing/Apple) seguem indexando
+# Regras gerais — buscas legítimas (Google/Bing/Apple) seguem indexando.
+# Sem Crawl-delay: o Google ignora, mas o Bing obedecia — 5s por página com
+# 800+ produtos deixava o catálogo levar mais de uma hora por varredura.
 User-agent: *
 Allow: /
 Disallow: /admin
 Disallow: /api/
 Disallow: /pedido/
+Disallow: /carrinho
+Disallow: /checkout
+Disallow: /minha-conta
+Disallow: /favoritos
+Disallow: /login
+Disallow: /cadastrar
 Disallow: /produtos?
-Crawl-delay: 5
+# Filtro e ordenação NÃO entram aqui de propósito: essas páginas mandam
+# noindex no HTML, e bloquear no robots impediria o Google de ler justamente
+# esse noindex — a URL ficaria no índice sem conteúdo, que é pior.
 
-Sitemap: https://www.luquibrinquedos.com.br/sitemap.xml
-"""
+Sitemap: {SITEMAP}
+""".replace('{SITEMAP}', SITE_URL + '/sitemap.xml')
     from flask import Response
     return Response(txt, mimetype='text/plain')
 
 
+SITEMAP_TTL = int(os.environ.get('SITEMAP_TTL', '3600'))
+_SITEMAP_CACHE = {}
+
+
 @app.route('/sitemap.xml')
 def sitemap_xml():
-    """Sitemap dinâmico: estáticas + categorias visíveis + produtos da vitrine."""
+    """Sitemap dinâmico: estáticas + categorias visíveis + catálogo inteiro."""
     from flask import Response
-    base = 'https://www.luquibrinquedos.com.br'
+    agora = time.time()
+    c = _SITEMAP_CACHE.get('xml')
+    if c and (agora - c['t']) < SITEMAP_TTL:
+        return Response(c['v'], mimetype='application/xml')
+    base = SITE_URL
     urls = [
         (base + '/', '1.0', 'daily'),
         (base + '/sobre', '0.7', 'monthly'),
@@ -3689,15 +3760,20 @@ def sitemap_xml():
     ]
     for c in (listar_categorias() or []):
         urls.append((f"{base}/categoria/{c['slug']}", '0.8', 'weekly'))
-    # Produtos da vitrine (até 1000 pra não estourar)
-    rs = pdv_get('/api/integracao/produtos', {'limite': 100, 'offset': 0})
-    if rs and rs.get('produtos'):
-        for p in rs['produtos']:
-            urls.append((f"{base}/produto/{p['id']}", '0.6', 'weekly'))
+    # Catálogo inteiro. Antes era uma chamada só, limite=100 e offset=0: o
+    # comentário prometia 1000 mas o sitemap saía com 100 produtos de ~830 —
+    # o resto o Google não tinha como descobrir. _feed_produtos() já pagina até
+    # o fim e deduplica por id (a ordenação do PDV troca de página em página).
+    for p in _feed_produtos():
+        urls.append((base + url_produto(p), '0.6', 'weekly'))
     xml = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
     for u, prio, freq in urls:
-        xml += f'  <url><loc>{u}</loc><priority>{prio}</priority><changefreq>{freq}</changefreq></url>\n'
+        # & em slug de categoria quebraria o XML inteiro — o Google descarta o
+        # arquivo, não a linha.
+        loc = u.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        xml += f'  <url><loc>{loc}</loc><priority>{prio}</priority><changefreq>{freq}</changefreq></url>\n'
     xml += '</urlset>'
+    _SITEMAP_CACHE['xml'] = {'t': agora, 'v': xml}
     return Response(xml, mimetype='application/xml')
 
 
@@ -3846,7 +3922,7 @@ def feed_xml():
         linhas.append(f"<g:id>{p['id']}</g:id>")
         linhas.append(f'<g:title>{_xml_escape(titulo[:150])}</g:title>')
         linhas.append(f'<g:description>{_xml_escape(desc)}</g:description>')
-        linhas.append(f"<g:link>{base}/produto/{p['id']}</g:link>")
+        linhas.append(f"<g:link>{base}{url_produto(p)}</g:link>")
         linhas.append(f'<g:image_link>{_xml_escape(foto)}</g:image_link>')
         linhas.append(f'<g:availability>{disp}</g:availability>')
         linhas.append(f'<g:price>{float(preco):.2f} BRL</g:price>')
@@ -4069,10 +4145,17 @@ def pag_liquida_luqui():
 
 
 @app.route('/produto/<int:pid>')
-def produto(pid):
+@app.route('/produto/<int:pid>-<slug>')
+def produto(pid, slug=None):
     p = buscar_produto(pid)
     if not p:
         abort(404)
+    # O id manda; o slug e enfeite pro buscador. Se veio sem slug (link antigo)
+    # ou com o slug velho (descricao mudou no PDV), 301 pra forma canonica —
+    # senao o mesmo produto existiria em varias URLs.
+    canonica = url_produto(p)
+    if request.path != canonica:
+        return redirect(canonica, code=301)
     avals = db_execute("""SELECT a.*, c.nome AS cliente_nome
         FROM avaliacoes a LEFT JOIN clientes_site c ON c.id=a.cliente_id
         WHERE a.produto_pdv_id=%s AND a.aprovado=true
@@ -4131,17 +4214,25 @@ def produto(pid):
     # nos últimos 30 dias. Usado pra gerar confiança ("X pessoas viram esse
     # brinquedo recentemente"). Só mostra se >= 3 pra não parecer pouco.
     try:
+        # Duas formas de path: a antiga (/produto/123) e a com slug
+        # (/produto/123-boneca-...). O hifen separa — sem ele, LIKE '/produto/12%'
+        # contaria as visitas do produto 1234 junto.
         row = db_execute("""SELECT COUNT(DISTINCT ip_hash) AS n
                             FROM site_visitas
-                            WHERE path = %s
+                            WHERE (path = %s OR path LIKE %s)
                               AND ts > NOW() - INTERVAL '30 days'
                               AND NOT COALESCE(is_bot, false)""",
-                         [f'/produto/{pid}'], fetch='one') or {}
+                         [f'/produto/{pid}', f'/produto/{pid}-%'], fetch='one') or {}
         visitas_30d = int(row.get('n') or 0)
     except Exception:
         visitas_30d = 0
+    # priceValidUntil: o Google avisa quando falta. Data de validade do preço
+    # anunciado — 1 ano à frente, já que o preço vem do PDV e é relido a cada
+    # carregamento de qualquer jeito.
+    preco_valido_ate = (datetime.now(SP_TZ) + timedelta(days=365)).strftime('%Y-%m-%d')
     return render_template('produto.html',
                            p=p, avaliacoes=avals, media_estrelas=media,
+                           preco_valido_ate=preco_valido_ate,
                            relacionados=relacionados[:4],
                            categorias=listar_categorias(),
                            cliente=cliente_logado(),
@@ -5753,7 +5844,7 @@ def _formatar_produtos(rows, preco_max=None):
             'nome': p.get('descricao'),
             'preco': preco,
             'foto': p.get('foto_url') or '',
-            'url': f"/produto/{p.get('id')}",
+            'url': url_produto(p),
         })
     return out
 

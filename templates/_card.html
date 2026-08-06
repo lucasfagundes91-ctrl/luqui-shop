@@ -7,7 +7,7 @@
   {% if selo %}<span class="selo {{ selo_classe }}">{{ selo }}</span>
   {% elif promo %}<span class="selo promo">PROMO</span>
   {% elif p.eh_novidade or p.novidade %}<span class="selo">NOVIDADE!</span>{% endif %}
-  <a href="/produto/{{ pid }}">
+  <a href="{{ url_produto(p) }}">
     <div class="foto">
       {% if p.foto_url or p.foto %}<img src="{{ p.foto_url or p.foto }}" alt="{{ p.descricao }}" loading="lazy">
       {% else %}<span class="ph">📦</span>{% endif %}

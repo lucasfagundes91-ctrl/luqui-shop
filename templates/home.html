@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 {% from "_card.html" import card %}
+{# O título antigo era só "Aqui você compra brincando" — bonito, mas ninguém
+   digita isso no Google. Agora carrega o que a pessoa realmente busca. #}
+{% block titulo %}Luqui Brinquedos — Loja de brinquedos em Cascavel/PR | Entrega pra todo o Brasil{% endblock %}
+{% block descricao %}Loja de brinquedos em Cascavel/PR com mais de 800 itens: pelúcias, jogos, bonecas, Hot Wheels, Lego e Pokémon. Compre online com entrega pra todo o Brasil, até 12x ou {{ desconto_pix_pct|int }}% off no PIX, e retire na loja da R. Eng. Rebouças, 2053.{% endblock %}
 {% block conteudo %}
 
 {% if cupom_primeira_compra_ativo %}
@@ -66,6 +70,19 @@
   setInterval(()=>go((i+1)%slides.length), 6000);
 })();
 </script>
+
+<!-- H1 DA HOME — a página não tinha nenhum. Os h2 do hero rodam a cada 6s,
+     então o único texto fixo que o Google lia era o <title>. -->
+<section style="max-width:1200px;margin:18px auto 0;padding:0 16px;text-align:center">
+  <h1 style="font-size:17px;font-weight:900;color:var(--azul);line-height:1.45">
+    Loja de brinquedos em Cascavel/PR — com entrega pra todo o Brasil
+  </h1>
+  <p style="font-size:13px;color:var(--mut);margin-top:8px;max-width:760px;margin-left:auto;margin-right:auto;line-height:1.6">
+    Pelúcias, jogos de tabuleiro, bonecas, Hot Wheels, Lego, Pokémon e brinquedos
+    educativos. Compre online em até 12x ou com {{ desconto_pix_pct|int }}% de desconto no PIX,
+    receba em casa ou retire na loja da <b>R. Engenheiro Rebouças, 2053 — Centro, Cascavel/PR</b>.
+  </p>
+</section>
 
 <!-- AVISO 15% OFF LOJA FÍSICA -->
 <section style="margin:14px 0">

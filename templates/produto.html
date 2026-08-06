@@ -4,7 +4,8 @@
 {% block og_titulo %}{{ p.descricao }} — Luqui Brinquedos{% endblock %}
 {% block og_descricao %}{{ (p.descricao_longa or p.descricao)|truncate(200) }} — R$ {{ '%.2f'|format(p.preco_promo or p.preco_venda or 0) }}{% endblock %}
 {% block og_imagem %}{{ p.foto_url or 'https://www.luquibrinquedos.com.br/static/logo.png' }}{% endblock %}
-{% block og_url %}https://www.luquibrinquedos.com.br/produto/{{ p.id }}{% endblock %}
+{% block og_url %}{{ SITE_URL }}{{ url_produto(p) }}{% endblock %}
+{% block canonical %}{{ SITE_URL }}{{ url_produto(p) }}{% endblock %}
 {% block og_tipo %}product{% endblock %}
 {% block extra_head %}
 <script type="application/ld+json">
@@ -16,11 +17,25 @@
   {% if p.foto_url %}"image": {{ p.foto_url|tojson }},{% endif %}
   "sku": {{ (p.codigo_barras or p.id|string)|tojson }},
   "brand": {"@type":"Brand","name":"Luqui Brinquedos"},
+  {# As estrelas já existiam na página e não iam pro Google — é o que faz o
+     resultado aparecer com ★★★★★ na busca. Só sai quando há avaliação
+     aprovada de verdade: inventar rating é motivo de penalidade. #}
+  {% if media_estrelas and avaliacoes %}
+  "aggregateRating": {
+    "@type": "AggregateRating",
+    "ratingValue": {{ media_estrelas }},
+    "reviewCount": {{ avaliacoes|length }},
+    "bestRating": 5,
+    "worstRating": 1
+  },
+  {% endif %}
   "offers": {
     "@type": "Offer",
-    "url": "https://www.luquibrinquedos.com.br/produto/{{ p.id }}",
+    "url": "{{ SITE_URL }}{{ url_produto(p) }}",
     "priceCurrency": "BRL",
     "price": {{ (p.preco_promo or p.preco_venda) }},
+    "priceValidUntil": "{{ preco_valido_ate }}",
+    "itemCondition": "https://schema.org/NewCondition",
     "availability": "{{ 'https://schema.org/InStock' if (p.estoque_atual and p.estoque_atual|float > 0) else 'https://schema.org/OutOfStock' }}",
     "seller": {"@type":"Organization","name":"Luqui Brinquedos"}
   }
@@ -262,7 +277,7 @@
       </a>
 
       <div style="display:flex;gap:6px;margin-top:10px;font-size:12px">
-        <a href="https://wa.me/?text={{ ('Olha esse brinquedo: ' + p.descricao + ' — ' + ('https://www.luquibrinquedos.com.br/produto/' + p.id|string))|urlencode }}"
+        <a href="https://wa.me/?text={{ ('Olha esse brinquedo: ' + p.descricao + ' — ' + SITE_URL + url_produto(p))|urlencode }}"
            target="_blank" style="flex:1;padding:8px;background:#F1F5F9;color:var(--azul);text-align:center;border-radius:6px;text-decoration:none;font-weight:600">
           📲 Indicar pra um amigo
         </a>
@@ -354,7 +369,7 @@
       <h3 style="margin-bottom:14px">🎯 Quem comprou esse, levou também</h3>
       <div class="relacionados-grid">
         {% for r in relacionados %}
-        <a href="/produto/{{ r.id }}" style="background:#F8FAFC;border-radius:10px;padding:12px;text-decoration:none;transition:transform .15s">
+        <a href="{{ url_produto(r) }}" style="background:#F8FAFC;border-radius:10px;padding:12px;text-decoration:none;transition:transform .15s">
           <div style="aspect-ratio:1;background:#fff;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:8px">
             {% if r.foto_url %}<img src="{{ r.foto_url }}" style="max-height:100%">
             {% else %}<span style="font-size:40px">📦</span>{% endif %}
