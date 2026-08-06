@@ -8139,46 +8139,167 @@ def admin_asaas_conta():
 # continua acontecendo sem risco de chargeback.
 CEP_LOJA_PADRAO = '85812130'   # R. Eng. Rebouças, 2053 — Cascavel/PR
 
-# Os 84 municípios do PR a até 120 km da loja, PRECOMPUTADOS.
+# Os 452 municipios a ate 300 km da loja, PRECOMPUTADOS, no formato
+# 'NOME|UF' -- nome normalizado por _nome_norm (sem acento, caixa alta).
 #
-# A primeira versão geocodificava o CEP na hora, e não funcionou: a AwesomeAPI
-# devolve HTTP 429 pro IP do Railway (compartilhado, sempre quente) e a
-# BrasilAPI não traz coordenada. Resultado: a régua caiu pra "qualquer CEP do
-# PR", o que deixaria Curitiba (500 km) passar.
+# A UF faz PARTE da chave porque a 300 km o raio atravessa a divisa: alem dos
+# 291 municipios do PR entram 94 de SC, 45 do RS, 19 do MS e 3 de SP. Com o
+# nome sozinho, uma "SANTA HELENA/GO" passaria pela regra achando que era a
+# Santa Helena do Parana. Foi tambem por isso que a checagem antiga de "UF tem
+# que ser a da loja" saiu: ela barrava Chapeco/SC antes de olhar a lista.
 #
-# Lista gerada a partir dos 141 municípios das mesorregiões Oeste, Sudoeste,
-# Centro-Ocidental e Centro-Sul, geocodificados pelo Nominatim e medidos em
-# haversine até -24.9506788,-53.4487927. Zero falhas na geração.
-# Mais perto: Cascavel (0,9 km). Mais longe que entrou: Saudade do Iguaçu
-# (117,3 km). Primeiro que ficou de fora: Pinhal de São Bento (120,4 km).
-# Foz do Iguaçu NÃO entra — fica a ~140 km.
+# Geocodificar o CEP na hora nao funciona: a AwesomeAPI devolve HTTP 429 pro
+# IP do Railway (compartilhado, sempre quente) e a BrasilAPI nao traz
+# coordenada. Por isso a lista e fixa; em troca a decisao nao depende de
+# nenhuma API em tempo real.
 #
-# Pra mudar o raio, é preciso gerar a lista de novo; não adianta só mexer num
-# número. Em troca, a decisão não depende de nenhuma API em tempo real.
+# Gerada do dataset IBGE de municipios com coordenadas (5.570 linhas, varredura
+# do Brasil inteiro), haversine ate -24.9506788,-53.4487927. Mais longe que
+# entrou: Itaguaje/PR (300,0 km). Primeiro que ficou de fora: Vicentina/MS
+# (300,1 km). Curitiba (424 km), Ponta Grossa (331), Dourados (334) e Campo
+# Grande (515) seguem fora; Foz do Iguacu (132), Maringa (229), Londrina (295),
+# Chapeco/SC (253) e Navirai/MS (223) entraram.
+#
+# A geracao anterior varria so 4 mesorregioes do PR e por isso perdia 7
+# municipios que estavam DENTRO dos 120 km (Alto Piquiri, Brasilandia do Sul,
+# Cafezal do Sul, Francisco Alves, Ipora, Mariluz, Perobal). Varrer o pais
+# inteiro custa o mesmo e nao tem esse ponto cego.
+#
+# Pra mudar o raio, gere a lista de novo; nao adianta so mexer no numero --
+# `cartao_raio_km` serve apenas pro texto da recusa.
 CIDADES_RAIO_CARTAO = frozenset({
-    'ALTAMIRA DO PARANA', 'AMPERE', 'ANAHY', 'ASSIS CHATEAUBRIAND',
-    'BELA VISTA DA CAROBA', 'BOA ESPERANCA', 'BOA ESPERANCA DO IGUACU',
-    'BOA VISTA DA APARECIDA', 'BRAGANEY', 'CAFELANDIA', 'CAMPINA DA LAGOA',
-    'CAMPO BONITO', 'CAPANEMA', 'CAPITAO LEONIDAS MARQUES', 'CASCAVEL',
-    'CATANDUVAS', 'CEU AZUL', 'CORBELIA', 'CRUZEIRO DO IGUACU',
-    'DIAMANTE D OESTE', 'DIAMANTE DO SUL', 'DOIS VIZINHOS', 'ENEAS MARQUES',
-    'ENTRE RIOS DO OESTE', 'ESPIGAO ALTO DO IGUACU', 'FORMOSA DO OESTE',
-    'GOIOERE', 'GUARANIACU', 'IBEMA', 'IGUATU', 'IRACEMA DO OESTE',
-    'ITAIPULANDIA', 'JANIOPOLIS', 'JESUITAS', 'JURANDA', 'LARANJAL',
-    'LARANJEIRAS DO SUL', 'LINDOESTE', 'MAMBORE', 'MARECHAL CANDIDO RONDON',
-    'MARIPA', 'MATELANDIA', 'MEDIANEIRA', 'MERCEDES', 'MISSAL',
-    'MOREIRA SALES', 'NOVA AURORA', 'NOVA CANTU',
-    'NOVA ESPERANCA DO SUDOESTE', 'NOVA LARANJEIRAS', 'NOVA PRATA DO IGUACU',
-    'NOVA SANTA ROSA', 'OURO VERDE DO OESTE', 'PALOTINA', 'PATO BRAGADO',
-    'PEROLA D OESTE', 'PLANALTO', 'QUARTO CENTENARIO', 'QUATRO PONTES',
-    'QUEDAS DO IGUACU', 'RAMILANDIA', 'RANCHO ALEGRE D OESTE', 'REALEZA',
-    'RIO BONITO DO IGUACU', 'SALTO DO LONTRA', 'SANTA HELENA',
-    'SANTA IZABEL DO OESTE', 'SANTA LUCIA', 'SANTA TEREZA DO OESTE',
-    'SANTA TEREZINHA DE ITAIPU', 'SAO JORGE D OESTE', 'SAO JOSE DAS PALMEIRAS',
-    'SAO MIGUEL DO IGUACU', 'SAO PEDRO DO IGUACU', 'SAUDADE DO IGUACU',
-    'SERRANOPOLIS DO IGUACU', 'SULINA', 'TERRA ROXA', 'TOLEDO',
-    'TRES BARRAS DO PARANA', 'TUPASSI', 'UBIRATA', 'VERA CRUZ DO OESTE',
-    'VERE',
+    'AMAMBAI|MS', 'BATAYPORA|MS', 'CAARAPO|MS', 'CORONEL SAPUCAIA|MS',
+    'ELDORADO|MS', 'GLORIA DE DOURADOS|MS', 'IGUATEMI|MS', 'ITAQUIRAI|MS',
+    'IVINHEMA|MS', 'JAPORA|MS', 'JATEI|MS', 'JUTI|MS', 'MUNDO NOVO|MS',
+    'NAVIRAI|MS', 'NOVO HORIZONTE DO SUL|MS', 'PARANHOS|MS',
+    'SETE QUEDAS|MS', 'TACURU|MS', 'TAQUARUSSU|MS', 'ALTAMIRA DO PARANA|PR',
+    'ALTO PARAISO|PR', 'ALTO PARANA|PR', 'ALTO PIQUIRI|PR', 'ALTONIA|PR',
+    'AMAPORA|PR', 'AMPERE|PR', 'ANAHY|PR', 'ANGULO|PR', 'APUCARANA|PR',
+    'ARAPONGAS|PR', 'ARAPUA|PR', 'ARARUNA|PR', 'ARIRANHA DO IVAI|PR',
+    'ASSIS CHATEAUBRIAND|PR', 'ASTORGA|PR', 'ATALAIA|PR',
+    'BARBOSA FERRAZ|PR', 'BARRACAO|PR', 'BELA VISTA DA CAROBA|PR',
+    'BITURUNA|PR', 'BOA ESPERANCA|PR', 'BOA ESPERANCA DO IGUACU|PR',
+    'BOA VENTURA DE SAO ROQUE|PR', 'BOA VISTA DA APARECIDA|PR',
+    'BOM JESUS DO SUL|PR', 'BOM SUCESSO|PR', 'BOM SUCESSO DO SUL|PR',
+    'BORRAZOPOLIS|PR', 'BRAGANEY|PR', 'BRASILANDIA DO SUL|PR', 'CAFEARA|PR',
+    'CAFELANDIA|PR', 'CAFEZAL DO SUL|PR', 'CALIFORNIA|PR', 'CAMBE|PR',
+    'CAMBIRA|PR', 'CAMPINA DA LAGOA|PR', 'CAMPINA DO SIMAO|PR',
+    'CAMPO BONITO|PR', 'CAMPO MOURAO|PR', 'CANDIDO DE ABREU|PR',
+    'CANDOI|PR', 'CANTAGALO|PR', 'CAPANEMA|PR',
+    'CAPITAO LEONIDAS MARQUES|PR', 'CASCAVEL|PR', 'CATANDUVAS|PR',
+    'CERRO AZUL|PR', 'CEU AZUL|PR', 'CHOPINZINHO|PR', 'CIANORTE|PR',
+    'CIDADE GAUCHA|PR', 'CLEVELANDIA|PR', 'COLORADO|PR', 'CORBELIA|PR',
+    'CORONEL DOMINGOS SOARES|PR', 'CORONEL VIVIDA|PR',
+    'CORUMBATAI DO SUL|PR', 'CRUZ MACHADO|PR', 'CRUZEIRO DO IGUACU|PR',
+    'CRUZEIRO DO OESTE|PR', 'CRUZEIRO DO SUL|PR', 'CRUZMALTINA|PR',
+    'DIAMANTE D OESTE|PR', 'DIAMANTE DO NORTE|PR', 'DIAMANTE DO SUL|PR',
+    'DOIS VIZINHOS|PR', 'DOURADINA|PR', 'DOUTOR CAMARGO|PR',
+    'ENEAS MARQUES|PR', 'ENGENHEIRO BELTRAO|PR', 'ENTRE RIOS DO OESTE|PR',
+    'ESPERANCA NOVA|PR', 'ESPIGAO ALTO DO IGUACU|PR', 'FAROL|PR',
+    'FAXINAL|PR', 'FENIX|PR', 'FERNANDES PINHEIRO|PR',
+    'FLOR DA SERRA DO SUL|PR', 'FLORAI|PR', 'FLORESTA|PR', 'FLORIDA|PR',
+    'FORMOSA DO OESTE|PR', 'FOZ DO IGUACU|PR', 'FOZ DO JORDAO|PR',
+    'FRANCISCO ALVES|PR', 'FRANCISCO BELTRAO|PR', 'GENERAL CARNEIRO|PR',
+    'GODOY MOREIRA|PR', 'GOIOERE|PR', 'GOIOXIM|PR', 'GRANDES RIOS|PR',
+    'GUAIRA|PR', 'GUAIRACA|PR', 'GUAMIRANGA|PR', 'GUAPOREMA|PR',
+    'GUARACI|PR', 'GUARANIACU|PR', 'GUARAPUAVA|PR', 'HONORIO SERPA|PR',
+    'IBEMA|PR', 'ICARAIMA|PR', 'IGUARACU|PR', 'IGUATU|PR', 'IMBAU|PR',
+    'IMBITUVA|PR', 'INACIO MARTINS|PR', 'INAJA|PR', 'INDIANOPOLIS|PR',
+    'IPIRANGA|PR', 'IPORA|PR', 'IRACEMA DO OESTE|PR', 'IRATI|PR',
+    'IRETAMA|PR', 'ITAGUAJE|PR', 'ITAIPULANDIA|PR', 'ITAMBE|PR',
+    'ITAPEJARA D OESTE|PR', 'ITAUNA DO SUL|PR', 'IVAI|PR', 'IVAIPORA|PR',
+    'IVATE|PR', 'IVATUBA|PR', 'JAGUAPITA|PR', 'JANDAIA DO SUL|PR',
+    'JANIOPOLIS|PR', 'JAPURA|PR', 'JARDIM ALEGRE|PR', 'JESUITAS|PR',
+    'JURANDA|PR', 'JUSSARA|PR', 'KALORE|PR', 'LARANJAL|PR',
+    'LARANJEIRAS DO SUL|PR', 'LIDIANOPOLIS|PR', 'LINDOESTE|PR', 'LOANDA|PR',
+    'LOBATO|PR', 'LONDRINA|PR', 'LUIZIANA|PR', 'LUNARDELLI|PR', 'MALLET|PR',
+    'MAMBORE|PR', 'MANDAGUACU|PR', 'MANDAGUARI|PR', 'MANFRINOPOLIS|PR',
+    'MANGUEIRINHA|PR', 'MANOEL RIBAS|PR', 'MARECHAL CANDIDO RONDON|PR',
+    'MARIA HELENA|PR', 'MARIALVA|PR', 'MARILANDIA DO SUL|PR', 'MARILENA|PR',
+    'MARILUZ|PR', 'MARINGA|PR', 'MARIOPOLIS|PR', 'MARIPA|PR',
+    'MARMELEIRO|PR', 'MARQUINHO|PR', 'MARUMBI|PR', 'MATELANDIA|PR',
+    'MATO RICO|PR', 'MAUA DA SERRA|PR', 'MEDIANEIRA|PR', 'MERCEDES|PR',
+    'MIRADOR|PR', 'MIRASELVA|PR', 'MISSAL|PR', 'MOREIRA SALES|PR',
+    'MUNHOZ DE MELO|PR', 'NOSSA SENHORA DAS GRACAS|PR',
+    'NOVA ALIANCA DO IVAI|PR', 'NOVA AURORA|PR', 'NOVA CANTU|PR',
+    'NOVA ESPERANCA|PR', 'NOVA ESPERANCA DO SUDOESTE|PR',
+    'NOVA LARANJEIRAS|PR', 'NOVA LONDRINA|PR', 'NOVA OLIMPIA|PR',
+    'NOVA PRATA DO IGUACU|PR', 'NOVA SANTA ROSA|PR', 'NOVA TEBAS|PR',
+    'NOVO ITACOLOMI|PR', 'ORTIGUEIRA|PR', 'OURIZONA|PR',
+    'OURO VERDE DO OESTE|PR', 'PAICANDU|PR', 'PALMAS|PR', 'PALMITAL|PR',
+    'PALOTINA|PR', 'PARAISO DO NORTE|PR', 'PARANACITY|PR', 'PARANAPOEMA|PR',
+    'PARANAVAI|PR', 'PATO BRAGADO|PR', 'PATO BRANCO|PR', 'PAULA FREITAS|PR',
+    'PAULO FRONTIN|PR', 'PEABIRU|PR', 'PEROBAL|PR', 'PEROLA|PR',
+    'PEROLA D OESTE|PR', 'PINHAL DE SAO BENTO|PR', 'PINHAO|PR',
+    'PITANGA|PR', 'PITANGUEIRAS|PR', 'PLANALTINA DO PARANA|PR',
+    'PLANALTO|PR', 'PORTO BARREIRO|PR', 'PORTO RICO|PR', 'PORTO VITORIA|PR',
+    'PRADO FERREIRA|PR', 'PRANCHITA|PR', 'PRESIDENTE CASTELO BRANCO|PR',
+    'PRUDENTOPOLIS|PR', 'QUARTO CENTENARIO|PR', 'QUATRO PONTES|PR',
+    'QUEDAS DO IGUACU|PR', 'QUERENCIA DO NORTE|PR', 'QUINTA DO SOL|PR',
+    'RAMILANDIA|PR', 'RANCHO ALEGRE D OESTE|PR', 'REALEZA|PR',
+    'REBOUCAS|PR', 'RENASCENCA|PR', 'RESERVA|PR', 'RESERVA DO IGUACU|PR',
+    'RIO AZUL|PR', 'RIO BOM|PR', 'RIO BONITO DO IGUACU|PR',
+    'RIO BRANCO DO IVAI|PR', 'ROLANDIA|PR', 'RONCADOR|PR', 'RONDON|PR',
+    'ROSARIO DO IVAI|PR', 'SABAUDIA|PR', 'SALGADO FILHO|PR',
+    'SALTO DO LONTRA|PR', 'SANTA CRUZ DE MONTE CASTELO|PR', 'SANTA FE|PR',
+    'SANTA HELENA|PR', 'SANTA ISABEL DO IVAI|PR',
+    'SANTA IZABEL DO OESTE|PR', 'SANTA LUCIA|PR', 'SANTA MARIA DO OESTE|PR',
+    'SANTA MONICA|PR', 'SANTA TEREZA DO OESTE|PR',
+    'SANTA TEREZINHA DE ITAIPU|PR', 'SANTO ANTONIO DO CAIUA|PR',
+    'SANTO ANTONIO DO SUDOESTE|PR', 'SAO CARLOS DO IVAI|PR', 'SAO JOAO|PR',
+    'SAO JOAO DO CAIUA|PR', 'SAO JOAO DO IVAI|PR', 'SAO JORGE D OESTE|PR',
+    'SAO JORGE DO IVAI|PR', 'SAO JORGE DO PATROCINIO|PR',
+    'SAO JOSE DAS PALMEIRAS|PR', 'SAO MANOEL DO PARANA|PR',
+    'SAO MIGUEL DO IGUACU|PR', 'SAO PEDRO DO IGUACU|PR',
+    'SAO PEDRO DO IVAI|PR', 'SAO PEDRO DO PARANA|PR', 'SAO TOME|PR',
+    'SARANDI|PR', 'SAUDADE DO IGUACU|PR', 'SERRANOPOLIS DO IGUACU|PR',
+    'SULINA|PR', 'TAMARANA|PR', 'TAMBOARA|PR', 'TAPEJARA|PR', 'TAPIRA|PR',
+    'TELEMACO BORBA|PR', 'TERRA BOA|PR', 'TERRA RICA|PR', 'TERRA ROXA|PR',
+    'TOLEDO|PR', 'TRES BARRAS DO PARANA|PR', 'TUNEIRAS DO OESTE|PR',
+    'TUPASSI|PR', 'TURVO|PR', 'UBIRATA|PR', 'UMUARAMA|PR',
+    'UNIAO DA VITORIA|PR', 'UNIFLOR|PR', 'VERA CRUZ DO OESTE|PR', 'VERE|PR',
+    'VIRMOND|PR', 'VITORINO|PR', 'XAMBRE|PR', 'ALPESTRE|RS',
+    'AMETISTA DO SUL|RS', 'ARATIBA|RS', 'BARRA DO GUARITA|RS',
+    'BARRA DO RIO AZUL|RS', 'BENJAMIN CONSTANT DO SUL|RS',
+    'BOM PROGRESSO|RS', 'BRAGA|RS', 'CAICARA|RS', 'CERRO GRANDE|RS',
+    'CRISSIUMAL|RS', 'CRISTAL DO SUL|RS', 'DERRUBADAS|RS',
+    'DOUTOR MAURICIO CARDOSO|RS', 'ENTRE RIOS DO SUL|RS', 'ERVAL GRANDE|RS',
+    'ERVAL SECO|RS', 'ESPERANCA DO SUL|RS', 'FAXINALZINHO|RS',
+    'FREDERICO WESTPHALEN|RS', 'GRAMADO DOS LOUREIROS|RS', 'HUMAITA|RS',
+    'IRAI|RS', 'ITATIBA DO SUL|RS', 'JABOTICABA|RS', 'LIBERATO SALZANO|RS',
+    'MARIANO MORO|RS', 'MIRAGUAI|RS', 'NONOAI|RS', 'NOVO TIRADENTES|RS',
+    'PALMITINHO|RS', 'PINHAL|RS', 'PINHEIRINHO DO VALE|RS', 'PLANALTO|RS',
+    'RIO DOS INDIOS|RS', 'RODEIO BONITO|RS', 'SEBERI|RS',
+    'TAQUARUCU DO SUL|RS', 'TENENTE PORTELA|RS', 'TIRADENTES DO SUL|RS',
+    'TRES PASSOS|RS', 'TRINDADE DO SUL|RS', 'VICENTE DUTRA|RS',
+    'VISTA ALEGRE|RS', 'VISTA GAUCHA|RS', 'ABELARDO LUZ|SC', 'AGUA DOCE|SC',
+    'AGUAS DE CHAPECO|SC', 'AGUAS FRIAS|SC', 'ANCHIETA|SC', 'ARABUTA|SC',
+    'ARVOREDO|SC', 'BANDEIRANTE|SC', 'BARRA BONITA|SC', 'BELMONTE|SC',
+    'BOM JESUS|SC', 'BOM JESUS DO OESTE|SC', 'CAIBI|SC', 'CALMON|SC',
+    'CAMPO ERE|SC', 'CATANDUVAS|SC', 'CAXAMBU DO SUL|SC', 'CHAPECO|SC',
+    'CONCORDIA|SC', 'CORDILHEIRA ALTA|SC', 'CORONEL FREITAS|SC',
+    'CORONEL MARTINS|SC', 'CUNHA PORA|SC', 'CUNHATAI|SC', 'DESCANSO|SC',
+    'DIONISIO CERQUEIRA|SC', 'ENTRE RIOS|SC', 'FAXINAL DOS GUEDES|SC',
+    'FLOR DO SERTAO|SC', 'FORMOSA DO SUL|SC', 'GALVAO|SC', 'GUARACIABA|SC',
+    'GUARUJA DO SUL|SC', 'GUATAMBU|SC', 'IPORA DO OESTE|SC', 'IPUACU|SC',
+    'IPUMIRIM|SC', 'IRACEMINHA|SC', 'IRANI|SC', 'IRATI|SC', 'ITA|SC',
+    'ITAPIRANGA|SC', 'JARDINOPOLIS|SC', 'JUPIA|SC', 'LAJEADO GRANDE|SC',
+    'LINDOIA DO SUL|SC', 'MACIEIRA|SC', 'MARAVILHA|SC', 'MAREMA|SC',
+    'MATOS COSTA|SC', 'MODELO|SC', 'MONDAI|SC', 'NOVA ERECHIM|SC',
+    'NOVA ITABERABA|SC', 'NOVO HORIZONTE|SC', 'OURO VERDE|SC', 'PAIAL|SC',
+    'PALMA SOLA|SC', 'PALMITOS|SC', 'PARAISO|SC', 'PASSOS MAIA|SC',
+    'PINHALZINHO|SC', 'PLANALTO ALEGRE|SC', 'PONTE SERRADA|SC',
+    'PORTO UNIAO|SC', 'PRINCESA|SC', 'QUILOMBO|SC', 'RIQUEZA|SC',
+    'ROMELANDIA|SC', 'SALTINHO|SC', 'SALTO VELOSO|SC', 'SANTA HELENA|SC',
+    'SANTA TEREZINHA DO PROGRESSO|SC', 'SANTIAGO DO SUL|SC',
+    'SAO BERNARDINO|SC', 'SAO CARLOS|SC', 'SAO DOMINGOS|SC',
+    'SAO JOAO DO OESTE|SC', 'SAO JOSE DO CEDRO|SC',
+    'SAO LOURENCO DO OESTE|SC', 'SAO MIGUEL DA BOA VISTA|SC',
+    'SAO MIGUEL DO OESTE|SC', 'SAUDADES|SC', 'SEARA|SC', 'SERRA ALTA|SC',
+    'SUL BRASIL|SC', 'TIGRINHOS|SC', 'TUNAPOLIS|SC', 'UNIAO DO OESTE|SC',
+    'VARGEAO|SC', 'VARGEM BONITA|SC', 'XANXERE|SC', 'XAVANTINA|SC',
+    'XAXIM|SC', 'EUCLIDES DA CUNHA PAULISTA|SP', 'ROSANA|SP',
+    'TEODORO SAMPAIO|SP'
 })
 
 
@@ -8288,9 +8409,9 @@ def cartao_liberado_para(cep, is_retira=False):
     if is_retira:
         return True, 0.0, 'retirada na loja'
     try:
-        raio = float(cfg('cartao_raio_km', '120'))
+        raio = float(cfg('cartao_raio_km', '300'))
     except ValueError:
-        raio = 120.0
+        raio = 300.0
     # A decisão sai da LISTA precomputada, não de geocodificação em tempo real:
     # a API de coordenadas devolve 429 pro IP do Railway. A cidade vem da
     # consulta de CEP, que tem três fontes e é confiável.
@@ -8299,10 +8420,11 @@ def cartao_liberado_para(cep, is_retira=False):
     cidade = _nome_norm(info.get('cidade'))
     if not cidade:
         return False, None, 'não foi possível confirmar a cidade do CEP'
-    uf_loja = (cfg('cartao_uf_loja', 'PR') or 'PR').upper()
-    if uf and uf != uf_loja:
-        return False, None, f'{info.get("cidade")}/{uf} é de fora da região'
-    if cidade in CIDADES_RAIO_CARTAO:
+    # Sem UF nao da pra decidir: existe Santa Helena no PR, em SC e em GO.
+    # Falha fechado, igual ao CEP que nao resolve.
+    if not uf:
+        return False, None, 'não foi possível confirmar o estado do CEP'
+    if f'{cidade}|{uf}' in CIDADES_RAIO_CARTAO:
         return True, None, f'{info.get("cidade")}/{uf} está na região'
     return False, None, (f'{info.get("cidade")}/{uf} fica a mais de '
                          f'{raio:.0f} km da loja')
