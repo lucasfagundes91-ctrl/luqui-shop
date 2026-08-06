@@ -8686,16 +8686,30 @@ def _pagar_cartao_pagarme(pid, p, cartao, tds):
     status_ch = (ch.get('status') or '').lower()
 
     if st not in (200, 201) or status_ch in ('failed', 'refused', ''):
-        motivo = ''
-        try:
-            errs = (tx.get('gateway_response') or {}).get('errors') or []
-            motivo = (errs[0].get('message') if errs else '') or ''
-            motivo = motivo.split('|')[-1].strip()
-        except Exception:
-            pass
+        # A recusa do EMISSOR vem em `acquirer_message` — não em
+        # gateway_response.errors. Quando o banco nega, a chamada à API deu
+        # certo (gateway_response fica {"code": "200"}) e só os errors ficam
+        # vazios; procurar o motivo ali devolvia sempre o genérico "Transação
+        # não autorizada". Aconteceu em 06/08/2026 no primeiro teste real: o
+        # emissor respondeu "Cartão vencido ou data de vencimento incorreta"
+        # (código 1001) e nem o dono da loja conseguiu saber disso — mesma
+        # classe do problema que o TEF do PDV Pro teve em julho.
+        motivo = (tx.get('acquirer_message') or '').strip()
+        if not motivo:
+            try:
+                errs = (tx.get('gateway_response') or {}).get('errors') or []
+                motivo = (errs[0].get('message') if errs else '') or ''
+                motivo = motivo.split('|')[-1].strip()
+            except Exception:
+                pass
         motivo = motivo or (d or {}).get('message') or 'Transação não autorizada'
-        log.warning("pedido %s pagarme recusado: http=%s status=%s msg=%s",
-                    pid, st, status_ch, motivo[:160])
+        # O texto do adquirente é escrito pro LOJISTA ("Oriente o usuário a
+        # contatar o banco"). Pra tela do cliente fica só a primeira parte,
+        # que é a que diz o que ele tem que fazer.
+        motivo = re.split(r'\.\s*Oriente\b', motivo)[0].strip(' .')
+        log.warning("pedido %s pagarme recusado: http=%s status=%s cod=%s msg=%s",
+                    pid, st, status_ch,
+                    tx.get('acquirer_return_code') or '-', motivo[:160])
         return jsonify({'erro': f'Pagamento não autorizado. {motivo[:140]}'}), 402
 
     # Pago. Guarda o rastro do cartão e da autenticação antes de seguir.
