@@ -128,6 +128,29 @@ def _ctx_flags():
 SITE_HOST = SITE_URL.split('//', 1)[-1].strip('/')     # www.luquibrinquedos.com.br
 
 
+# ===================== Apps na tela de início (PWA) =====================
+# Manifest, /instalar e perfil de atalhos do iPhone — ver pwa_apps.py.
+# Antes das rotas: o módulo intercepta a instalação no before_request,
+# que roda na ordem de registro.
+from pwa_apps import registrar_pwa
+
+registrar_pwa(
+    app,
+    sistema='Luqui Brinquedos',
+    slug_sistema='luqui',
+    cor='#f5b20a',
+    cor_fundo='#f5b20a',
+    apps=[
+        {'slug': 'app', 'nome': 'Luqui Brinquedos', 'rotulo': 'Luqui', 'url': '/',
+         'icone': 'luqui-icon', 'cheio': False,
+         'desc': 'A loja: catálogo, carrinho e acompanhamento do pedido.'},
+        {'slug': 'admin', 'nome': 'Luqui Gestão', 'rotulo': 'Luqui Gestão',
+         'url': '/admin', 'icone': 'luqui-admin-icon', 'cheio': False,
+         'desc': 'Pedidos, produtos, clientes e campanhas da loja.'},
+    ],
+)
+
+
 @app.before_request
 def _forca_host_canonico():
     """301 do apex pro www.
