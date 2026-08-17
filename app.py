@@ -1960,7 +1960,16 @@ def pdv_get(path, params=None, ttl=60):
             timeout=10,
         )
         if r.status_code != 200:
-            log.error("PDV Pro %s → %s", path, r.status_code)
+            # Reinício do PDV Pro devolve 502 por uns 30s. Antes isso virava
+            # None e a loja ficava SEM CATÁLOGO pra quem entrasse naquela
+            # janela — vitrine vazia perde a venda inteira. Catálogo de um
+            # minuto atrás é melhor que catálogo nenhum, então serve o cache
+            # velho, como o caminho da exceção já fazia.
+            if cached:
+                log.warning("PDV Pro %s → %s; servindo cache de %.0fs atrás",
+                            path, r.status_code, now - cached['t'])
+                return cached['data']
+            log.error("PDV Pro %s → %s (sem cache pra servir)", path, r.status_code)
             return None
         data = r.json()
         _PDV_CACHE[key] = {'t': now, 'data': data}
@@ -8778,6 +8787,7 @@ def pedido_pagar_cartao(pid):
     # negada que faz adquirente marcar (e derrubar) conta de lojista.
     # Cliente legítimo erra o cartão 2 ou 3 vezes, não 67.
     if cfg('cartao_ativo', '1') != '1':
+        log.warning("cartao-barrado pedido=%s motivo=cartao_desativado", pid)
         return jsonify({'erro': 'Pagamento no cartão temporariamente '
                                 'indisponível. Fale com a loja pelo WhatsApp.',
                         'whatsapp': cfg('whatsapp_loja', WHATSAPP_LOJA)}), 503
@@ -8786,20 +8796,21 @@ def pedido_pagar_cartao(pid):
     _retira = (p.get('frete_servico') or '').lower().startswith('retirar')
     _ok_raio, _, _mot = cartao_liberado_para(p.get('cep'), _retira)
     if not _ok_raio:
-        log.info("pagar-cartao barrado por distancia: pedido %s (%s)", pid, _mot)
+        log.warning("cartao-barrado pedido=%s motivo=fora_do_raio (%s)", pid, _mot)
         return jsonify({'erro': 'Para a sua região aceitamos PIX e boleto. '
                                 'Fale com a loja que a gente te ajuda a '
                                 'finalizar.',
                         'whatsapp': cfg('whatsapp_loja', WHATSAPP_LOJA)}), 403
     tentativas = int(p.get('tentativas_cartao') or 0)
     if tentativas >= MAX_TENTATIVAS_CARTAO:
-        log.warning("pedido %s bloqueado: %s tentativas de cartão", pid, tentativas)
+        log.warning("cartao-barrado pedido=%s motivo=max_tentativas (%s)",
+                    pid, tentativas)
         return jsonify({
             'erro': 'Muitas tentativas de pagamento neste pedido. Fale com a '
                     'loja pelo WhatsApp que a gente finaliza pra você.',
             'whatsapp': cfg('whatsapp_loja', WHATSAPP_LOJA)}), 429
     if not rate_limit_ok('cartao_ip', _rl_ip(), 12, 900):
-        log.warning("rate limit de cartão por IP estourado (pedido %s)", pid)
+        log.warning("cartao-barrado pedido=%s motivo=rate_limit_ip", pid)
         return jsonify({
             'erro': 'Muitas tentativas de pagamento. Aguarde alguns minutos.'}), 429
     db_execute("UPDATE pedidos SET tentativas_cartao=COALESCE(tentativas_cartao,0)+1 "
@@ -8824,18 +8835,30 @@ def pedido_pagar_cartao(pid):
     ccv = ''.join(c for c in (d.get('ccv') or '') if c.isdigit())
     holder_nome = (d.get('titular_nome') or '').strip().upper()[:80]
     holder_cpf = ''.join(c for c in (d.get('titular_cpf') or '') if c.isdigit())
+    # Por que este log existe: em 17/08/2026 o cartão ficou 17 dias sem
+    # aprovar nada e 4 de 5 tentativas nem chegaram ao Pagar.me. Como cada
+    # barreira devolvia 4xx sem dizer qual era, não houve como saber onde
+    # morreram. Agora toda saída antes da cobrança grita "cartao-barrado
+    # motivo=...", e a próxima tentativa se explica sozinha.
     if not (12 <= len(num) <= 19):
+        log.warning("cartao-barrado pedido=%s motivo=numero_invalido (%s dig)",
+                    pid, len(num))
         return jsonify({'erro': 'Número do cartão inválido'}), 400
     if not (3 <= len(ccv) <= 4):
+        log.warning("cartao-barrado pedido=%s motivo=cvv_invalido", pid)
         return jsonify({'erro': 'CVV inválido'}), 400
     try:
         if not (1 <= int(mes) <= 12) or int(ano) < datetime.now().year:
             raise ValueError
     except ValueError:
+        log.warning("cartao-barrado pedido=%s motivo=validade_invalida (%s/%s)",
+                    pid, mes, ano)
         return jsonify({'erro': 'Validade do cartão inválida'}), 400
     if len(holder_nome) < 3:
+        log.warning("cartao-barrado pedido=%s motivo=titular_sem_nome", pid)
         return jsonify({'erro': 'Nome do titular obrigatório'}), 400
     if len(holder_cpf) not in (11, 14):
+        log.warning("cartao-barrado pedido=%s motivo=titular_sem_cpf", pid)
         return jsonify({'erro': 'CPF/CNPJ do titular obrigatório'}), 400
 
     # Guarda quem pagou ANTES de escolher o provedor — o antifraude usa isso
