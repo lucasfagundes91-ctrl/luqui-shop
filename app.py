@@ -3333,7 +3333,7 @@ def cron_recuperar_pedidos_parados():
                   WHERE regexp_replace(COALESCE(q.telefone,''), '\\D', '', 'g')
                       = regexp_replace(COALESCE(p.telefone,''), '\\D', '', 'g')
                     AND regexp_replace(COALESCE(p.telefone,''), '\\D', '', 'g') <> ''
-                    AND q.status IN """ + _SQL_PAGOS
+                    AND q.status IN """ + _SQL_PAGOS + ")"
     cands = db_execute("SELECT *" + _BASE_SQL + _RISCO_SQL + " ORDER BY p.total DESC",
                        ['%[recuperacao-enviada%', RISCO_LIMITE], fetch='all') or []
     # Quantos ficaram de fora POR RISCO. Vai na resposta pro log do cron mostrar
