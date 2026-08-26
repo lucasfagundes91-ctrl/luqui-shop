@@ -497,6 +497,36 @@
     });
     document.body.appendChild(btn);
 
+    /* Várias telas têm barra de ação colada embaixo (Rejeitar/Aprovar do
+       /conferir, por exemplo). O botão nasce no canto e cobria esses botões —
+       aqui ele olha o que está debaixo dele e sobe o quanto precisar. */
+    function desviarDeBarras() {
+      btn.style.bottom = '';
+      var r = btn.getBoundingClientRect();
+      var lista = [];
+      try { lista = document.elementsFromPoint(r.left + r.width / 2, r.top + r.height / 2) || []; }
+      catch (e) { return; }
+      for (var i = 0; i < lista.length; i++) {
+        var el = lista[i];
+        if (el === btn || btn.contains(el) || el === document.body) continue;
+        var st = null;
+        try { st = getComputedStyle(el); } catch (e) { continue; }
+        if (st.position !== 'fixed' && st.position !== 'sticky') continue;
+        var rr = el.getBoundingClientRect();
+        if (rr.height && rr.bottom > window.innerHeight - 8 && rr.top < window.innerHeight) {
+          btn.style.bottom = 'calc(' + Math.round(window.innerHeight - rr.top + 10) +
+                             'px + env(safe-area-inset-bottom))';
+          return;
+        }
+      }
+    }
+    desviarDeBarras();
+    /* a barra costuma aparecer depois do primeiro fetch */
+    setTimeout(desviarDeBarras, 800);
+    setTimeout(desviarDeBarras, 2500);
+    window.addEventListener('resize', desviarDeBarras);
+    window.addEventListener('orientationchange', desviarDeBarras);
+
     var y0 = null, dist = 0, ativo = false;
     var LIMITE = 70;
 
