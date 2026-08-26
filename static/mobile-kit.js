@@ -447,3 +447,105 @@
     iniciar();
   }
 })();
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PUXAR PRA ATUALIZAR + botão de recarregar          (kit mobile Luqsys)
+
+   No app instalado (PWA) não existe barra do navegador: nem botão de
+   recarregar, nem o "puxa pra baixo" do Safari. Sem isso a pessoa fecha e
+   reabre o app pra ver informação nova. Bloco autocontido de propósito — dá
+   pra colar no fim de qualquer mobile-kit.js sem mexer no que já existe.
+   ═══════════════════════════════════════════════════════════════════════════ */
+(function () {
+  if (window.__mkRefresh) return;
+  window.__mkRefresh = true;
+
+  function ehApp() {
+    try {
+      return window.matchMedia('(display-mode: standalone)').matches
+          || window.navigator.standalone === true;
+    } catch (e) { return false; }
+  }
+
+  /* Sobe pelos pais procurando quem realmente rola: se a lista de dentro já
+     está rolada, o gesto é dela, não de atualizar. */
+  function alvoDeRolagem(el) {
+    while (el && el !== document.body && el !== document.documentElement) {
+      var st = null;
+      try { st = getComputedStyle(el); } catch (e) {}
+      if (st && /(auto|scroll)/.test(st.overflowY) && el.scrollHeight > el.clientHeight + 4) return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  function montar() {
+    var barra = document.createElement('div');
+    barra.id = 'mk-puxar';
+    barra.innerHTML = '<span class="mk-puxar-txt">↓ puxe pra atualizar</span>';
+    document.body.appendChild(barra);
+
+    var btn = document.createElement('button');
+    btn.id = 'mk-recarregar';
+    btn.type = 'button';
+    btn.title = 'Atualizar';
+    btn.setAttribute('aria-label', 'Atualizar');
+    btn.textContent = '↻';
+    btn.addEventListener('click', function () {
+      btn.classList.add('girando');
+      location.reload();
+    });
+    document.body.appendChild(btn);
+
+    var y0 = null, dist = 0, ativo = false;
+    var LIMITE = 70;
+
+    document.addEventListener('touchstart', function (ev) {
+      if (ev.touches.length !== 1) return;
+      var rolando = alvoDeRolagem(ev.target);
+      if (rolando && rolando.scrollTop > 2) return;
+      if (window.scrollY > 2) return;
+      y0 = ev.touches[0].clientY; dist = 0; ativo = true;
+    }, { passive: true });
+
+    document.addEventListener('touchmove', function (ev) {
+      if (!ativo || y0 === null) return;
+      dist = ev.touches[0].clientY - y0;
+      if (dist <= 0) { barra.classList.remove('on', 'pronto'); return; }
+      barra.classList.add('on');
+      barra.style.transform = 'translateY(' + Math.min(dist, LIMITE + 30) + 'px)';
+      barra.classList.toggle('pronto', dist >= LIMITE);
+      barra.querySelector('.mk-puxar-txt').textContent =
+        dist >= LIMITE ? '↻ solte pra atualizar' : '↓ puxe pra atualizar';
+    }, { passive: true });
+
+    function soltar() {
+      if (!ativo) return;
+      ativo = false;
+      if (dist >= LIMITE) {
+        barra.querySelector('.mk-puxar-txt').textContent = '↻ atualizando…';
+        location.reload();
+        return;
+      }
+      barra.classList.remove('on', 'pronto');
+      barra.style.transform = '';
+      y0 = null; dist = 0;
+    }
+    document.addEventListener('touchend', soltar, { passive: true });
+    document.addEventListener('touchcancel', soltar, { passive: true });
+  }
+
+  function iniciar() {
+    var estreito = false;
+    try { estreito = window.matchMedia('(max-width: 900px)').matches; } catch (e) {}
+    if (!ehApp() && !estreito) return;
+    document.body.classList.add('mk-app');
+    montar();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', iniciar);
+  } else {
+    iniciar();
+  }
+})();

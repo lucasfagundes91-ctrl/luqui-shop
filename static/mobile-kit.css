@@ -214,3 +214,38 @@
 @media (min-width: 901px) {
   .mk-topbar, .mk-fundo { display: none !important; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PUXAR PRA ATUALIZAR + botão de recarregar
+   No app instalado (PWA) não existe barra do navegador: nem botão de recarregar
+   nem o "puxa pra baixo" do Safari. Sem isso a pessoa fecha e reabre o app pra
+   ver informação nova.
+   ═══════════════════════════════════════════════════════════════════════════ */
+#mk-puxar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 2147483000;
+  display: none; justify-content: center; pointer-events: none;
+  transform: translateY(0); transition: transform .12s ease-out;
+}
+#mk-puxar.on { display: flex; }
+#mk-puxar .mk-puxar-txt {
+  background: rgba(17,24,39,.88); color: #fff;
+  font: 600 12.5px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  padding: 9px 16px; border-radius: 0 0 12px 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25); white-space: nowrap;
+}
+#mk-puxar.pronto .mk-puxar-txt { background: #15803d; }
+
+#mk-recarregar {
+  position: fixed; left: 12px; z-index: 2147482000;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  width: 42px; height: 42px; border-radius: 50%;
+  background: rgba(17,24,39,.55); color: #fff; border: none;
+  font-size: 20px; line-height: 1; cursor: pointer; padding: 0;
+  display: none; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  -webkit-tap-highlight-color: transparent;
+}
+body.mk-app #mk-recarregar { display: flex; }
+#mk-recarregar:active { background: rgba(17,24,39,.85); }
+#mk-recarregar.girando { animation: mk-gira .8s linear infinite; }
+@keyframes mk-gira { to { transform: rotate(360deg); } }
