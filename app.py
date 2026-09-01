@@ -34,6 +34,7 @@ import logging
 import math
 import os
 import secrets
+import threading
 import time
 import unicodedata
 from datetime import date as _date, datetime, timedelta, timezone
@@ -152,6 +153,71 @@ registrar_pwa(
          'desc': 'Pedidos, produtos, clientes e campanhas da loja.'},
     ],
 )
+
+
+# ─── Barreira de scraper (banda do Railway) ───────────────────────────────────
+# Agosto/2026: um crawler que se identifica como "SleepBot" passou a varrer
+# /buscar a ~18 req/s vindo de centenas de IPs do Google Cloud. Cada pagina de
+# listagem carrega 48 produtos (80-150 KB), entao a saida do luqui-shop foi de
+# 2 GB/dia (01/08) pra 125 GB/dia (31/08) e a fatura do Railway pulou de US$ 88
+# pra US$ 168 no mes — US$ 72 so deste projeto, US$ 44 so de banda.
+#
+# O certo e barrar na borda (Cloudflare), onde a banda nem chega a ser paga —
+# falta token com Zone -> Firewall Services. Aqui a request ja chegou, mas o
+# 403 curto troca ~100 KB por ~200 bytes: corta 99,8% do custo do abuso.
+#
+# Duas camadas, porque o UA e trivial de trocar:
+#  1. UA declarado de scraper abusivo -> 403 direto.
+#  2. Rajada em pagina de listagem, sem cookie de sessao -> 429. Toda resposta
+#     do site crava cookie de sessao, entao visitante de verdade so cai nesta
+#     regra no primeiro pageview — e ninguem abre 30 listagens em um minuto.
+_UA_BLOQUEADOS = ('sleepbot',)
+_ROTAS_LISTAGEM = ('/buscar', '/produtos', '/categoria/', '/novidades',
+                   '/mais-vendidos')
+_LISTAGEM_MAX = 30                 # hits por IP...
+_LISTAGEM_JANELA = 60              # ...a cada 60 s (1 worker gunicorn)
+_listagem_hits = {}
+_listagem_janela = [0.0]
+_listagem_lock = threading.Lock()
+
+
+def _ip_visitante():
+    """IP real do cliente (o site fica atras de Cloudflare + edge do Railway)."""
+    return (request.headers.get('CF-Connecting-IP')
+            or (request.headers.get('X-Forwarded-For') or '').split(',')[0].strip()
+            or request.remote_addr or '')
+
+
+@app.before_request
+def _barra_scraper():
+    ua = (request.headers.get('User-Agent') or '').lower()
+    if any(b in ua for b in _UA_BLOQUEADOS):
+        return Response('blocked\n', status=403, mimetype='text/plain')
+
+    if request.method not in ('GET', 'HEAD'):
+        return None
+    p = request.path or '/'
+    if not any(p == r or p.startswith(r) for r in _ROTAS_LISTAGEM):
+        return None
+    if request.cookies.get('session'):
+        return None                      # ja navegou aqui: nao e varredura
+
+    agora = time.time()
+    ip = _ip_visitante()
+    if not ip:
+        return None
+    with _listagem_lock:
+        if agora - _listagem_janela[0] >= _LISTAGEM_JANELA:
+            _listagem_janela[0] = agora
+            _listagem_hits.clear()       # janela fixa: limpa tudo, sem vazar RAM
+        n = _listagem_hits.get(ip, 0) + 1
+        _listagem_hits[ip] = n
+    if n > _LISTAGEM_MAX:
+        if n == _LISTAGEM_MAX + 1:
+            log.warning('scraper-barrado ip=%s path=%s ua=%s', ip, p, ua[:80])
+        return Response('slow down\n', status=429, mimetype='text/plain',
+                        headers={'Retry-After': '60'})
+    return None
 
 
 @app.before_request
