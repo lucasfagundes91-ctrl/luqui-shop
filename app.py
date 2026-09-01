@@ -15,7 +15,10 @@ try:
     _time_tz.tzset()
 except AttributeError:            # Windows não tem tzset
     pass
-if _time_tz.tzname[0] in ('UTC', 'GMT'):
+# Checa o OFFSET, nao o nome: sem tzdata a glibc le 'America/Sao_Paulo'
+# como spec POSIX e o tzname vira 'America' com offset ZERO -- a versao
+# antiga desta linha so olhava ('UTC','GMT') e passava batido.
+if _time_tz.timezone == 0 and _time_tz.altzone == 0:
     # Imagem sem tzdata: o TZ acima não pega e as datas voltam a sair em UTC.
     # Falhar em silêncio aqui viraria relatório torto semanas depois.
     print('AVISO: fuso nao aplicado (falta tzdata na imagem) - datas em UTC',
