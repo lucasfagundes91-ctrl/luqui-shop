@@ -60,6 +60,18 @@ if [[ $FORCE_REDEPLOY -eq 0 ]]; then
   echo "⚠️  Auto-deploy parece travado — forçando railway up."
 fi
 
+# Sem o CLI do Railway aqui não dá pra forçar nada. Morrer com
+# "command not found" fazia um build lento (>3 min) parecer deploy falhado —
+# e ele costuma subir sozinho logo depois. Então segue esperando.
+if ! command -v railway >/dev/null 2>&1; then
+  echo "⚠️  CLI do Railway não instalado nesta máquina — sem como forçar."
+  echo "🔵 Seguindo na espera do auto-deploy do GitHub (até 5 min)…"
+  if wait_until_redeploy 300 "auto-deploy (sem CLI)"; then exit 0; fi
+  echo "❌ Deploy não subiu em 8 min. Force pelo painel do Railway"
+  echo "   ou instale o CLI: npm i -g @railway/cli && railway link"
+  exit 1
+fi
+
 echo "🔵 railway up --detach (a env precisa estar linkada via 'railway link')…"
 railway up --detach
 
