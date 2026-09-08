@@ -2438,12 +2438,18 @@ def integracao_pedido_marcar_pronto(pid):
 def integracao_pedidos_site():
     """Lista pedidos do site pro PDV Pro consumir (tela centralizada).
     Filtros: status (pago,aguardando_pagto,enviado,entregue,cancelado),
-    limit (default 50). Autenticado por X-API-Key = PDVPRO_API_KEY."""
+    inicio/fim (YYYY-MM-DD sobre criado_em) e limit (default 50).
+    Autenticado por X-API-Key = PDVPRO_API_KEY.
+
+    O filtro de data existe pro relatório de Entregas do PDV: sem ele, só dava
+    pra pegar os N mais recentes e um período antigo vinha vazio."""
     if not _verifica_api_key_pdv():
         return jsonify({'erro': 'unauthorized'}), 401
     status = (request.args.get('status') or '').strip()
+    inicio = (request.args.get('inicio') or '').strip()
+    fim    = (request.args.get('fim') or '').strip()
     try:
-        limit = max(1, min(200, int(request.args.get('limit') or 50)))
+        limit = max(1, min(1000, int(request.args.get('limit') or 50)))
     except ValueError:
         limit = 50
     where = []
@@ -2451,6 +2457,14 @@ def integracao_pedidos_site():
     if status:
         where.append('status=%s')
         params.append(status)
+    # criado_em é timestamptz; compara no fuso de Brasília pra o dia bater com
+    # o que o lojista vê na tela.
+    if re.match(r'^\d{4}-\d{2}-\d{2}$', inicio):
+        where.append("(criado_em AT TIME ZONE 'America/Sao_Paulo')::date >= %s")
+        params.append(inicio)
+    if re.match(r'^\d{4}-\d{2}-\d{2}$', fim):
+        where.append("(criado_em AT TIME ZONE 'America/Sao_Paulo')::date <= %s")
+        params.append(fim)
     sql_where = ('WHERE ' + ' AND '.join(where)) if where else ''
     rows = db_execute(f"""
         SELECT id, nome, email, telefone, cpf, cidade, uf, total, frete,
