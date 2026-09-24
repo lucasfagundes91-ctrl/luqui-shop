@@ -177,6 +177,19 @@ _ROTAS_LISTAGEM = ('/buscar', '/produtos', '/categoria/', '/novidades',
 _LISTAGEM_MAX = 30                 # hits por IP...
 _LISTAGEM_JANELA = 60              # ...a cada 60 s (1 worker gunicorn)
 _listagem_hits = {}
+_DESAFIO_COOKIE = 'lb_ok'
+_CRAWLERS_BONS = ('googlebot', 'google-inspectiontool', 'adsbot-google',
+                  'googleother', 'storebot-google', 'bingbot', 'applebot',
+                  'duckduckbot', 'facebookexternalhit', 'meta-externalagent',
+                  'facebookcatalog')
+_DESAFIO_HTML = (
+    '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">'
+    '<meta name="robots" content="noindex"><title>Luqui Brinquedos</title>'
+    '<meta name="viewport" content="width=device-width,initial-scale=1"></head>'
+    '<body style="font-family:sans-serif;text-align:center;padding:40px">'
+    '<p>Carregando…</p><noscript><p>Ative o JavaScript para ver a loja.</p></noscript>'
+    '<script>document.cookie="lb_ok=1; path=/; max-age=31536000; SameSite=Lax";'
+    'location.replace(location.href);</script></body></html>')
 _listagem_janela = [0.0]
 _listagem_lock = threading.Lock()
 
@@ -199,8 +212,22 @@ def _barra_scraper():
     p = request.path or '/'
     if not any(p == r or p.startswith(r) for r in _ROTAS_LISTAGEM):
         return None
-    if request.cookies.get('session'):
+    if request.cookies.get('session') or request.cookies.get(_DESAFIO_COOKIE):
         return None                      # ja navegou aqui: nao e varredura
+
+    # Categoria sem referer e sem cookie e a assinatura do robo que chegou a
+    # 500 mil hits/dia em set/2026 (~3 mil visitas humanas no mesmo dia), um
+    # hit por IP — o limite por IP abaixo nunca pegava. Cada hit montava a
+    # pagina inteira (100 KB): era a banda de 80 GB/dia do Railway. Em vez da
+    # pagina, vai um HTML de 600 bytes que grava cookie e recarrega: gente
+    # nem percebe, fetcher sem JavaScript para aqui. Buscador e crawler de
+    # catalogo passam direto pra nao perder indexacao nem anuncio.
+    if (p.startswith('/categoria/') and not request.referrer
+            and (request.host or '').lower().split(':')[0] == SITE_HOST
+            and not any(b in ua for b in _CRAWLERS_BONS)):
+        return Response(_DESAFIO_HTML, status=200, mimetype='text/html',
+                        headers={'Cache-Control': 'no-store',
+                                 'X-Robots-Tag': 'noindex'})
 
     agora = time.time()
     ip = _ip_visitante()
