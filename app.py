@@ -2009,14 +2009,44 @@ def admin_pedido_gerar_etiqueta(pid):
 
 
 # ─── Cliente API PDV Pro (cache 60s) ──────────────────────────────────────────
-_PDV_CACHE = {}
+# Teto em BYTES, não em entradas, e sai o usado há mais tempo. Sem teto, cada
+# combinação de categoria/página/filtro que um robô visitava ficava aqui pra
+# sempre (o cache velho é mantido de propósito pra servir quando o PDV cai):
+# em set/2026 o web chegou a 23,5 GB de RAM, crescendo ~1,5 GB/dia, e a conta
+# do Railway do luqui-shop foi a US$ 95 no mês com a loja parada.
+from collections import OrderedDict
+_PDV_CACHE = OrderedDict()           # key -> {'t', 'data', 'n'}
+_PDV_CACHE_BYTES = 0
+_PDV_CACHE_MAX_BYTES = int(os.environ.get('PDV_CACHE_MAX_MB', '64')) * 1024 * 1024
+_PDV_CACHE_LOCK = threading.Lock()
+
+
+def _pdv_cache_get(key):
+    with _PDV_CACHE_LOCK:
+        c = _PDV_CACHE.get(key)
+        if c:
+            _PDV_CACHE.move_to_end(key)
+        return c
+
+
+def _pdv_cache_put(key, data, n):
+    global _PDV_CACHE_BYTES
+    with _PDV_CACHE_LOCK:
+        velho = _PDV_CACHE.pop(key, None)
+        if velho:
+            _PDV_CACHE_BYTES -= velho['n']
+        _PDV_CACHE[key] = {'t': time.time(), 'data': data, 'n': n}
+        _PDV_CACHE_BYTES += n
+        while _PDV_CACHE_BYTES > _PDV_CACHE_MAX_BYTES and len(_PDV_CACHE) > 1:
+            _, fora = _PDV_CACHE.popitem(last=False)
+            _PDV_CACHE_BYTES -= fora['n']
 
 
 def pdv_get(path, params=None, ttl=60):
     """Chama a API de integração do PDV Pro com cache em memória."""
     key = (path, tuple(sorted((params or {}).items())))
     now = time.time()
-    cached = _PDV_CACHE.get(key)
+    cached = _pdv_cache_get(key)
     if cached and (now - cached['t']) < ttl:
         return cached['data']
     if not PDVPRO_API_KEY:
@@ -2041,7 +2071,8 @@ def pdv_get(path, params=None, ttl=60):
             log.error("PDV Pro %s → %s (sem cache pra servir)", path, r.status_code)
             return None
         data = r.json()
-        _PDV_CACHE[key] = {'t': now, 'data': data}
+        # Objeto Python ocupa umas 4-6× o JSON cru; o teto é aproximado.
+        _pdv_cache_put(key, data, len(r.content) * 5)
         return data
     except Exception as e:
         log.error("pdv_get %s: %s", path, e)
