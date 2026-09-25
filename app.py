@@ -8847,8 +8847,21 @@ def _pagar_cartao_pagarme(pid, p, cartao, tds):
         else:
             msg = ('Não foi possível confirmar a compra com o seu banco. '
                    'Tente de novo ou finalize no PIX.')
-        log.warning("pedido %s recusado no 3DS: status=%s trans_id=%s",
-                    pid, status_3ds or '-', bool(trans_id))
+        # O motivo que o navegador mandou (erro da lib da Stone, desafio
+        # cancelado, etc.) é o que diz se foi fraudador com cartão inválido ou
+        # cliente de verdade barrado. Antes só ia "status=-" pro log e ele
+        # some em um dia: em set/2026 não deu pra saber por que uma cliente
+        # não conseguiu comprar. Fica no próprio pedido.
+        motivo_3ds = (status_3ds or str(tds.get('erro') or '')
+                      or ('cancelado' if tds.get('challenge_canceled') else '-'))[:150]
+        log.warning("pedido %s recusado no 3DS: status=%s trans_id=%s motivo=%s",
+                    pid, status_3ds or '-', bool(trans_id), motivo_3ds)
+        try:
+            db_execute("UPDATE pedidos SET observacao = COALESCE(observacao,'') || %s "
+                       "WHERE id=%s",
+                       [f" [3ds-recusado:{datetime.now(SP_TZ).strftime('%d/%m %H:%M')} {motivo_3ds}]", pid])
+        except Exception as e:
+            log.warning("pedido %s: gravar motivo 3ds: %s", pid, e)
         return jsonify({'erro': msg, 'sem_3ds': True}), 402
 
     st, d = pagarme_criar_cobranca(pid, cartao,
