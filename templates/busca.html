@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% block titulo %}Busca: {{ termo }} — Luqui Brinquedos{% endblock %}
+{# busca interna e listagem filtrada não vão pro índice: os filtros combinam em URLs infinitas #}
+{% block meta_robots %}{% if termo_q or filtros_ativos %}noindex, follow{% else %}index, follow, max-image-preview:large{% endif %}{% endblock %}
 {% block conteudo %}
 
 {% macro link_filtro(chave, slug, label, qtd) -%}
@@ -12,7 +14,7 @@
   {%- endfor -%}
   {%- for v in novos -%}{%- set ns.qs = ns.qs ~ chave ~ '=' ~ (v|urlencode) ~ '&' -%}{%- endfor -%}
   {%- if termo_q -%}{%- set ns.qs = ns.qs ~ 'q=' ~ (termo_q|urlencode) ~ '&' -%}{%- endif -%}
-  <a href="?{{ ns.qs[:-1] if ns.qs else '' }}" class="filtro-link {% if ja_marcado %}on{% endif %}">
+  <a href="?{{ ns.qs[:-1] if ns.qs else '' }}" rel="nofollow" class="filtro-link {% if ja_marcado %}on{% endif %}">
     <span class="cb">{% if ja_marcado %}✓{% endif %}</span>
     <span class="nm">{{ label }}</span>
     <span class="qt">{{ qtd }}</span>
@@ -90,9 +92,9 @@
     {% if tem_ativos %}
       <div class="filtros-ativos">
         {% for k, vs in filtros_ativos.items() %}{% for v in vs %}
-          <a href="?{% for k2, vs2 in filtros_ativos.items() if k2 != k %}{% for v2 in vs2 %}{{ k2 }}={{ v2|urlencode }}&{% endfor %}{% endfor %}{% for v2 in vs if v2 != v %}{{ k }}={{ v2|urlencode }}&{% endfor %}{% if termo_q %}q={{ termo_q|urlencode }}{% endif %}" class="chip">✕ {{ v }}</a>
+          <a href="?{% for k2, vs2 in filtros_ativos.items() if k2 != k %}{% for v2 in vs2 %}{{ k2 }}={{ v2|urlencode }}&{% endfor %}{% endfor %}{% for v2 in vs if v2 != v %}{{ k }}={{ v2|urlencode }}&{% endfor %}{% if termo_q %}q={{ termo_q|urlencode }}{% endif %}" rel="nofollow" class="chip">✕ {{ v }}</a>
         {% endfor %}{% endfor %}
-        <a href="?{% if termo_q %}q={{ termo_q|urlencode }}{% endif %}" class="limpar">limpar tudo</a>
+        <a href="?{% if termo_q %}q={{ termo_q|urlencode }}{% endif %}" rel="nofollow" class="limpar">limpar tudo</a>
       </div>
     {% endif %}
 

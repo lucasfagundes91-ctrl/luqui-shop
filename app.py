@@ -171,7 +171,10 @@ registrar_pwa(
 #  2. Rajada em pagina de listagem, sem cookie de sessao -> 429. Toda resposta
 #     do site crava cookie de sessao, entao visitante de verdade so cai nesta
 #     regra no primeiro pageview — e ninguem abre 30 listagens em um minuto.
-_UA_BLOQUEADOS = ('sleepbot',)
+# KeenableBot (01/10/2026): mesmo padrao do sleepbot — centenas de IPs do
+# Google Cloud, ~80 mil hits/dia em /buscar, 5 GB/dia. Amzn-SearchBot: busca
+# da Amazon (Rufus/Alexa) — concorrente, e o Amazonbot ja estava barrado.
+_UA_BLOQUEADOS = ('sleepbot', 'keenablebot', 'amzn-searchbot')
 _ROTAS_LISTAGEM = ('/buscar', '/produtos', '/categoria/', '/novidades',
                    '/mais-vendidos')
 _LISTAGEM_MAX = 30                 # hits por IP...
@@ -3861,6 +3864,30 @@ Allow: /
 User-agent: FacebookBot
 Allow: /
 
+# Robôs de busca que só gastam banda (01/10/2026: Keenable 5 GB/dia em /buscar)
+User-agent: KeenableBot
+Disallow: /
+User-agent: Amzn-SearchBot
+Disallow: /
+
+# Applebot ficou preso nos filtros de /mais-vendidos (27 mil hits/dia, 3,6 GB/dia
+# medidos em 01/10/2026): cada combinação de marca × faixa × grupo é uma URL nova. O Applebot
+# usa só o grupo dele, então as regras gerais vão repetidas aqui + qualquer URL
+# com query string (produto e categoria limpos continuam liberados).
+User-agent: Applebot
+Allow: /
+Disallow: /*?
+Disallow: /buscar
+Disallow: /admin
+Disallow: /api/
+Disallow: /pedido/
+Disallow: /carrinho
+Disallow: /checkout
+Disallow: /minha-conta
+Disallow: /favoritos
+Disallow: /login
+Disallow: /cadastrar
+
 # SEO scrapers de concorrente
 User-agent: AhrefsBot
 Disallow: /
@@ -3892,6 +3919,7 @@ Disallow: /favoritos
 Disallow: /login
 Disallow: /cadastrar
 Disallow: /produtos?
+Disallow: /buscar
 # Filtro e ordenação NÃO entram aqui de propósito: essas páginas mandam
 # noindex no HTML, e bloquear no robots impediria o Google de ler justamente
 # esse noindex — a URL ficaria no índice sem conteúdo, que é pior.
