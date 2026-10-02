@@ -8719,14 +8719,23 @@ def pagarme_tds_token():
 
 
 def _pagarme_endereco(p):
+    # "Retirar na loja" não pede endereço. Com os campos vazios o line_1 saía
+    # "S/N, Nao informado" — duas partes — e o 3DS recusava TODO pedido de
+    # retirada no cartão ("Invalid address, must contain 3 parts in
+    # address.line_1"). Sem endereço, vai o da loja, onde a entrega acontece.
+    if not (p.get('endereco') or '').strip():
+        p = dict(p, endereco='Rua Engenheiro Rebouças', numero='2053',
+                 bairro='Centro', cidade='Cascavel', uf='PR',
+                 cep=CEP_LOJA_PADRAO)
     num = (p.get('numero') or 'S/N')
-    rua = (p.get('endereco') or 'Nao informado')
-    bairro = (p.get('bairro') or '')
+    rua = p.get('endereco')
+    # line_1 precisa das 3 partes (número, rua, bairro) mesmo sem bairro.
+    bairro = (p.get('bairro') or p.get('cidade') or 'Centro')
     return {
         'country': 'BR',
         'state': (p.get('uf') or 'PR')[:2].upper(),
         'city': (p.get('cidade') or 'Cascavel')[:64],
-        'zip_code': _so_digitos(p.get('cep')) or '85812130',
+        'zip_code': _so_digitos(p.get('cep')) or CEP_LOJA_PADRAO,
         'line_1': f'{num}, {rua}, {bairro}'.strip(' ,')[:256],
         # A biblioteca de 3DS EXIGE line_2 e recusa a autenticação inteira sem
         # ele: "order.shipping.address.line_2 is required". A maioria dos
