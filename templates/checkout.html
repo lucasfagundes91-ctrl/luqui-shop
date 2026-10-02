@@ -599,6 +599,13 @@ async function buscarFrete(){
   const uf = document.getElementById('uf').value;
   const cep = (document.getElementById('cep').value || '').replace(/\D/g,'');
   if(cep.length !== 8) return;
+  // Mostra o bloco de frete aqui, e não só no clique de "Receber em casa":
+  // quem escolhe o modo ANTES de digitar o CEP (ou tem o endereço preenchido
+  // pelo cadastro) ganhava as opções calculadas dentro de um bloco ainda
+  // display:none. A 1ª opção (Entrega Luqui) ficava marcada sem ninguém ver,
+  // e o horário dela — invisível — travava o "Pagar e finalizar".
+  const blocoFrete = document.getElementById('bloco-frete');
+  if(blocoFrete) blocoFrete.style.display = 'block';
   // Remove hidden de retirada (se voltou pra modo entrega depois)
   const h = document.getElementById('frete-virtual-retira'); if(h) h.remove();
   const box = document.getElementById('opcoes-frete');
@@ -681,8 +688,8 @@ function aoTrocarFrete(){
     const isLocal = r.dataset.id === 'LOCAL';
     const bloco = document.getElementById('bloco-agendamento');
     if(bloco) bloco.style.display = isLocal ? 'block' : 'none';
-    const sel = document.getElementById('entrega-agendada');
-    if(sel) sel.required = isLocal;
+    // Sem `sel.required`: required num campo que pode estar oculto mata o
+    // submit em silêncio. O horário é cobrado no JS do submit.
     recalcular();
   }
 }
@@ -906,11 +913,16 @@ document.getElementById('form-checkout').addEventListener('submit', async (e)=>{
     const sel = document.getElementById('entrega-agendada');
     if(!sel || !sel.value){
       toast('Escolha o horário de entrega', 'err');
+      if(sel){ sel.scrollIntoView({behavior:'smooth', block:'center'}); sel.focus(); }
       const btn2 = document.querySelector('#form-checkout button[type=submit]');
       if(btn2){ btn2.disabled=false; btn2.textContent='Pagar e finalizar →'; }
       return;
     }
     dados.entrega_agendada = sel.value;
+  } else {
+    // O select continua no form depois de trocar pra Correios/transportadora;
+    // sem isso o pedido gravava um horário de entrega que não vai existir.
+    delete dados.entrega_agendada;
   }
   if(cupom) dados.cupom_codigo = cupom.codigo;
   try {
