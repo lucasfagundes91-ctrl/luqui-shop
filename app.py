@@ -4754,6 +4754,7 @@ def checkout_frete():
     uf = (request.args.get('uf') or '').upper()
     cep = (request.args.get('cep') or '').strip()
     opcoes = []
+    fora_regiao = bool(cep) and not entrega_liberada_para(cep)
     # Retirar na loja — sempre primeira opção quando ativa
     if cfg('retirada_loja_ativa', '1') == '1':
         opcoes.append({
@@ -4782,6 +4783,9 @@ def checkout_frete():
                        'id': 'LOCAL',
                        'agendamento': slots})
     # Tenta Melhor Envio se tiver CEP + carrinho + conexão
+    if fora_regiao:
+        return jsonify({'opcoes': opcoes, 'fora_regiao': True,
+                        'aviso': entrega_aviso_regiao()})
     itens_sess = carrinho_ler() or []
     if cep and itens_sess and cfg('me_access_token'):
         # Enriquece com produto pra ter dimensão
@@ -8030,6 +8034,9 @@ def checkout_finalizar():
         uf_d = (d.get('uf') or '').strip().upper()
         if len(uf_d) != 2:
             return jsonify({'erro': 'UF inválida'}), 400
+        if not entrega_liberada_para(cep_digs):
+            log.info("entrega barrada por estado: cep=%s uf=%s", cep_digs, uf_d)
+            return jsonify({'erro': entrega_aviso_regiao()}), 400
     # Valida que cada produto tem dados fiscais no PDV Pro (NCM/CFOP/CSOSN).
     # Sem isso a NF-e nao emite e o pedido fica sem nota — bloqueia ANTES de
     # cobrar do cliente em vez de descobrir depois do pagamento.
@@ -8594,6 +8601,47 @@ def distancia_da_loja_km(cep):
     if not origem:
         return None
     return _haversine_km(origem[0], origem[1], destino[0], destino[1])
+
+
+# ─── Entrega só no Sul ────────────────────────────────────────────────────────
+# Em 05/10/2026 a loja voltou a vender só para PR, SC e RS. Os pedidos de longe
+# (PA, BA, PB) da semana anterior eram suspeitos, e o frete até lá custava mais
+# que o produto: a bicicleta do #879 cobrou R$ 83 e a etiqueta saía a R$ 389.
+# A UF sai da FAIXA do CEP, não de API. Faixa de CEP é tabela dos Correios e
+# não muda, e a consulta de CEP já devolveu 429 pro IP do Railway.
+FAIXAS_CEP_UF = {
+    'PR': (80000000, 87999999),
+    'SC': (88000000, 89999999),
+    'RS': (90000000, 99999999),
+}
+
+
+def entrega_ufs_permitidas():
+    """UFs atendidas na entrega. site_config `entrega_ufs`, vazio = todas."""
+    raw = cfg('entrega_ufs', 'PR,SC,RS') or ''
+    return [u.strip().upper() for u in raw.split(',') if u.strip()]
+
+
+def entrega_liberada_para(cep):
+    """True se o CEP cai num estado atendido. CEP inválido recusa."""
+    ufs = entrega_ufs_permitidas()
+    if not ufs:
+        return True
+    c = _so_digitos(cep)
+    if len(c) != 8:
+        return False
+    n = int(c)
+    return any(FAIXAS_CEP_UF[u][0] <= n <= FAIXAS_CEP_UF[u][1]
+               for u in ufs if u in FAIXAS_CEP_UF)
+
+
+def entrega_aviso_regiao():
+    ufs = entrega_ufs_permitidas()
+    nomes = {'PR': 'Paraná', 'SC': 'Santa Catarina', 'RS': 'Rio Grande do Sul'}
+    lista = [nomes.get(u, u) for u in ufs]
+    txt = (', '.join(lista[:-1]) + ' e ' + lista[-1]) if len(lista) > 1 else ''.join(lista)
+    return (f'No momento entregamos só para {txt}. '
+            f'Você pode retirar na loja em Cascavel/PR ou falar com a gente no WhatsApp.')
 
 
 def cartao_liberado_para(cep, is_retira=False):

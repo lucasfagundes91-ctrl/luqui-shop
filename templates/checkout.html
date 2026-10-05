@@ -614,6 +614,14 @@ async function buscarFrete(){
   const d = await r.json();
   // Filtra opcoes: nao queremos RETIRA aqui (cliente ja escolheu Receber em casa)
   const ops = (d.opcoes||[]).filter(o=>o.id !== 'RETIRA');
+  if(d.fora_regiao){
+    const div = document.createElement('div');
+    div.style.cssText = 'background:#FEF3C7;color:#92400E;padding:12px;border-radius:8px;font-size:13px';
+    div.textContent = '📍 ' + (d.aviso || 'No momento não entregamos nesse CEP.');
+    box.innerHTML = ''; box.appendChild(div);
+    freteCalculado = false;
+    return;
+  }
   if(!ops.length){
     box.innerHTML = '<div style="background:#FEE2E2;color:#991B1B;padding:12px;border-radius:8px;font-size:13px">Nenhuma opção de entrega disponível pra esse CEP. Tente conferir o CEP ou fale com a loja no WhatsApp.</div>';
     freteCalculado = false;
