@@ -3440,7 +3440,7 @@ RECUP_LIMITE_DIA = 3
 
 @app.route('/cron/recuperar-pedidos-parados')
 def cron_recuperar_pedidos_parados():
-    """Pedidos parados há 48h+: manda o link da fatura hospedada do Asaas.
+    """Pedidos parados há 48h+: chama o cliente pro WhatsApp da loja (sem link).
 
     Complementa /cron/carrinho-abandonado, que só pega a janela de 24-48h e
     devolve o cliente pro checkout transparente — o mesmo que recusou o cartão
@@ -3506,46 +3506,37 @@ def cron_recuperar_pedidos_parados():
             continue
         vistos.add(tel_norm)
         try:
-            # Garante uma fatura hospedada (o caminho que o emissor aprova)
-            link = (p.get('asaas_link') or '')
-            if not link.startswith('http'):
-                cust = link.split(':', 1)[1] if link.startswith('customer:') else None
-                if not cust:
-                    cust = asaas_criar_customer(p['nome'], p['email'],
-                                                p['cpf'], p['telefone'])
-                cob = asaas_criar_cobranca(
-                    cust, p['total'], 'CREDIT_CARD',
-                    f'Luqui Brinquedos — Pedido #{p["id"]}',
-                    parcelas=p.get('parcelas') or 1,
-                    externa_ref=f'pedido-{p["id"]}') if cust else None
-                link = (cob or {}).get('invoiceUrl') or ''
-                if link:
-                    db_execute("""UPDATE pedidos SET asaas_cobranca_id=%s,
-                                  asaas_link=%s WHERE id=%s""",
-                               [(cob or {}).get('id'), link, p['id']])
-            if not link:
-                log.error("recuperacao %s: sem link de pagamento", p['id'])
+            # SEM link de pagamento automático (decisão de 05/10/2026). A fatura
+            # hospedada do Asaas aceita cartão sem 3DS: foi por ela que os
+            # pedidos #876 (BA) e #879 (PB) — o #879 já recusado no 3DS — foram
+            # pagos em 04/10. Agora a mensagem só chama a pessoa pro WhatsApp
+            # da loja, e quem gera o link é a atendente, olhando o pedido.
+            # O único link que vai é o da PRÓPRIA página de pagamento do site,
+            # que cobra pela Pagar.me com 3DS obrigatório.
+            _retira = (p.get('frete_servico') or '').lower().startswith('retirar')
+            if not _retira and not entrega_liberada_para(p.get('cep')):
                 continue
+            pag_url = (f"https://www.luquibrinquedos.com.br/pedido/{p['id']}"
+                       f"/pagamento?t={p.get('token') or ''}")
             primeiro = ((p.get('nome') or '').strip().split() or ['amigo(a)'])[0]
             enviar_whatsapp(p['telefone'],
                 f"💛 Oi {primeiro}! Aqui é da *Luqui Brinquedos*.\n\n"
-                f"Vi que seu pagamento do pedido #{p['id']} "
-                f"({rs(p['total'])}) não passou. Isso costuma ser o banco "
-                f"barrando compra pela internet, não é problema no seu cartão.\n\n"
-                f"Separei um link seguro que resolve:\n{link}\n\n"
-                f"Seus produtos estão guardados. Qualquer dúvida, é só chamar aqui! 🧸")
+                f"Vi que o pagamento do seu pedido #{p['id']} "
+                f"({rs(p['total'])}) não foi concluído.\n\n"
+                f"Seus produtos estão guardados. Pra finalizar:\n{pag_url}\n\n"
+                f"Se preferir, é só responder esta mensagem que a gente te "
+                f"ajuda. 🧸")
             enviar_email(p['email'],
-                f'Seu pedido #{p["id"]} está guardado — link de pagamento',
+                f'Seu pedido #{p["id"]} — pagamento não concluído',
                 f"""<p>Oi {primeiro}! 💛</p>
-<p>Notamos que o pagamento do seu pedido não foi concluído. Na maioria das
-vezes é o banco barrando a compra pela internet — não é problema no seu cartão.</p>
+<p>O pagamento do seu pedido não foi concluído.</p>
 <p><b>Pedido #{p['id']} — Total: {rs(p['total'])}</b></p>
-<p><a href="{link}"
+<p><a href="{pag_url}"
    style="background:#FFC700;color:#1652C7;padding:12px 24px;border-radius:8px;
           font-weight:900;text-decoration:none;display:inline-block">
-  🔐 Pagar pela página segura
+  Finalizar pagamento
 </a></p>
-<p>Seus produtos continuam guardados. Se precisar de ajuda, é só responder. 🧸</p>""")
+<p>Se preferir, fale com a gente pelo WhatsApp que a gente te ajuda. 🧸</p>""")
             # Marca todos os pedidos parados do mesmo telefone
             db_execute("""UPDATE pedidos SET observacao=COALESCE(observacao,'')
                           || %s
@@ -9033,6 +9024,10 @@ def pedido_pagar_cartao(pid):
     # Mesma trava do checkout, repetida aqui de propósito: pedido antigo pode
     # ter nascido antes da regra, e esta rota é chamável direto.
     _retira = (p.get('frete_servico') or '').lower().startswith('retirar')
+    if not _retira and not entrega_liberada_para(p.get('cep')):
+        log.warning("cartao-barrado pedido=%s motivo=fora_dos_estados", pid)
+        return jsonify({'erro': entrega_aviso_regiao(),
+                        'whatsapp': cfg('whatsapp_loja', WHATSAPP_LOJA)}), 403
     _ok_raio, _, _mot = cartao_liberado_para(p.get('cep'), _retira)
     if not _ok_raio:
         log.warning("cartao-barrado pedido=%s motivo=fora_do_raio (%s)", pid, _mot)
@@ -9167,27 +9162,9 @@ def pedido_pagar_cartao(pid):
         except Exception:
             pass
         log.warning(f"pedido {pid} cartao recusado: code={code} msg={msg}")
-        # Fallback: a recusa do checkout transparente quase sempre é o emissor
-        # negando transação não autenticada. A fatura hospedada do Asaas roda
-        # antifraude/3DS própria e aprova onde o transparente apanha, então
-        # oferecemos esse caminho em vez de deixar o cliente na mão.
-        fallback = (p.get('asaas_link') or '')
-        if not fallback.startswith('http'):
-            cob = asaas_criar_cobranca(
-                customer_id, p['total'], 'CREDIT_CARD',
-                f'Luqui Brinquedos — Pedido #{pid}',
-                parcelas=p.get('parcelas') or 1,
-                externa_ref=f'pedido-{pid}')
-            fallback = (cob or {}).get('invoiceUrl') or ''
-            if fallback:
-                db_execute("""UPDATE pedidos SET asaas_cobranca_id=%s,
-                              asaas_link=%s WHERE id=%s""",
-                           [(cob or {}).get('id'), fallback, pid])
-        if fallback:
-            return jsonify({'erro': msg, 'fallback_url': fallback,
-                            'fallback_msg': 'Finalize pela página segura do '
-                                            'Asaas — costuma aprovar quando o '
-                                            'banco recusa aqui.'}), 402
+        # Sem fallback pra fatura hospedada do Asaas: ela aceita cartão sem
+        # 3DS (ver /cron/recuperar-pedidos-parados). Link de pagamento só a
+        # loja gera, à mão.
         return jsonify({'erro': msg}), 402
 
     cob_id = resp.get('id')
@@ -9250,6 +9227,9 @@ def pedido_trocar_pra_pix(pid):
         return jsonify({'erro': 'Este pedido já foi processado'}), 400
     if p['forma_pagto'] == 'pix':
         return jsonify({'ok': True, 'ja_era_pix': True})
+    if (not (p.get('frete_servico') or '').lower().startswith('retirar')
+            and not entrega_liberada_para(p.get('cep'))):
+        return jsonify({'erro': entrega_aviso_regiao()}), 403
 
     # Refaz a conta: tira juros de parcelamento e aplica o desconto do PIX.
     bruto = float(p['subtotal']) + float(p['frete'] or 0) - float(p['desconto'] or 0)
