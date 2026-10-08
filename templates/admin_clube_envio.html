@@ -161,7 +161,7 @@ function renderSelecionados(aid){
 async function confirmarEnvio(aid){
   const itens = SELEC[aid] || [];
   if(!itens.length){ alert('Adicione pelo menos 1 item antes de confirmar.'); return; }
-  if(!confirm('Confirmar envio de '+itens.length+' item(ns)? Vai dar baixa de estoque no PDV Pro.')) return;
+  if(!await luqConfirmar('Confirmar envio de '+itens.length+' item(ns)? Vai dar baixa de estoque no PDV Pro.')) return;
   try {
     const r = await fetch('/api/clube/envio/registrar', {
       method:'POST', headers:{'Content-Type':'application/json'},

@@ -90,7 +90,7 @@
           <div class="saldo-badge">💰 R$ {{ '%.2f'|format(saldo.balance or 0) }}</div>
         {% endif %}
         <form action="/admin/melhorenvio/desconectar" method="post"
-              onsubmit="return confirm('Desconectar Melhor Envio? Vai precisar reautorizar pra emitir etiquetas.')">
+              onsubmit="if(this.dataset.luqOk){delete this.dataset.luqOk;return true}var f=this,b=event.submitter;luqConfirmar('Desconectar Melhor Envio? Vai precisar reautorizar pra emitir etiquetas.').then(function(ok){if(ok){f.dataset.luqOk=1;f.requestSubmit?f.requestSubmit(b||undefined):f.submit()}});return false">
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
           <button type="submit" class="btn-desconectar">Desconectar</button>
         </form>

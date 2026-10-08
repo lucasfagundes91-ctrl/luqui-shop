@@ -78,7 +78,7 @@
               <button class="btn-mini btn-aprovar">✓ Aprovar</button>
             </form>
           {% endif %}
-          <form method="post" action="/admin/avaliacoes/{{ a.id }}/excluir" style="display:inline" onsubmit="return confirm('Excluir essa avaliação?')">
+          <form method="post" action="/admin/avaliacoes/{{ a.id }}/excluir" style="display:inline" onsubmit="if(this.dataset.luqOk){delete this.dataset.luqOk;return true}var f=this,b=event.submitter;luqConfirmar('Excluir essa avaliação?').then(function(ok){if(ok){f.dataset.luqOk=1;f.requestSubmit?f.requestSubmit(b||undefined):f.submit()}});return false">
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
             <button class="btn-mini btn-excluir">🗑️ Excluir</button>
           </form>

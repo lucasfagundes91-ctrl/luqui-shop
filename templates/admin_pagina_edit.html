@@ -10,7 +10,7 @@
     {% endif %}
   </div>
   <form method="post" action="/admin/paginas/{{ slug }}/restaurar"
-        onsubmit="return confirm('Restaurar o texto padrão e descartar o que você editou?')">
+        onsubmit="if(this.dataset.luqOk){delete this.dataset.luqOk;return true}var f=this,b=event.submitter;luqConfirmar('Restaurar o texto padrão e descartar o que você editou?').then(function(ok){if(ok){f.dataset.luqOk=1;f.requestSubmit?f.requestSubmit(b||undefined):f.submit()}});return false">
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <button type="submit" style="background:#fff;border:1px solid #E5E7EB;color:#64748B;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px">
       ↺ Restaurar texto padrão

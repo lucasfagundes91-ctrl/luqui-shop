@@ -147,7 +147,7 @@
         <span class="pill-st {{ 'ativo' if b.ativo else 'inativo' }}">{{ '✓ Ativo' if b.ativo else '○ Inativo' }}</span>
         <div>
           <a href="/admin/banners?edit={{ b.id }}" class="btn-mini editar">✏️ Editar</a>
-          <form method="post" action="/admin/banners/{{ b.id }}/excluir" style="display:inline" onsubmit="return confirm('Excluir o banner &quot;{{ b.titulo }}&quot;?')">
+          <form method="post" action="/admin/banners/{{ b.id }}/excluir" style="display:inline" onsubmit="if(this.dataset.luqOk){delete this.dataset.luqOk;return true}var f=this,b=event.submitter;luqConfirmar('Excluir o banner &quot;{{ b.titulo }}&quot;?').then(function(ok){if(ok){f.dataset.luqOk=1;f.requestSubmit?f.requestSubmit(b||undefined):f.submit()}});return false">
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
             <button class="btn-mini excluir">🗑️</button>
           </form>

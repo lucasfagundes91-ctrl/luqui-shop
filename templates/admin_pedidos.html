@@ -290,7 +290,7 @@ const esc = s => { const d = document.createElement('div'); d.textContent = s ==
 function fecharPedido(){ document.getElementById('ped-bg').classList.remove('on'); }
 
 async function liberarRisco(pid){
-  if(!confirm('Liberar o pedido #' + pid + ' pra envio?\n\n'
+  if(!await luqConfirmar('Liberar o pedido #' + pid + ' pra envio?\n\n'
       + 'Só faça isso depois de confirmar com o cliente que o cartão é dele. '
       + 'Depois de postado, um chargeback vira prejuízo.')) return;
   try{
@@ -403,7 +403,7 @@ async function cotarEEtiqueta(pid){
     const idx = parseInt(esc, 10) - 1;
     if(isNaN(idx) || idx < 0 || idx >= d.opcoes.length){ alert('Opção inválida.'); return; }
     const op = d.opcoes[idx];
-    if(!confirm('Emitir etiqueta '+op.servico+' por R$ '+op.valor.toFixed(2)+'?\nVai debitar do saldo do Melhor Envio.')) return;
+    if(!await luqConfirmar('Emitir etiqueta '+op.servico+' por R$ '+op.valor.toFixed(2)+'?\nVai debitar do saldo do Melhor Envio.')) return;
     const r2 = await fetch('/api/admin/pedidos/'+pid+'/etiqueta', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({service_id: op.id, servico_nome: op.servico}),
@@ -425,7 +425,7 @@ async function atualizarStatus(pid, novo, sel){
     rastreio = prompt('Código de rastreio (Correios/transportadora):', '');
     if(rastreio === null){ sel.value=''; return; }
   }
-  if(!confirm('Confirmar status "'+novo+'" pro pedido #'+pid+'? (cliente recebe WhatsApp)')){ sel.value=''; return; }
+  if(!await luqConfirmar('Confirmar status "'+novo+'" pro pedido #'+pid+'? (cliente recebe WhatsApp)')){ sel.value=''; return; }
   try {
     const r = await fetch('/api/admin/pedido/'+pid+'/status', {
       method:'POST', headers:{'Content-Type':'application/json'},
