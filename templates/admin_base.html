@@ -5,11 +5,18 @@
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:-apple-system,sans-serif;background:#F8FAFC;color:#0F172A}
   .layout{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
-  .sb{background:#0F172A;color:#fff;padding:20px}
+  /* menu fica parado na tela e o rodapé (Sair + assinatura) vai pro fim da barra */
+  .sb{background:#0F172A;color:#fff;padding:20px;position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;display:flex;flex-direction:column}
+  .sb .sb-rodape{margin-top:auto;padding-top:16px;padding-bottom:50px} /* 50px: livra os botões flutuantes de ajuda/tour do canto */
   .sb h1{font-size:18px;color:#FFC700;margin-bottom:24px}
   .sb a{display:block;color:#cbd5e1;padding:10px 14px;border-radius:8px;text-decoration:none;font-size:14px;margin-bottom:4px}
   .sb a:hover, .sb a.on{background:#1E293B;color:#FFC700}
-  .sb .sair{position:absolute;bottom:20px;font-size:12px;color:#94A3B8}
+  .sb .sair{display:block;font-size:12px;color:#94A3B8}
+  /* assinatura padrão Luqsys */
+  .luq-assinatura{font-size:10.5px;color:#94A3B8;opacity:.85;letter-spacing:.03em;line-height:1.4}
+  .luq-assinatura.no-menu{margin-top:8px}
+  .luq-assinatura.no-rodape{text-align:center;padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
+  .sb .luq-assinatura{padding-left:14px;white-space:nowrap}
   main{padding:30px}
   h2{font-size:22px;margin-bottom:20px}
   .card{background:#fff;border-radius:14px;padding:20px;margin-bottom:18px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
@@ -55,7 +62,7 @@
 </script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <!-- Kit mobile Luqsys: só age em tela ≤900px (celular e iPad em pé) -->
-  <link rel="stylesheet" href="{{ url_for('static', filename='mobile-kit.css') }}?v=17">
+  <link rel="stylesheet" href="{{ url_for('static', filename='mobile-kit.css') }}?v=18">
   <script defer src="{{ url_for('static', filename='mobile-kit.js') }}?v=17"></script>
   <script src="{{ url_for('static', filename='luq-dialogo.js') }}?v=1"></script><script>window.luqConfirmar||(window.luqConfirmar=function(m){return Promise.resolve(confirm(m&&m.titulo?m.titulo+"\n\n"+(m.mensagem||""):m))})</script>
 <!-- luqsys-pwa --><link rel="manifest" href="/manifest/admin.json"><meta name="theme-color" content="#202e5c"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Luqui Gestão"><link rel="apple-touch-icon" sizes="180x180" href="/static/brand/luqui-admin-icon-180.png"><link rel="apple-touch-icon" sizes="192x192" href="/static/brand/luqui-admin-icon-192.png"><script defer src="/static/pwa.js?v=1"></script><script defer src="/static/pdf-viewer.js?v=1"></script>
@@ -79,7 +86,10 @@
     <a href="/admin/chats" {% if pagina == 'chats' %}class="on"{% endif %}>🧸 Chats Luquizinha</a>
     <a href="/admin/melhorenvio" {% if pagina == 'melhorenvio' %}class="on"{% endif %}>📮 Melhor Envio</a>
     <a href="/" target="_blank">🔗 Ver site público</a>
-    <span class="sair"><a href="/admin/sair">Sair</a></span>
+    <div class="sb-rodape">
+      <span class="sair"><a href="/admin/sair">Sair</a></span>
+      <div class="luq-assinatura no-menu">Desenvolvido por Lucas Fagundes</div>
+    </div>
   </aside>
   <main>{% block conteudo %}{% endblock %}</main>
 </div>

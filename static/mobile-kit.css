@@ -178,8 +178,8 @@
   body.mk-gaveta .sidebar .sb-user button { width: auto !important; padding: 8px 14px !important; font-size: 13px !important; }
   body.mk-gaveta .sidebar .sb-user button::before { content: none !important; }
   body.mk-gaveta .sidebar .sb-acoes .lbl { display: inline !important; }
-  /* assinatura do rodapé só ocupa espaço no celular */
-  body.mk-gaveta .sb-sign { display: none !important; }
+  /* assinatura "Desenvolvido por Lucas Fagundes": aparece também na gaveta */
+  body.mk-gaveta .sidebar .luq-assinatura { display: block !important; }
 
   /* conteúdo ocupa a tela inteira — não sobra faixa de ícones */
   body.mk-gaveta .main {
