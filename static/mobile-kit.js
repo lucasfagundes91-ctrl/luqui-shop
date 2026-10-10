@@ -16,7 +16,20 @@
    ════════════════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
-  var MOBILE = function () { return window.innerWidth <= 900; };
+  /* Largura da tela = documentElement.clientWidth (o "initial containing
+     block", a mesma largura que o @media do CSS usa). NÃO usar
+     window.innerWidth: no Chrome do Android, quando algum conteúdo passa da
+     borda o layout viewport cresce até a largura do conteúdo e o innerWidth
+     vai junto (medido no AluguelPro: 1180 numa tela de 390). O kit lia
+     1180 > 900, concluía "desktop", não montava a gaveta, o menu de 248px
+     continuava empurrando o conteúdo — e o conteúdo largo mantinha o
+     innerWidth em 1180. Ciclo fechado. Safari/iPhone não expande, por isso
+     lá ficava normal. */
+  var VW = function () {
+    var cw = document.documentElement && document.documentElement.clientWidth;
+    return cw > 0 ? cw : window.innerWidth;
+  };
+  var MOBILE = function () { return VW() <= 900; };
 
   function rotularTabela(tb) {
     // pega os rótulos do cabeçalho
@@ -75,14 +88,14 @@
         // lista de cards (o rótulo de cada valor já foi posto acima).
         var pl = tb.querySelector('tr');
         var nCols = pl ? pl.children.length : 0;
-        var apertada = nCols >= 4 || tb.scrollWidth > window.innerWidth + 2;
-        if (window.innerWidth <= 600 && apertada) {
+        var apertada = nCols >= 4 || tb.scrollWidth > VW() + 2;
+        if (VW() <= 600 && apertada) {
           tb.classList.add('mk-card-tbl');
         } else {
           tb.classList.remove('mk-card-tbl');
         }
         // tabela sem nenhum container rolável e mais larga que a tela
-        if (!temScrollerAcima(tb) && tb.getBoundingClientRect().width > window.innerWidth + 2) {
+        if (!temScrollerAcima(tb) && tb.getBoundingClientRect().width > VW() + 2) {
           var pai = tb.parentElement;
           if (pai && !pai.classList.contains('mk-scroll')) {
             var wrap = document.createElement('div');
@@ -131,7 +144,7 @@
       // três jeitos de não caber: conteúdo maior que o próprio elemento, o
       // elemento passando da borda da tela, ou o elemento sendo mais largo
       // que o espaço que o pai tem pra dar.
-      var naoCabe = el.scrollWidth > el.clientWidth + 2 || r.right > window.innerWidth + 2;
+      var naoCabe = el.scrollWidth > el.clientWidth + 2 || r.right > VW() + 2;
       if (!naoCabe && el.parentElement) naoCabe = r.width > el.parentElement.clientWidth + 2;
       if (naoCabe) {
         // Barra de navegação (fila de ícones/abas): quebrar em várias linhas
@@ -153,7 +166,7 @@
     // Grid espremido: 4-5 colunas em 390px deixam ~40px por coluna e cada
     // palavra do rótulo ("Disponíveis", "pendentes") quebra no meio. Com
     // coluna abaixo de 90px, passa a 2 colunas.
-    if (window.innerWidth <= 600) {
+    if (VW() <= 600) {
       var todos = document.querySelectorAll('*');
       for (var t = 0; t < todos.length; t++) {
         var g = todos[t];
@@ -176,9 +189,9 @@
     for (var g = 0; g < grids.length; g++) {
       var el2 = grids[g];
       if (el2.dataset.mkGrid) continue;
-      if (el2.scrollWidth > el2.clientWidth + 2 || el2.getBoundingClientRect().right > window.innerWidth + 2) {
+      if (el2.scrollWidth > el2.clientWidth + 2 || el2.getBoundingClientRect().right > VW() + 2) {
         el2.style.setProperty('grid-template-columns',
-          window.innerWidth <= 600 ? '1fr' : 'repeat(auto-fit, minmax(170px, 1fr))', 'important');
+          VW() <= 600 ? '1fr' : 'repeat(auto-fit, minmax(170px, 1fr))', 'important');
         el2.dataset.mkGrid = '1';
       }
     }
@@ -275,7 +288,7 @@
   /* Fila de cartões de indicador (KPI) espremida: 4 cartões numa linha de
      390px dão ~60px cada e "atrasadas" quebra no meio. Passa a 2 por linha. */
   function alargarCartoes() {
-    if (window.innerWidth > 600) return;
+    if (VW() > 600) return;
     var els = document.querySelectorAll('div, ul, section');
     for (var i = 0; i < els.length; i++) {
       var el = els[i];
@@ -314,7 +327,7 @@
      dentro de um label que já estourava. */
   function conterEstouros() {
     if (!MOBILE()) return;
-    var vw = window.innerWidth;
+    var vw = VW();
     var els = document.querySelectorAll('body *');
     for (var i = 0; i < els.length; i++) {
       var el = els[i];
@@ -358,7 +371,7 @@
     // ContabilidadePro: 260px de menu em 390px de tela deixavam ~130px pro
     // conteúdo e o texto saía uma letra por linha.
     var flutua = cs0.position === 'fixed' || cs0.position === 'absolute';
-    var comeATela = largura >= window.innerWidth * 0.28;
+    var comeATela = largura >= VW() * 0.28;
     if (!flutua && !comeATela) return;
     if (!flutua) sb.dataset.mkFixar = '1';
 
