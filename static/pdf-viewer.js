@@ -31,6 +31,14 @@
                       window.matchMedia('(display-mode: minimal-ui)').matches)) ||
                    window.navigator.standalone === true;
 
+  /* v2 (13/10/2026): também no celular/tablet pelo navegador. No Safari o PDF
+     tomava a tela igual (fatura Copel do SolarPro) e o Lucas quer sempre a
+     mesma camada do recibo do AluguelPro: Voltar, compartilhar, zoom. No
+     computador (mouse) segue abrindo em aba nova. */
+  var TOQUE = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches &&
+                 window.matchMedia('(max-width: 1366px)').matches);
+  var ATIVO = STANDALONE || TOQUE;
+
   var COR = (document.querySelector('meta[name="theme-color"]') || {}).content || '#0f172a';
   var abrirNativo = window.open.bind(window);
 
@@ -69,14 +77,15 @@
      o window.open de socorro sairia fora do toque do usuário e o iOS bloquearia
      — a janela simplesmente não abriria. Na dúvida, deixa passar direto. */
   var NAO = /(imprimir|print|etiqueta|cupom|xml|xlsx|excel|csv|zip|txt|exportar|caixa|comanda)/;
-  var SIM = /(recibo|demonstrativo|presta[cç][aã]o|comprovante|boleto|danfe|carn[eê]|fatura|espelho|apresenta[cç]|anexo|arquivo)/;
+  var SIM = /(recibo|demonstrativo|presta[cç][aã]o|comprovante|boleto|danfe|carn[eê]|fatura|espelho|apresenta[cç]|anexo|arquivo|contrato|procura[cç]|holerite|laudo|vistoria|download)/;
 
   function pareceDocumento(url) {
     try {
       var u = new URL(String(url), location.href);
       var p = u.pathname.toLowerCase(), q = (u.search || '').toLowerCase();
       if (NAO.test(p) || NAO.test(q)) return false;     // tela de impressão, planilha, texto
-      return /\.pdf$/.test(p) || /(^|\/)pdf(\/|$)/.test(p) || /pdf/.test(q) || SIM.test(p);
+      return /\.pdf$/.test(p) || /(^|[\/_.-])pdf([\/_.-]|$)/.test(p) || /pdf/.test(q) || SIM.test(p) ||
+             /^\/api\/.*\/documento(\/|$)/.test(p);   // RG/CNH/selfie do signatário
     } catch (e) { return false; }
   }
 
@@ -341,7 +350,7 @@
   // Compartilhar / baixar / zoom — só aparecem quando o arquivo já chegou.
   function montarAcoes(estado) {
     var arq = null;
-    try { arq = new File([estado.blob], estado.nome, { type: 'application/pdf' }); } catch (e) {}
+    try { arq = new File([estado.blob], estado.nome, { type: estado.blob.type || 'application/pdf' }); } catch (e) {}
     var podeCompartilhar = !!(arq && navigator.canShare && navigator.canShare({ files: [arq] }));
 
     var menos = botao('&#8722;', 'Diminuir');
@@ -375,9 +384,37 @@
   }
 
   // ── ligação com o app ─────────────────────────────────────────────────────
-  window.LuqPDF = { abrir: abrir, fechar: fechar, standalone: STANDALONE, nativo: abrirNativo };
+  window.LuqPDF = { abrir: abrir, fechar: fechar, standalone: STANDALONE, ativo: ATIVO,
+                    nativo: abrirNativo, parece: pareceDocumento };
 
-  if (STANDALONE) {
+  if (ATIVO) {
+    // Link comum (<a href> com ou sem target=_blank, inclusive download) de
+    // documento do próprio sistema: abre na camada em vez de trocar a tela.
+    document.addEventListener('click', function (ev) {
+      try {
+        if (ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+        var a = ev.target && ev.target.closest && ev.target.closest('a[href]');
+        if (!a || a.hasAttribute('data-sem-visualizador')) return;
+        var alvo = (a.getAttribute('target') || '').toLowerCase();
+        if (alvo && alvo !== '_blank' && alvo !== '_self' && alvo !== '_top') return;
+        var bruto = a.getAttribute('href') || '';
+        if (!bruto || bruto.charAt(0) === '#' || /^javascript:/i.test(bruto)) return;
+        var href = a.href;
+        if (!mesmaOrigem(href) || !pareceDocumento(href)) return;
+        // Link de menu ("/faturas", "/contratos") NÃO é documento: além da cara
+        // de documento, exige sinal forte — .pdf/"pdf" no endereço, atributo
+        // download, ou rota de API/aba nova apontando pra um registro (com id).
+        var u = new URL(href), cam = u.pathname.toLowerCase();
+        var forte = a.hasAttribute('download') || /\.pdf$/.test(cam) ||
+                    /(^|[\/_.-])pdf([\/_.-]|$)/.test(cam) || /pdf/.test(u.search.toLowerCase());
+        var registro = /\d/.test(cam) && (alvo === '_blank' || /^\/api\//.test(cam));
+        if (!forte && !registro) return;
+        ev.preventDefault();
+        abrir(href);
+      } catch (e) {}
+    }, true);
+
+
     window.open = function (url, alvo, feats) {
       try {
         if (url && mesmaOrigem(url) && pareceDocumento(url) && (!alvo || alvo === '_blank')) {
