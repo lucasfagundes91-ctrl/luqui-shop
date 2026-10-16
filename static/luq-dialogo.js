@@ -28,6 +28,9 @@
     'display:flex;align-items:center;justify-content:center;padding:16px;' +
     'opacity:0;transition:opacity .15s ease;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}' +
     '.luqd-fundo.luqd-on{opacity:1}' +
+    '.luqd-host{position:fixed;inset:0;width:100%;height:100%;max-width:none;max-height:none;' +
+    'margin:0;padding:0;border:0;background:transparent;overflow:visible}' +
+    '.luqd-host::backdrop{background:transparent}' +
     '.luqd-caixa{background:#fff;color:#0f172a;width:100%;max-width:420px;border-radius:16px;' +
     'box-shadow:0 20px 50px rgba(0,0,0,.3);overflow:hidden;transform:translateY(8px) scale(.98);' +
     'transition:transform .15s ease;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}' +
@@ -166,7 +169,11 @@
         fechado = true;
         document.removeEventListener('keydown', tecla, true);
         fundo.classList.remove('luqd-on');
-        setTimeout(function () { if (fundo.parentNode) fundo.parentNode.removeChild(fundo); }, 160);
+        setTimeout(function () {
+          var alvo = host || fundo;
+          if (host && host.open) { try { host.close(); } catch (e) {} }
+          if (alvo.parentNode) alvo.parentNode.removeChild(alvo);
+        }, 160);
         try { if (foco && foco.focus) foco.focus(); } catch (e) {}
         if (cfg.aoFechar) cfg.aoFechar();
         resolve(valor);
@@ -186,7 +193,23 @@
       });
       document.addEventListener('keydown', tecla, true);
 
-      (document.body || document.documentElement).appendChild(fundo);
+      // Com um <dialog> modal aberto (ex.: editar tarefa no Meu Dia), ele fica
+      // na camada do topo e o resto da página vira inerte: o z-index não
+      // adianta, a confirmação aparecia ATRÁS e o Salvar parecia não fazer
+      // nada. Aí a confirmação também abre como <dialog> modal, por cima.
+      var host = null;
+      if (document.querySelector('dialog[open]') && window.HTMLDialogElement) {
+        host = document.createElement('dialog');
+        host.className = 'luqd-host';
+        host.addEventListener('cancel', function (e) {
+          e.preventDefault(); fechar(cfg.confirmar ? false : undefined);
+        });
+        host.appendChild(fundo);
+        (document.body || document.documentElement).appendChild(host);
+        try { host.showModal(); } catch (e) { host.setAttribute('open', ''); }
+      } else {
+        (document.body || document.documentElement).appendChild(fundo);
+      }
       requestAnimationFrame(function () {
         fundo.classList.add('luqd-on');
         // Perigo: o foco fica no Cancelar, pra Enter distraído não apagar nada.
