@@ -8046,16 +8046,24 @@ def checkout_finalizar():
                     if not resp.get('ok') and resp.get('problemas'):
                         falt = []
                         for pid, info in (resp['problemas'] or {}).items():
-                            falt.append(f"{info.get('descricao','')} "
-                                        f"(falta: {', '.join(info.get('faltando') or [])})")
-                        log.warning(f"checkout bloqueado por fiscal: {falt}")
-                        return jsonify({
-                            'erro': ('Não conseguimos emitir nota fiscal pra '
-                                     'esses produtos no momento. Por favor, '
-                                     'fale com a loja pelo WhatsApp pra '
-                                     'finalizar a compra: '
-                                     + '; '.join(falt[:3]))
-                        }), 400
+                            # CFOP vazio NAO impede a nota: a emissao do PDV usa
+                            # 5102 (e troca pra 6102 fora do estado). Barrar por
+                            # isso perdia venda — 512 produtos da Luqui sem CFOP
+                            # (20/10: Hot Wheels GBF81, cliente travou no PIX).
+                            faltando = [f for f in (info.get('faltando') or [])
+                                        if f != 'CFOP']
+                            if faltando:
+                                falt.append(f"{info.get('descricao','')} "
+                                            f"(falta: {', '.join(faltando)})")
+                        if falt:
+                            log.warning(f"checkout bloqueado por fiscal: {falt}")
+                            return jsonify({
+                                'erro': ('Não conseguimos emitir nota fiscal pra '
+                                         'esses produtos no momento. Por favor, '
+                                         'fale com a loja pelo WhatsApp pra '
+                                         'finalizar a compra: '
+                                         + '; '.join(falt[:3]))
+                            }), 400
         except Exception as e:
             log.warning(f"falha ao validar fiscal no PDV (segue): {e}")
     # Calcula totais
