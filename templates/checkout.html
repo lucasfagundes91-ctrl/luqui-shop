@@ -386,6 +386,22 @@ let cupom = null; // {codigo, desconto}
 async function aplicarCupom(){
   const cod = document.getElementById('cupom-codigo').value.trim().toUpperCase();
   if(!cod) return;
+  // Cliente digitando CEP/CPF no campo do cupom (20/10: "85802-030" virou
+  // "Cupom inválido" e a cliente achou que o site estava com problema).
+  const info0 = document.getElementById('cupom-info');
+  const dig = cod.replace(/\D/g,'');
+  if(/^\d{5}-?\d{3}$/.test(cod)){
+    cupom=null; recalcular();
+    const fc = document.getElementById('cep');
+    if(fc && !fc.value.replace(/\D/g,'')){ fc.value = cod; buscarCep(cod); }
+    info0.innerHTML='<span style="color:var(--vermelho)">Isso parece um CEP — o CEP vai no endereço de entrega, aqui é só código de desconto.</span>';
+    return;
+  }
+  if(dig.length===11 && dig===cod.replace(/[.\-\s]/g,'')){
+    cupom=null; recalcular();
+    info0.innerHTML='<span style="color:var(--vermelho)">Isso parece um CPF. O cupom que chega pelo WhatsApp vale na loja física — é só informar o CPF no caixa. Aqui no site vale código de desconto.</span>';
+    return;
+  }
   try {
     const r = await fetch('/api/checkout/cupom?codigo='+encodeURIComponent(cod)+'&subtotal='+SUBTOTAL);
     const d = await r.json();

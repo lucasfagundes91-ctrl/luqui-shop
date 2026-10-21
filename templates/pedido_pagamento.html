@@ -95,6 +95,26 @@ if(typeof gtag !== 'undefined'){
             Abrir página do boleto →
           </a>
         {% endif %}
+      {% elif p.forma_pagto == 'cartao' and cartao_bloqueado %}
+        <h3 style="margin-bottom:6px">📱 Pague com PIX</h3>
+        <p style="font-size:14px;color:var(--mut);margin-bottom:16px">
+          Para este pedido o pagamento é só no PIX — e ainda sai com desconto.
+          Toque no botão pra gerar o código.
+        </p>
+        <button type="button" id="bt-virar-pix" class="btn btn-block"
+                style="padding:14px;font-weight:800;background:#16A34A;color:#fff;border:0;border-radius:10px;cursor:pointer"
+                onclick="virarPix(this)">📱 Gerar PIX (com desconto)</button>
+        <script>
+        async function virarPix(bp){
+          bp.disabled = true; bp.textContent = 'Gerando PIX…';
+          try {
+            const rp = await fetch('/api/pedido/{{ p.id }}/trocar-pra-pix' + location.search, {method:'POST'});
+            const dp = await rp.json();
+            if(dp.erro){ bp.disabled=false; bp.textContent='📱 Gerar PIX (com desconto)'; alert(dp.erro); return; }
+            location.href = dp.url || location.pathname + location.search;
+          } catch(e){ bp.disabled=false; bp.textContent='📱 Gerar PIX (com desconto)'; }
+        }
+        </script>
       {% elif p.forma_pagto == 'cartao' %}
         <h3 style="margin-bottom:6px">💳 Pague com Cartão</h3>
         <p style="font-size:13px;color:var(--mut);margin-bottom:18px">

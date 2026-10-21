@@ -8749,6 +8749,9 @@ def pagarme_tds_token():
 
     A chave secreta NUNCA vai pro browser — por isso este proxy existe.
     """
+    if ip_testando_cartao(_rl_ip()):
+        log.warning("tds-token barrado: teste de cartão ip=%s", _rl_ip())
+        return jsonify({'erro': 'cartão indisponível'}), 403
     if not pagarme_configurado():
         return jsonify({'erro': 'pagarme não configurado'}), 503
     if not rate_limit_ok('tds_token', _rl_ip(), 30, 900):
@@ -9003,6 +9006,28 @@ def _pagar_cartao_pagarme(pid, p, cartao, tds):
     return jsonify({'ok': True, 'status': 'pago'})
 
 
+TESTE_CARTAO_CPFS = 3   # identidades distintas no mesmo IP em 24h
+
+
+def ip_testando_cartao(ip):
+    """True se o IP já fez pedido com TESTE_CARTAO_CPFS ou mais CPFs diferentes
+    nas últimas 24h — a assinatura do robô que testa cartão roubado (18-19/10:
+    88 pedidos de R$ 2,69, nomes inventados, dezenas de CPFs por IP). O
+    antifraude já pontuava, mas o robô seguia até a autenticação do banco e
+    acumulava negativa na Pagar.me — o que derruba conta de lojista. Família
+    no mesmo Wi-Fi tem 1 ou 2 CPFs, não 3."""
+    if not ip:
+        return False
+    try:
+        r = db_execute("SELECT COUNT(DISTINCT regexp_replace(cpf,'[^0-9]','','g')) AS n "
+                       "FROM pedidos WHERE ip_cliente=%s AND criado_em > NOW() - interval '24 hours' "
+                       "AND risco_liberado_em IS NULL", [ip], fetch='one') or {}
+        return int(r.get('n') or 0) >= TESTE_CARTAO_CPFS
+    except Exception as e:
+        log.error("ip_testando_cartao %s: %s", ip, e)
+        return False
+
+
 @app.route('/api/pedido/<int:pid>/pagar-cartao', methods=['POST'])
 def pedido_pagar_cartao(pid):
     """Checkout transparente — cliente preenche cartão na própria página da
@@ -9042,6 +9067,11 @@ def pedido_pagar_cartao(pid):
         return jsonify({'erro': 'Para a sua região aceitamos PIX e boleto. '
                                 'Fale com a loja que a gente te ajuda a '
                                 'finalizar.',
+                        'whatsapp': cfg('whatsapp_loja', WHATSAPP_LOJA)}), 403
+    if ip_testando_cartao(p.get('ip_cliente')) or ip_testando_cartao(_rl_ip()):
+        log.warning("cartao-barrado pedido=%s motivo=teste_cartao_ip ip=%s", pid, _rl_ip())
+        return jsonify({'erro': 'Para este pedido o pagamento é só no PIX. '
+                                'Toque no botão abaixo pra gerar o código.',
                         'whatsapp': cfg('whatsapp_loja', WHATSAPP_LOJA)}), 403
     tentativas = int(p.get('tentativas_cartao') or 0)
     if tentativas >= MAX_TENTATIVAS_CARTAO:
@@ -9317,6 +9347,10 @@ def pedido_pagamento(pid):
                            usa_pagarme=usa_pagarme,
                            tds_js=tds_js, tds_dados=tds_dados,
                            tds_ativo=(cfg('tds_ativo', '1') == '1'),
+                           cartao_bloqueado=(p.get('forma_pagto') == 'cartao'
+                                             and p.get('status') == 'aguardando_pagto'
+                                             and (ip_testando_cartao(p.get('ip_cliente'))
+                                                  or ip_testando_cartao(_rl_ip()))),
                            carrinho=carrinho_ler())
 
 
