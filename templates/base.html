@@ -995,7 +995,10 @@ async function assinarNewsletter(form){
 </div>
 <script>
 (function(){
-  if(!localStorage.getItem('luqui_cookies_ok')){
+  // Na finalização e no pagamento o aviso não aparece: no celular ele cobria
+  // o QR Code/botão de pagar. Ele volta em qualquer outra página.
+  if(!localStorage.getItem('luqui_cookies_ok')
+     && !/^\/(checkout|pedido\/)/.test(location.pathname)){
     document.getElementById('cookie-banner').style.display='block';
   }
 })();
