@@ -317,7 +317,8 @@
         <div style="margin-bottom:10px">
           <label style="font-size:11px;color:var(--mut);font-weight:700;letter-spacing:.5px">CUPOM DE DESCONTO</label>
           <div style="display:flex;gap:6px;margin-top:4px">
-            <input id="cupom-codigo" placeholder="Tem um código?" style="flex:1;padding:8px;border:1px solid var(--linha);border-radius:6px;font-size:13px;text-transform:uppercase">
+            <input id="cupom-codigo" placeholder="Tem um código?" enterkeyhint="done"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();aplicarCupom();}" style="flex:1;padding:8px;border:1px solid var(--linha);border-radius:6px;font-size:13px;text-transform:uppercase">
             <button type="button" onclick="aplicarCupom()" style="background:var(--azul);color:#fff;border:0;padding:0 14px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">Aplicar</button>
           </div>
           <div id="cupom-info" style="font-size:11px;margin-top:4px"></div>
