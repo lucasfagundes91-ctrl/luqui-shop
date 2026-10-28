@@ -15,7 +15,7 @@
     <div class="prod-card">
       <a href="{{ url_produto(p) }}">
         <div class="foto">
-          {% if p.foto_url %}<img src="{{ p.foto_url }}">{% else %}<span class="ph">📦</span>{% endif %}
+          {% if p.foto_url %}<img src="{{ p.foto_url|mini }}" loading="lazy">{% else %}<span class="ph">📦</span>{% endif %}
         </div>
         <div class="desc">{{ p.descricao }}</div>
       </a>

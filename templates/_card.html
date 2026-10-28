@@ -9,7 +9,7 @@
   {% elif p.eh_novidade or p.novidade %}<span class="selo">NOVIDADE!</span>{% endif %}
   <a href="{{ url_produto(p) }}">
     <div class="foto">
-      {% if p.foto_url or p.foto %}<img src="{{ p.foto_url or p.foto }}" alt="{{ p.descricao }}" loading="lazy">
+      {% if p.foto_url or p.foto %}<img src="{{ (p.foto_url or p.foto)|mini }}" alt="{{ p.descricao }}" loading="lazy" decoding="async">
       {% else %}<span class="ph">📦</span>{% endif %}
     </div>
     <div class="desc">{{ p.descricao }}</div>

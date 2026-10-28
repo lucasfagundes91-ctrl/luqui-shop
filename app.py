@@ -1493,6 +1493,16 @@ app.jinja_env.globals['cfg'] = cfg
 app.jinja_env.globals['whatsapp_loja'] = lambda: cfg('whatsapp_loja', WHATSAPP_LOJA)
 
 
+@app.template_filter('mini')
+def _filtro_mini(url, w=400):
+    """Miniatura da foto do PDV Pro (/produto-foto/<arq>?w=400). A original tem
+    até 1280 px; a busca de 'barbie' com 54 produtos baixava 4,6 MB e no 4G os
+    cartões ficavam cinza. Outras URLs (foto externa) passam como estão."""
+    if not url or '/produto-foto/' not in url or '?' in url:
+        return url
+    return f"{url}?w={w}"
+
+
 @app.template_filter('titulo')
 def _filtro_titulo(s):
     """Title case PT-BR: 'CARRO MOTO NAVAL AVIAO' -> 'Carro Moto Naval Aviao'.

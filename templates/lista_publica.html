@@ -33,7 +33,7 @@
             <span class="selo" style="background:#475569;left:10px">😔 INDISPONÍVEL</span>
           {% endif %}
           <div class="foto"{% if sem_estoque %} style="filter:grayscale(.5)"{% endif %}>
-            {% if it.foto_url %}<img src="{{ it.foto_url }}" alt="">
+            {% if it.foto_url %}<img src="{{ it.foto_url|mini }}" alt="" loading="lazy">
             {% else %}<span class="ph">📦</span>{% endif %}
           </div>
           <div class="desc">{{ it.descricao }}</div>

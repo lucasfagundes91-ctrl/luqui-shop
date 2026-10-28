@@ -26,7 +26,7 @@
       {% for it in itens %}
       <div style="display:grid;grid-template-columns:80px 1fr auto auto;gap:16px;padding:16px;border-bottom:1px solid var(--linha);align-items:center">
         <div style="width:80px;height:80px;background:#F1F5F9;border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden">
-          {% if it.foto_url %}<img src="{{ it.foto_url }}" style="max-height:100%">
+          {% if it.foto_url %}<img src="{{ it.foto_url|mini(200) }}" style="max-height:100%">
           {% else %}<span style="font-size:36px">📦</span>{% endif %}
         </div>
         <div>
