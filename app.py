@@ -5762,14 +5762,29 @@ def lista_remover_item(lid, item_id):
 # Nome da loja, site e endereços vêm da marca. O resto do roteiro é de loja
 # de brinquedos — lojas de outro segmento desligam o assistente
 # (MARCA_ASSISTENTE_ATIVO=0) até ter um roteiro próprio.
+# Loja de brinquedos (Luqui) qualifica por idade/sexo da criança; loja de
+# utilidades pergunta pra que é e só pede idade quando for brinquedo.
+if MARCA['brinquedos']:
+    _PROMPT_TRABALHO = """SEU TRABALHO: ajudar a pessoa (geralmente uma mae/tia/avo) a encontrar
+o brinquedo perfeito. Sua META eh GARANTIR CONTATO + mostrar produtos
+o mais rapido possivel."""
+    _PROMPT_QUALIFICACAO = """3. Idade da crianca (pra refinar)
+4. Menino ou menina
+"""
+else:
+    _PROMPT_TRABALHO = f"""SEU TRABALHO: ajudar a pessoa a encontrar o produto certo — utilidades
+pra casa, cozinha, organizacao, decoracao, presentes e tambem brinquedos.
+Sua META eh GARANTIR CONTATO + mostrar produtos o mais rapido possivel."""
+    _PROMPT_QUALIFICACAO = """3. Pra que vai usar / qual ambiente (cozinha, banheiro, festa, presente...)
+4. Se for brinquedo: idade da crianca
+"""
+
 LUQUIZINHA_SITE_PROMPT = f"""Voce eh a {MARCA['assistente_nome']} 🧸, atendente IA da {MARCA['nome']}
 no site {SITE_HOST}. Sua personalidade eh
 calorosa, doce, brincalhona — voce trabalha numa {MARCA['tipo_loja']} da
 familia em {MARCA['endereco']['cidade_uf']}.
 
-SEU TRABALHO: ajudar a pessoa (geralmente uma mae/tia/avo) a encontrar
-o brinquedo perfeito. Sua META eh GARANTIR CONTATO + mostrar produtos
-o mais rapido possivel.
+{_PROMPT_TRABALHO}
 
 TOM:
 - Frases CURTAS (1-3 linhas). 1-2 emojis por mensagem.
@@ -5801,9 +5816,7 @@ continuar o atendimento por WhatsApp. Sem isso, o lead se perde.
 ORDEM DE QUALIFICACAO (NAO trave a conversa nisso):
 1. WhatsApp (REGRA #1 — sempre tenta primeiro)
 2. Buscar o que ela pediu (se ja veio termo na 1a msg, busca em paralelo)
-3. Idade da crianca (pra refinar)
-4. Menino ou menina
-- Nome NAO eh prioridade. So peca se a conversa engatar.
+{_PROMPT_QUALIFICACAO}- Nome NAO eh prioridade. So peca se a conversa engatar.
 
 REGRA DE OURO — BUSCAR PRODUTOS CEDO:
 - Tem TERMO? Busca AGORA, mesmo sem idade.
@@ -5856,7 +5869,7 @@ LUQUIZINHA_TOOLS = [
     {
         "name": "buscar_produtos",
         "description": (
-            "Busca brinquedos no catalogo. Devolve {produtos:[], "
+            "Busca " + MARCA['itens'] + " no catalogo. Devolve {produtos:[], "
             "termo_usado, tipo}. tipo='match' = achou o que a cliente "
             "pediu. tipo='sugestao' = mostra opcoes da faixa etaria (sem "
             "termo). tipo='sem_match' = NAO TEM o produto pedido — neste "
@@ -5870,7 +5883,9 @@ LUQUIZINHA_TOOLS = [
             "properties": {
                 "idade_anos": {"type": "integer", "description": "Idade da crianca em anos (ex: 5)."},
                 "sexo": {"type": "string", "enum": ["menino", "menina"], "description": "Sexo da crianca, se souber."},
-                "termo": {"type": "string", "description": "Tipo de brinquedo (ex: 'boneca', 'carrinho', 'jogo de tabuleiro'). Opcional."},
+                "termo": {"type": "string", "description": (f"Tipo de {MARCA['item']} (ex: 'boneca', 'carrinho', 'jogo de tabuleiro'). Opcional."
+                                                               if MARCA['brinquedos'] else
+                                                               "Tipo de produto (ex: 'pote hermetico', 'cesto', 'boneca'). Opcional.")},
                 "preco_max": {"type": "number", "description": "Limite de preco em reais (opcional)."},
             },
         },

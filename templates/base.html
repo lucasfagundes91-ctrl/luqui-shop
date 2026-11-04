@@ -555,13 +555,13 @@ document.addEventListener('keydown', e=>{
   <div class="luqz-w-card">
     <button class="luqz-w-x" aria-label="Fechar">×</button>
     <div class="luqz-w-avatar">
-      <span>🧸</span>
+      <span>{{ marca.emoji }}</span>
     </div>
     <h2>Oi! Eu sou a {{ marca.assistente_nome }} 💛</h2>
-    <p>Te ajudo a achar o brinquedo <b>perfeito</b> pra criança da sua vida! Conta o que vc procura que eu separo as opções 🎁</p>
+    {% if marca.brinquedos %}<p>Te ajudo a achar o brinquedo <b>perfeito</b> pra criança da sua vida! Conta o que vc procura que eu separo as opções 🎁</p>{% else %}<p>Te ajudo a achar o produto <b>certo</b> pra sua casa ou pra presentear! Conta o que vc procura que eu separo as opções 🎁</p>{% endif %}
     <div class="luqz-w-btns">
       <button class="luqz-w-no">Agora não</button>
-      <button class="luqz-w-yes">Sim, me ajuda! 🧸</button>
+      <button class="luqz-w-yes">Sim, me ajuda! {{ marca.emoji }}</button>
     </div>
   </div>
 </div>
@@ -569,11 +569,11 @@ document.addEventListener('keydown', e=>{
 <div id="luqz-widget">
   <div id="luqz-balao" style="display:none">
     <button id="luqz-balao-x">×</button>
-    <p>Oi! 💛 Sou a {{ marca.assistente_nome }} 🧸<br>Quer ajuda pra escolher um brinquedo?</p>
+    <p>Oi! 💛 Sou a {{ marca.assistente_nome }} {{ marca.emoji }}<br>Quer ajuda pra escolher um {{ marca.item }}?</p>
     <button id="luqz-balao-cta">Conversar agora</button>
   </div>
   <button id="luqz-avatar" aria-label="Abrir {{ marca.assistente_nome }}">
-    <span class="luqz-emoji">🧸</span>
+    <span class="luqz-emoji">{{ marca.emoji }}</span>
     <span id="luqz-badge" style="display:none">1</span>
   </button>
 </div>
@@ -581,7 +581,7 @@ document.addEventListener('keydown', e=>{
 <div id="luqz-chat" aria-hidden="true">
   <div class="luqz-h">
     <div class="luqz-h-info">
-      <div class="luqz-h-avatar">🧸</div>
+      <div class="luqz-h-avatar">{{ marca.emoji }}</div>
       <div>
         <b>{{ marca.assistente_nome }}</b>
         <div class="luqz-status">Atendente IA · online</div>
@@ -834,7 +834,7 @@ document.addEventListener('keydown', e=>{
       const teveHist = await carregarHistorico();
       if(!teveHist){
         // 1a mensagem sem chamar API — texto fixo
-        appendBot("Oi! 💛 Sou a {{ marca.assistente_nome }} 🧸 Antes da gente começar, me passa teu WhatsApp com DDD? Assim, se a gente perder a conversa aqui, eu te chamo direto por lá pra terminar teu atendimento ✨");
+        appendBot("Oi! 💛 Sou a {{ marca.assistente_nome }} {{ marca.emoji }} Antes da gente começar, me passa teu WhatsApp com DDD? Assim, se a gente perder a conversa aqui, eu te chamo direto por lá pra terminar teu atendimento ✨");
       }
     }
     setTimeout(()=>input.focus(), 200);
