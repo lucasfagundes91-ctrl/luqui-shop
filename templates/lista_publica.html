@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block titulo %}Lista de aniversário de {{ lista.nome_crianca }} — Luqui Brinquedos{% endblock %}
+{% block titulo %}Lista de aniversário de {{ lista.nome_crianca }} — {{ marca.nome }}{% endblock %}
 {% block conteudo %}
 <div style="max-width:1100px;margin:30px auto;padding:0 16px">
   <div style="background:linear-gradient(135deg,#87CEFA,#4FB8FF);border-radius:18px;padding:36px 28px;color:#fff;text-align:center">
     <div style="font-size:48px">🎂</div>
-    <h1 style="color:#FFC700;font-family:'Comic Sans MS','Marker Felt',sans-serif;font-size:42px;text-shadow:2px 2px 0 #1652C7;margin-top:8px">
+    <h1 style="color:{{ marca.cor_destaque }};font-family:'Comic Sans MS','Marker Felt',sans-serif;font-size:42px;text-shadow:2px 2px 0 {{ marca.cor_primaria }};margin-top:8px">
       Lista do(a) {{ lista.nome_crianca }}
     </h1>
     <div style="font-size:18px;font-weight:800;margin-top:6px">
@@ -48,7 +48,7 @@
               Reservado por {{ it.comprado_por_nome or 'alguém' }}
             </button>
           {% elif sem_estoque %}
-            <button class="btn" onclick="avisarVoltaLista({{ it.produto_pdv_id }})" style="background:#FBBF24;color:#1652C7">
+            <button class="btn" onclick="avisarVoltaLista({{ it.produto_pdv_id }})" style="background:#FBBF24;color:{{ marca.cor_primaria }}">
               🔔 Me avise quando voltar
             </button>
           {% else %}

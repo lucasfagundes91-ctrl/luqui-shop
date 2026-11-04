@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block titulo %}Minhas listas de aniversário — Luqui Brinquedos{% endblock %}
+{% block titulo %}Minhas listas de aniversário — {{ marca.nome }}{% endblock %}
 {% block conteudo %}
 <div style="max-width:900px;margin:30px auto;padding:0 16px">
   <a href="/minha-conta" style="color:var(--mut);font-size:13px">← Voltar pra minha conta</a>
@@ -28,7 +28,7 @@
             <button onclick="copiarLink('{{ l.slug }}')" class="btn btn-ghost" style="flex:1;padding:9px 12px;font-size:13px">📋 Copiar link</button>
           </div>
           <div style="margin-top:8px;font-size:11px;color:var(--mut);word-break:break-all">
-            luquibrinquedos.com.br/lista/{{ l.slug }}
+            {{ SITE_URL.split('//')[-1].replace('www.', '') }}/lista/{{ l.slug }}
           </div>
         </div>
       {% endfor %}
@@ -94,7 +94,7 @@ async function salvarLista(){
   } catch(e){ toast('Erro: '+e.message,'err'); }
 }
 function copiarLink(slug){
-  const url = 'https://www.luquibrinquedos.com.br/lista/'+slug;
+  const url = '{{ SITE_URL }}/lista/'+slug;
   navigator.clipboard.writeText(url).then(()=>toast('Link copiado! 📋')).catch(()=>toast('Erro ao copiar','err'));
 }
 </script>

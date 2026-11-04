@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block titulo %}Página não encontrada — Luqui Brinquedos{% endblock %}
+{% block titulo %}Página não encontrada — {{ marca.nome }}{% endblock %}
 {% block conteudo %}
 <div style="max-width:600px;margin:40px auto;padding:60px 24px;text-align:center">
-  <div style="font-size:80px">🧸</div>
-  <h1 style="color:var(--azul);margin:14px 0;font-size:32px">Eita, esse brinquedo a gente não tem aqui!</h1>
+  <div style="font-size:80px">{{ marca.emoji }}</div>
+  <h1 style="color:var(--azul);margin:14px 0;font-size:32px">{% if marca.brinquedos %}Eita, esse brinquedo a gente não tem aqui!{% else %}Eita, essa página a gente não tem aqui!{% endif %}</h1>
   <p style="color:var(--mut);margin-bottom:30px">A página que você procurou não existe ou foi movida. Mas tem muita coisa legal te esperando 💛</p>
   <a href="/" class="btn btn-amarelo" style="padding:14px 32px">Voltar pra loja</a>
 </div>

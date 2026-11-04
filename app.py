@@ -51,6 +51,8 @@ from flask import (Flask, Response, abort, g, jsonify, redirect, render_template
                    request, send_from_directory, session, url_for)
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from marca import MARCA, cep_digitos, enderecos_curtos
+
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(levelname)s %(message)s')
 log = logging.getLogger('luquishop')
@@ -95,23 +97,24 @@ PDVPRO_URL = os.environ.get('PDVPRO_URL', 'https://pdvpro.luqsys.com.br')
 PDVPRO_API_KEY = os.environ.get('PDVPRO_API_KEY', '')
 ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'lucasfagundes91@hotmail.com')
 ADMIN_SENHA_PADRAO = os.environ.get('ADMIN_SENHA') or secrets.token_urlsafe(16)
-WHATSAPP_LOJA = os.environ.get('WHATSAPP_LOJA', '5545991119800')
+WHATSAPP_LOJA = os.environ.get('WHATSAPP_LOJA',
+                               cep_digitos(MARCA['telefone_e164']))
 ASAAS_API_KEY = os.environ.get('ASAAS_API_KEY', '')
 ASAAS_WEBHOOK_TOKEN = os.environ.get('ASAAS_WEBHOOK_TOKEN', '')
 ASAAS_BASE = 'https://api.asaas.com/v3'
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
 EMAIL_FROM = os.environ.get('EMAIL_FROM',
-                            'Luqui Brinquedos <contato@luquibrinquedos.com.br>')
+                            f"{MARCA['nome']} <{MARCA['email']}>")
 # O Resend só entrega de domínio verificado na conta. Enquanto o plano
 # comportar 1 domínio só (ocupado por luqsys.com.br), o EMAIL_FROM aponta pra
 # lá e o Reply-To traz a resposta do cliente pro endereço real da loja.
-EMAIL_REPLY_TO = os.environ.get('EMAIL_REPLY_TO',
-                                'contato@luquibrinquedos.com.br')
+EMAIL_REPLY_TO = os.environ.get('EMAIL_REPLY_TO', MARCA['email'])
 SITE_URL = os.environ.get('SITE_URL', 'https://www.luquibrinquedos.com.br')
 ZAPI_INSTANCE = os.environ.get('ZAPI_INSTANCE', '')
 ZAPI_TOKEN = os.environ.get('ZAPI_TOKEN', '')
 ZAPI_CLIENT_TOKEN = os.environ.get('ZAPI_CLIENT_TOKEN', '')
-ADMIN_WHATSAPP = os.environ.get('ADMIN_WHATSAPP', '5545991119800')
+ADMIN_WHATSAPP = os.environ.get('ADMIN_WHATSAPP',
+                                cep_digitos(MARCA['telefone_e164']))
 META_PIXEL_ID = os.environ.get('META_PIXEL_ID', '')
 GOOGLE_TAG_ID = os.environ.get('GOOGLE_TAG_ID', '')
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
@@ -126,10 +129,24 @@ def _ctx_flags():
     return {'clube_ativo': CLUBE_LUQUI_ATIVO,
             'cupom_aniversario_ativo': CUPOM_ANIVERSARIO_ATIVO,
             'cupom_primeira_compra_ativo': CUPOM_PRIMEIRA_COMPRA_ATIVO,
-            'SITE_URL': SITE_URL}
+            'SITE_URL': SITE_URL,
+            'marca': MARCA}
+
+
+# Também como global: macro importada sem contexto ({% from "_card.html"
+# import card %}) não enxerga o que vem do context_processor.
+app.jinja_env.globals['marca'] = MARCA
 
 
 SITE_HOST = SITE_URL.split('//', 1)[-1].strip('/')     # www.luquibrinquedos.com.br
+
+
+@app.template_filter('jstr')
+def _filtro_jstr(v):
+    """Valor como literal JSON pro JSON-LD (aspas, acento cru, sem '</')."""
+    from markupsafe import Markup
+    return Markup(json.dumps(v, ensure_ascii=False, separators=(',', ':'))
+                  .replace('</', '<\\/'))
 
 
 # ===================== Apps na tela de início (PWA) =====================
@@ -140,16 +157,16 @@ from pwa_apps import registrar_pwa
 
 registrar_pwa(
     app,
-    sistema='Luqui Brinquedos',
-    slug_sistema='luqui',
-    cor='#f5b20a',
-    cor_fundo='#f5b20a',
+    sistema=MARCA['nome'],
+    slug_sistema=MARCA['slug'],
+    cor=MARCA['cor_tema'],
+    cor_fundo=MARCA['cor_tema'],
     apps=[
-        {'slug': 'app', 'nome': 'Luqui Brinquedos', 'rotulo': 'Luqui', 'url': '/',
-         'icone': 'luqui-icon', 'cheio': False,
+        {'slug': 'app', 'nome': MARCA['nome'], 'rotulo': MARCA['nome_curto'], 'url': '/',
+         'icone': MARCA['icone'], 'cheio': False,
          'desc': 'A loja: catálogo, carrinho e acompanhamento do pedido.'},
-        {'slug': 'admin', 'nome': 'Luqui Gestão', 'rotulo': 'Luqui Gestão',
-         'url': '/admin', 'icone': 'luqui-admin-icon', 'cheio': False,
+        {'slug': 'admin', 'nome': MARCA['gestao_nome'], 'rotulo': MARCA['gestao_nome'],
+         'url': '/admin', 'icone': MARCA['icone_admin'], 'cheio': False,
          'desc': 'Pedidos, produtos, clientes e campanhas da loja.'},
     ],
 )
@@ -187,7 +204,7 @@ _CRAWLERS_BONS = ('googlebot', 'google-inspectiontool', 'adsbot-google',
                   'facebookcatalog')
 _DESAFIO_HTML = (
     '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">'
-    '<meta name="robots" content="noindex"><title>Luqui Brinquedos</title>'
+    '<meta name="robots" content="noindex"><title>' + MARCA['nome'] + '</title>'
     '<meta name="viewport" content="width=device-width,initial-scale=1"></head>'
     '<body style="font-family:sans-serif;text-align:center;padding:40px">'
     '<p>Carregando…</p><noscript><p>Ative o JavaScript para ver a loja.</p></noscript>'
@@ -278,8 +295,28 @@ def _bloqueia_clube_se_desligado():
     p = request.path or ''
     if p == '/clube' or p.startswith('/clube/') or p.startswith('/api/clube'):
         if p.startswith('/api/'):
-            return jsonify({'erro': 'Clube Luqui temporariamente indisponível'}), 404
+            return jsonify({'erro': f"{MARCA['clube_nome']} temporariamente indisponível"}), 404
         abort(404)
+    return None
+
+
+# Recursos que a marca pode desligar (MARCA_LISTA_ANIVERSARIO_ATIVA=0,
+# MARCA_ASSISTENTE_ATIVO=0): o template esconde o botão e a rota some, igual
+# ao clube acima.
+_ROTAS_LISTA = ('/lista-aniversario', '/minhas-listas', '/lista/', '/api/listas/',
+                '/api/lista/')
+
+
+@app.before_request
+def _bloqueia_recursos_desligados():
+    p = request.path or ''
+    if not MARCA['lista_aniversario_ativa'] and any(
+            p == r or p.startswith(r) for r in _ROTAS_LISTA):
+        if p.startswith('/api/'):
+            return jsonify({'erro': 'Lista de aniversário indisponível'}), 404
+        abort(404)
+    if not MARCA['assistente_ativo'] and p.startswith('/api/luquizinha/'):
+        return jsonify({'erro': 'Assistente indisponível'}), 404
     return None
 
 
@@ -941,7 +978,7 @@ def init_db():
                   '2 livros a cada mês',
                   'Marca página lúdico com personagens',
                   '10% de desconto na loja física',
-                  'Uma inscrição GRÁTIS no evento mensal da Luqui',
+                  f"Uma inscrição GRÁTIS no evento mensal da {MARCA['nome_curto']}",
                   'Material auxiliar instrutivo']),
                 ('smart-anual', 'Plano Smart Anual', 'anual', 70.99, 4,
                  ['1 brinquedo surpresa a cada mês',
@@ -984,28 +1021,31 @@ def init_db():
     # Banners default — insere os que ainda nao existem (checa por titulo).
     # Assim Lucas pode editar/desativar pelo /admin/banners sem perder no
     # proximo deploy, e novos banners do seed entram sem duplicar os antigos.
+    # Cores e cidade vêm da marca (os da Luqui já estão no banco).
+    _prim, _prim_c, _prim_e, _dest = (MARCA['cor_primaria'], MARCA['cor_primaria_clara'],
+                                      MARCA['cor_primaria_escura'], MARCA['cor_destaque'])
     try:
         seeds = [
             ('PAGUE NO PIX',
-             'Ganhe <b style="color:#FFC700">3% de desconto</b> em qualquer compra!',
+             f'Ganhe <b style="color:{_dest}">3% de desconto</b> em qualquer compra!',
              '/produtos', 'Ver produtos',
-             'linear-gradient(135deg,#1652C7,#3B82F6)', 1),
+             f'linear-gradient(135deg,{_prim},{_prim_c})', 1),
             ('PARCELE EM 12X',
-             '<b style="color:#FFC700">À vista no cartão</b> ou parcelado com juros',
+             f'<b style="color:{_dest}">À vista no cartão</b> ou parcelado com juros',
              '/produtos', 'Comprar agora',
-             'linear-gradient(135deg,#0E3D9E,#1652C7)', 2),
+             f'linear-gradient(135deg,{_prim_e},{_prim})', 2),
             ('RETIRE NA LOJA',
-             '📍 Cascavel/PR — <b style="color:#FFC700">frete grátis</b>. Agende o horário no checkout!',
+             f'📍 {MARCA["endereco"]["cidade_uf"]} — <b style="color:{_dest}">frete grátis</b>. Agende o horário no checkout!',
              '/retirar-na-loja', 'Como funciona',
-             'linear-gradient(135deg,#1652C7,#4FB8FF)', 3),
-            ('CLUBE LUQUI 🎁',
-             'Descontos exclusivos + <b style="color:#FFC700">5% acumulativo</b> + 1 ponto a cada R$ 1',
+             f'linear-gradient(135deg,{_prim},#4FB8FF)', 3),
+            (MARCA['clube_nome'].upper() + ' 🎁',
+             f'Descontos exclusivos + <b style="color:{_dest}">5% acumulativo</b> + 1 ponto a cada R$ 1',
              '/clube', 'Quero entrar',
-             'linear-gradient(135deg,#A16207,#FFC700)', 4),
+             f'linear-gradient(135deg,#A16207,{_dest})', 4),
             ('NOVIDADES ✨',
-             'Confere o que <b style="color:#FFC700">chegou</b> de mais legal!',
+             f'Confere o que <b style="color:{_dest}">chegou</b> de mais legal!',
              '/novidades', 'Ver novidades',
-             'linear-gradient(135deg,#1652C7,#3B82F6)', 5),
+             f'linear-gradient(135deg,{_prim},{_prim_c})', 5),
         ]
         inseridos = 0
         for tit, sub, link, cta, cor, ordem in seeds:
@@ -1028,8 +1068,8 @@ def init_db():
         defaults = {
             # Cidades com frete LOCAL FIXO (default só Cascavel, R$ 10).
             # Toledo saiu — usa cotação ME normal.
-            'frete_fixo_cidades': 'Cascavel',
-            'frete_fixo_uf': 'PR',
+            'frete_fixo_cidades': MARCA['endereco']['cidade'],
+            'frete_fixo_uf': MARCA['endereco']['uf'],
             'frete_fixo_cascavel': '10',
             # Deprecated (mantido por compat com configs antigas no banco)
             'frete_gratis_cidades': '',
@@ -1042,8 +1082,8 @@ def init_db():
             'juros_parcelamento_am': '2.49',  # % ao mes, acima do limite sem juros
             'whatsapp_loja': WHATSAPP_LOJA,
             # Melhor Envio — preencher em /admin/melhorenvio
-            'me_cep_origem': '85801080',  # Luqui Brinquedos Cascavel
-            'me_remetente_nome': 'Luqui Brinquedos',
+            'me_cep_origem': MARCA['cep_origem'],
+            'me_remetente_nome': MARCA['nome'],
             'me_remetente_cnpj': '',
             'me_remetente_cnae': '',
             'me_remetente_telefone': '',
@@ -1052,8 +1092,8 @@ def init_db():
             'me_remetente_numero': '',
             'me_remetente_complemento': '',
             'me_remetente_bairro': '',
-            'me_remetente_cidade': 'Cascavel',
-            'me_remetente_uf': 'PR',
+            'me_remetente_cidade': MARCA['endereco']['cidade'],
+            'me_remetente_uf': MARCA['endereco']['uf'],
             # Caixa "padrão" pra produto que não tem dimensão (cm) — usado na cotação
             'me_caixa_padrao_largura': '20',
             'me_caixa_padrao_altura': '15',
@@ -1061,8 +1101,8 @@ def init_db():
             'me_caixa_padrao_peso_kg': '0.5',
             # Retirada na loja
             'retirada_loja_ativa': '1',
-            'loja_endereco_completo': 'R. Eng. Rebouças, 2053 - Cascavel/PR',
-            'loja_horario_funcionamento': 'Seg a Sex: 9h às 18h · Sáb: 9h às 13h',
+            'loja_endereco_completo': enderecos_curtos(sep=' · ', prefixo='', traco=' - '),
+            'loja_horario_funcionamento': MARCA['horario_resumo'],
             'loja_tempo_separacao_min': '30',
         }
         for k, v in defaults.items():
@@ -1293,7 +1333,7 @@ def me_remetente_dict():
     # brinquedos. Fica em branco quando remetente e PF, que nao tem CNAE.
     cnae = ''.join(c for c in cfg('me_remetente_cnae', '') if c.isdigit())
     d = {
-        'name':         cfg('me_remetente_nome', 'Luqui Brinquedos'),
+        'name':         cfg('me_remetente_nome', MARCA['nome']),
         'phone':        cfg('me_remetente_telefone', ''),
         'email':        cfg('me_remetente_email', ''),
         'document':     cnpj if len(cnpj) == 11 else '',
@@ -1302,8 +1342,8 @@ def me_remetente_dict():
         'complement':   cfg('me_remetente_complemento', ''),
         'number':       cfg('me_remetente_numero', ''),
         'district':     cfg('me_remetente_bairro', ''),
-        'city':         cfg('me_remetente_cidade', 'Cascavel'),
-        'state_abbr':   cfg('me_remetente_uf', 'PR'),
+        'city':         cfg('me_remetente_cidade', MARCA['endereco']['cidade']),
+        'state_abbr':   cfg('me_remetente_uf', MARCA['endereco']['uf']),
         'country_id':   'BR',
         'postal_code':  ''.join(c for c in cfg('me_cep_origem', '')
                                 if c.isdigit()),
@@ -2451,17 +2491,17 @@ def integracao_pedido_mudar_status(pid):
                            f"preparado com muito carinho 💛"),
             'pronto_retirada': (
                 f"🏪 Oi {primeiro}! Seu *Pedido #{pid}* já está *pronto pra retirar* "
-                f"na Luqui Brinquedos! 💛\n\n"
-                f"📍 R. Eng. Rebouças, 2053 — Cascavel/PR\n"
-                f"🕐 Seg a Sex: 8h-18h · Sáb: 9h-13h\n\n"
-                f"Leva um documento com foto. Te esperamos! 🧸"),
+                f"na {MARCA['nome']}! 💛\n\n"
+                f"{enderecos_curtos()}\n"
+                f"🕐 {MARCA['horario_whatsapp']}\n\n"
+                f"Leva um documento com foto. Te esperamos! {MARCA['emoji']}"),
             'enviado': (f"🚚 Oi {primeiro}! Seu *Pedido #{pid}* "
                         f"acabou de sair pra entrega!"
                         + (f"\n\n*Rastreio:* {rastreio}" if rastreio else "")
-                        + f"\n\nAcompanhe: https://www.luquibrinquedos.com.br/pedido/{pid}/tracking?t={p.get('token','')}"),
+                        + f"\n\nAcompanhe: {SITE_URL}/pedido/{pid}/tracking?t={p.get('token','')}"),
             'entregue': (f"💛 *Pedido #{pid} entregue!* Esperamos que ame!\n\n"
                          f"Que tal nos avaliar? "
-                         f"https://www.luquibrinquedos.com.br/pedido/{pid}/tracking?t={p.get('token','')}"),
+                         f"{SITE_URL}/pedido/{pid}/tracking?t={p.get('token','')}"),
         }
         if p.get('telefone') and novo in msgs:
             enviar_whatsapp(p['telefone'], msgs[novo])
@@ -2490,10 +2530,10 @@ def integracao_pedido_marcar_pronto(pid):
         is_retira = (r.get('frete_servico') or '').lower().startswith('retirar')
         if is_retira:
             msg = (f"Oi {(r['nome'] or '').split()[0]}! 💛 Seu pedido #{pid} "
-                   f"ja esta pronto pra retirar na Luqui Brinquedos!\n\n"
-                   f"📍 R. Eng. Reboucas, 2053 - Cascavel/PR\n"
-                   f"🕐 Seg a Sex: 8h-18h · Sab: 9h-13h\n\n"
-                   f"Leva um documento com foto. Te esperamos! 🧸")
+                   f"ja esta pronto pra retirar na {MARCA['nome']}!\n\n"
+                   f"{enderecos_curtos(traco=' - ')}\n"
+                   f"🕐 {MARCA['horario_whatsapp']}\n\n"
+                   f"Leva um documento com foto. Te esperamos! {MARCA['emoji']}")
         else:
             msg = (f"Oi {(r['nome'] or '').split()[0]}! 💛 Seu pedido #{pid} "
                    f"esta separado e indo pro Correios. Em breve te mando o "
@@ -2989,23 +3029,77 @@ def carrinho_total(itens):
 
 
 # ─── Rotas públicas ───────────────────────────────────────────────────────────
+# Textos padrão das páginas institucionais. Nome, CNPJ, telefone, cidade e
+# endereços vêm da marca (marca.py) — com a config da Luqui sai o texto de
+# sempre. O admin pode sobrescrever qualquer página em /admin/paginas.
+_LOJA = MARCA['endereco']                       # loja principal
+_ITEM, _ITENS = MARCA['item'], MARCA['itens']
+
+
+def _retirada_entregas_html():
+    """Parágrafo "Retirada na loja física" da página de entregas."""
+    ends = MARCA['enderecos']
+    if len(ends) == 1:
+        e = ends[0]
+        txt = (f"Mora em {e['cidade']}? Pode retirar grátis em nossa loja na\n"
+               f"<b>{e['rua']} — {e['bairro']}</b>.")
+        if e['obs']:
+            txt += f" {e['obs']}!"
+    else:
+        txt = (f"Mora em {_LOJA['cidade']}? Pode retirar grátis em uma das nossas lojas:<br>\n"
+               + '<br>\n'.join(f"{e['nome']}: <b>{e['rua']} — {e['bairro']}</b>"
+                               + (f" ({e['obs']})" if e['obs'] else '') for e in ends)
+               + '.')
+    return txt + f"\nHorário: {MARCA['horario_texto']}."
+
+
+def _enderecos_retirar_html():
+    """Bloco "Endereço" da página Retire na loja (uma <p> por loja)."""
+    ends = MARCA['enderecos']
+    if len(ends) == 1:
+        e = ends[0]
+        return f"<p>{e['linha']}" + (f"<br>{e['obs']}" if e['obs'] else '') + '</p>'
+    return ''.join(f"<p><b>{e['nome']}</b><br>{e['linha']}"
+                   + (f"<br>{e['obs']}" if e['obs'] else '') + '</p>' for e in ends)
+
+
+# Termos: a cláusula do Clube Caixa Misteriosa só existe em loja de brinquedos
+# (ou com o clube ligado); sem ela, as cláusulas seguintes sobem um número.
+if MARCA['brinquedos'] or CLUBE_LUQUI_ATIVO:
+    _TERMOS_CLUBE = f"""<h3>4. Clube Caixa Misteriosa</h3>
+<ul>
+  <li>Cobrança mensal automática via Asaas</li>
+  <li>Sem fidelidade — cancele quando quiser na sua área "Minha conta" ou pelo WhatsApp</li>
+  <li>A primeira caixa é despachada em até 7 dias após confirmação do 1º pagamento</li>
+  <li>{_ITENS.capitalize()} são <b>selecionados pela equipe {MARCA['nome_curto']}</b> conforme o plano escolhido — não há possibilidade de escolher itens específicos</li>
+  <li>Em caso de falha no pagamento, a entrega do mês fica suspensa até regularização</li>
+</ul>
+
+"""
+    _N_TERMOS = 5
+else:
+    _TERMOS_CLUBE, _N_TERMOS = '', 4
+_USO_INADEQUADO = (f'Uso inadequado do {_ITEM} (siga sempre a faixa etária recomendada)'
+                   if MARCA['brinquedos'] else
+                   f'Uso inadequado do {_ITEM} (siga sempre as instruções do fabricante)')
+
 PAGINAS_LEGAIS = {
     'trocas-devolucoes': {
         'titulo': 'Trocas e devoluções',
-        'conteudo': """
+        'conteudo': f"""
 <h3>Direito de arrependimento (7 dias)</h3>
 <p>Conforme o <b>Código de Defesa do Consumidor (CDC, art. 49)</b>, você tem até
 <b>7 dias corridos</b> a partir do recebimento pra desistir da compra e pedir
 o reembolso integral, sem necessidade de justificativa.</p>
 
 <h3>Produto com defeito</h3>
-<p>Se o brinquedo chegou quebrado ou com algum problema de fabricação, você tem
+<p>Se o {_ITEM} chegou quebrado ou com algum problema de fabricação, você tem
 <b>30 dias</b> pra entrar em contato. Vamos trocar ou devolver o valor pago
 (o que você preferir).</p>
 
 <h3>Como fazer a troca</h3>
 <ol>
-  <li>Manda mensagem no WhatsApp <b>(45) 99111-9800</b> em até 7 dias do recebimento</li>
+  <li>Manda mensagem no WhatsApp <b>{MARCA['telefone_exibicao']}</b> em até 7 dias do recebimento</li>
   <li>Envie o produto pelos Correios (nós cobrimos o frete da troca/devolução em caso de defeito)</li>
   <li>Após receber e conferir, processamos a troca ou estorno em até 7 dias úteis</li>
 </ol>
@@ -3013,7 +3107,7 @@ o reembolso integral, sem necessidade de justificativa.</p>
 <h3>O que NÃO podemos trocar</h3>
 <ul>
   <li>Produtos lacrados que foram abertos (por higiene), exceto se houver defeito</li>
-  <li>Brinquedos com uso evidente (sujos, riscados, sem embalagem)</li>
+  <li>{_ITENS.capitalize()} com uso evidente (sujos, riscados, sem embalagem)</li>
   <li>Itens personalizados sob encomenda</li>
 </ul>
 
@@ -3027,9 +3121,9 @@ o reembolso integral, sem necessidade de justificativa.</p>
     },
     'entregas': {
         'titulo': 'Entregas e prazos',
-        'conteudo': """
-<h3>Entrega local Cascavel</h3>
-<p>Cascavel/PR: <b>R$ 10 fixo</b>, entrega em 1 a 2 dias úteis. Toledo/PR e demais cidades: frete calculado no checkout pelo Melhor Envio.</p>
+        'conteudo': f"""
+<h3>Entrega local {_LOJA['cidade']}</h3>
+<p>{_LOJA['cidade_uf']}: <b>R$ 10 fixo</b>, entrega em 1 a 2 dias úteis. Toledo/PR e demais cidades: frete calculado no checkout pelo Melhor Envio.</p>
 
 <h3>Demais regiões do Paraná</h3>
 <ul>
@@ -3053,9 +3147,7 @@ Pagamentos PIX confirmam na hora; boleto leva 1-2 dias úteis pra compensar.</p>
 seu pedido. Pode acompanhar também em <a href="/minha-conta">Minha conta</a>.</p>
 
 <h3>Retirada na loja física</h3>
-<p>Mora em Cascavel? Pode retirar grátis em nossa loja na
-<b>R. Engenheiro Rebouças, 2053 — Centro</b>. Estacionamento gratuito em frente!
-Horário: segunda a sexta 9h-18h · sábado 9h-13h.</p>
+<p>{_retirada_entregas_html()}</p>
 """,
     },
     'formas-pagamento': {
@@ -3094,10 +3186,9 @@ certificado SSL válido.</p>
     },
     'privacidade': {
         'titulo': 'Política de privacidade',
-        'conteudo': """
+        'conteudo': f"""
 <h3>Quem somos</h3>
-<p><b>Luqui Brinquedos LTDA</b> (CNPJ 32.650.888/0001-02) — R. Engenheiro Rebouças,
-2053 — Centro — Cascavel/PR. E-mail: contato@luquibrinquedos.com.br.</p>
+<p><b>{MARCA['razao_social']}</b> (CNPJ {MARCA['cnpj']}) — {_LOJA['linha']}. E-mail: {MARCA['email']}.</p>
 
 <h3>Dados que coletamos</h3>
 <ul>
@@ -3133,8 +3224,8 @@ certificado SSL válido.</p>
   <li>Revogar consentimento de marketing a qualquer momento</li>
 </ul>
 <p>Pra exercer qualquer direito, mande e-mail pra
-<a href="mailto:privacidade@luquibrinquedos.com.br">privacidade@luquibrinquedos.com.br</a>
-ou WhatsApp <b>(45) 99111-9800</b>. Respondemos em até 15 dias.</p>
+<a href="mailto:{MARCA['email_privacidade']}">{MARCA['email_privacidade']}</a>
+ou WhatsApp <b>{MARCA['telefone_exibicao']}</b>. Respondemos em até 15 dias.</p>
 
 <h3>Cookies</h3>
 <p>Usamos cookies essenciais (sessão, carrinho) e analíticos (entender quais
@@ -3143,14 +3234,14 @@ funções podem parar de funcionar.</p>
 
 <h3>Segurança</h3>
 <p>Site protegido por HTTPS (SSL). Senhas armazenadas com hash criptográfico
-(nunca em texto puro). Acesso aos dados restrito à equipe Luqui.</p>
+(nunca em texto puro). Acesso aos dados restrito à equipe {MARCA['nome_curto']}.</p>
 """,
     },
     'termos': {
         'titulo': 'Termos de uso',
-        'conteudo': """
+        'conteudo': f"""
 <h3>1. Aceite</h3>
-<p>Ao usar luquibrinquedos.com.br você concorda com estes termos. Se não
+<p>Ao usar {SITE_HOST.replace('www.', '')} você concorda com estes termos. Se não
 concordar, por favor não use o site.</p>
 
 <h3>2. Cadastro</h3>
@@ -3162,33 +3253,24 @@ concordar, por favor não use o site.</p>
 
 <h3>3. Preços e disponibilidade</h3>
 <p>Preços e estoque podem variar. O preço válido é o que aparece no momento da
-finalização do pedido. Em caso de erro grosseiro (ex.: brinquedo de R$ 200
+finalização do pedido. Em caso de erro grosseiro (ex.: {_ITEM} de R$ 200
 listado por R$ 2), reservamos o direito de cancelar o pedido devolvendo
 integralmente o valor pago.</p>
 
-<h3>4. Clube Caixa Misteriosa</h3>
-<ul>
-  <li>Cobrança mensal automática via Asaas</li>
-  <li>Sem fidelidade — cancele quando quiser na sua área "Minha conta" ou pelo WhatsApp</li>
-  <li>A primeira caixa é despachada em até 7 dias após confirmação do 1º pagamento</li>
-  <li>Brinquedos são <b>selecionados pela equipe Luqui</b> conforme o plano escolhido — não há possibilidade de escolher itens específicos</li>
-  <li>Em caso de falha no pagamento, a entrega do mês fica suspensa até regularização</li>
-</ul>
-
-<h3>5. Propriedade intelectual</h3>
-<p>Logos, fotos, descrições e código do site pertencem à Luqui Brinquedos.
+{_TERMOS_CLUBE}<h3>{_N_TERMOS}. Propriedade intelectual</h3>
+<p>Logos, fotos, descrições e código do site pertencem à {MARCA['nome']}.
 Marcas de produtos pertencem aos respectivos fabricantes.</p>
 
-<h3>6. Limitação de responsabilidade</h3>
+<h3>{_N_TERMOS + 1}. Limitação de responsabilidade</h3>
 <p>Não nos responsabilizamos por:</p>
 <ul>
   <li>Atrasos causados pelos Correios/transportadora</li>
   <li>Endereço incorreto informado pelo cliente</li>
-  <li>Uso inadequado do brinquedo (siga sempre a faixa etária recomendada)</li>
+  <li>{_USO_INADEQUADO}</li>
 </ul>
 
-<h3>7. Foro</h3>
-<p>Eventuais conflitos serão resolvidos no foro da comarca de Cascavel/PR.</p>
+<h3>{_N_TERMOS + 2}. Foro</h3>
+<p>Eventuais conflitos serão resolvidos no foro da comarca de {_LOJA['cidade_uf']}.</p>
 """,
     },
 }
@@ -3201,7 +3283,9 @@ PAGINAS_DEFAULTS = dict(PAGINAS_LEGAIS)
 PAGINAS_DEFAULTS['retirar-na-loja'] = {
     'titulo': '🏪 Retire na loja',
     'conteudo': (
-        '<p>Compre no site e <b>retire grátis</b> na nossa loja em Cascavel/PR.</p>'
+        '<p>Compre no site e <b>retire grátis</b> '
+        + ('na nossa loja' if len(MARCA['enderecos']) == 1 else 'em uma das nossas lojas')
+        + f" em {_LOJA['cidade_uf']}.</p>"
         '<h3>Como funciona</h3>'
         '<ol>'
         '<li>Faça o pedido no site e escolha <b>Retirar na loja</b> no frete.</li>'
@@ -3209,29 +3293,29 @@ PAGINAS_DEFAULTS['retirar-na-loja'] = {
         '<li>Vá até a loja com um documento com foto pra retirar.</li>'
         '</ol>'
         '<h3>Endereço</h3>'
-        '<p>R. Engenheiro Rebouças, 2053 — Centro — Cascavel/PR<br>'
-        'Estacionamento gratuito em frente</p>'
-        '<h3>Horário</h3>'
-        '<p>Seg a sex: 09:00 às 18:00<br>'
-        'Sábado: 09:00 às 13:00<br>'
-        'Domingo: fechado</p>'
-        '<p>Dúvidas? <a href="https://wa.me/5545991119800">Fale com a gente no WhatsApp 💚</a></p>'
+        + _enderecos_retirar_html()
+        + '<h3>Horário</h3>'
+        '<p>' + '<br>'.join(MARCA['horario']) + '</p>'
+        f'<p>Dúvidas? <a href="https://wa.me/{WHATSAPP_LOJA}">Fale com a gente no WhatsApp 💚</a></p>'
     ),
 }
 PAGINAS_DEFAULTS['sobre'] = {
-    'titulo': 'Sobre a Luqui',
+    'titulo': f"Sobre a {MARCA['nome_curto']}",
     'conteudo': (
-        '<p>A <b>Luqui Brinquedos</b> é uma loja de brinquedos em Cascavel/PR. '
-        'Trabalhamos com as melhores marcas — Hot Wheels, Barbie, Mattel, Estrela — '
-        'com preços justos e atendimento próximo.</p>'
-        '<p><b>Endereço:</b> R. Engenheiro Rebouças, 2053 — Centro — Cascavel/PR<br>'
-        '<b>Telefone:</b> (45) 99111-9800</p>'
+        f"<p>A <b>{MARCA['nome']}</b> é uma {MARCA['tipo_loja']} em {_LOJA['cidade_uf']}. "
+        + ('Trabalhamos com as melhores marcas — Hot Wheels, Barbie, Mattel, Estrela — '
+           if MARCA['brinquedos'] else 'Trabalhamos com as melhores marcas, ')
+        + 'com preços justos e atendimento próximo.</p>'
+        '<p><b>Endereço:</b> '
+        + '<br>'.join((e['nome'] + ': ' if len(MARCA['enderecos']) > 1 else '') + e['linha']
+                      for e in MARCA['enderecos'])
+        + f"<br><b>Telefone:</b> {MARCA['telefone_exibicao']}</p>"
     ),
 }
 PAGINAS_DEFAULTS['clube-sobre'] = {
-    'titulo': '🎁 Clube Luqui',
+    'titulo': '🎁 ' + MARCA['clube_nome'],
     'conteudo': (
-        '<p>Junta pontos comprando na loja física da Luqui e usa pra abater nas '
+        f"<p>Junta pontos comprando na loja física da {MARCA['nome_curto']} e usa pra abater nas "
         'compras do site.</p>'
         '<p>A cada R$ 1,00 gasto na loja você ganha pontos. No site, na hora de '
         'fechar a compra, escolha quantos pontos usar — até 25% do valor do pedido.</p>'
@@ -3378,15 +3462,15 @@ def cron_aniversariantes():
                 f"🎂 Feliz Aniversário, {c['nome'].split()[0]}! 💛\n\n"
                 f"Pra comemorar, te demos um cupom de *15% OFF* válido por 14 dias:\n"
                 f"`{codigo}`\n\n"
-                f"Aproveita: https://www.luquibrinquedos.com.br")
+                f"Aproveita: {SITE_URL}")
             enviar_email(c['email'],
                 f'🎂 Feliz aniversário, {c["nome"].split()[0]}!',
                 f"""<p>🎉 Parabéns!</p>
-<p>Hoje é seu dia especial e a Luqui preparou um <b>cupom de 15% OFF</b> pra você:</p>
+<p>Hoje é seu dia especial e a {MARCA['nome_curto']} preparou um <b>cupom de 15% OFF</b> pra você:</p>
 <p style="background:#FEF3C7;padding:14px 24px;border-radius:8px;font-size:22px;
           font-weight:900;color:#1652C7;text-align:center;letter-spacing:2px">{codigo}</p>
 <p>Válido por <b>14 dias</b>. Use no checkout.</p>
-<p><a href="https://www.luquibrinquedos.com.br" style="background:#FFC700;color:#1652C7;padding:12px 28px;border-radius:8px;font-weight:900;text-decoration:none">🎁 Aproveitar</a></p>""")
+<p><a href="{SITE_URL}" style="background:{MARCA['cor_destaque']};color:{MARCA['cor_primaria']};padding:12px 28px;border-radius:8px;font-weight:900;text-decoration:none">🎁 Aproveitar</a></p>""")
             gerados += 1
         except Exception as e:
             log.error("aniver %s: %s", c['id'], e)
@@ -3422,17 +3506,17 @@ def cron_carrinho_abandonado():
             primeiro = ((p.get('nome') or '').strip().split() or ['amigo(a)'])[0]
             enviar_whatsapp(p['telefone'],
                 f"💛 Oi {primeiro}! "
-                f"Vi que você começou um pedido aqui na Luqui mas ainda não finalizou.\n\n"
+                f"Vi que você começou um pedido aqui na {MARCA['nome_curto']} mas ainda não finalizou.\n\n"
                 f"Total: *{rs(p['total'])}*\n\n"
                 f"Tá tudo certinho? Quer finalizar?\n"
-                f"👉 https://www.luquibrinquedos.com.br/pedido/{p['id']}/pagamento?t={p.get('token','')}")
+                f"👉 {SITE_URL}/pedido/{p['id']}/pagamento?t={p.get('token','')}")
             enviar_email(p['email'],
                 f'Esqueceu de finalizar seu pedido #{p["id"]}?',
                 f"""<p>Oi {p['nome'].split()[0]}! 💛</p>
-<p>Notamos que você começou um pedido aqui na Luqui mas ainda não finalizou o pagamento.</p>
+<p>Notamos que você começou um pedido aqui na {MARCA['nome_curto']} mas ainda não finalizou o pagamento.</p>
 <p><b>Total:</b> {rs(p['total'])}</p>
-<p><a href="https://www.luquibrinquedos.com.br/pedido/{p['id']}/pagamento?t={p.get('token','')}"
-   style="background:#FFC700;color:#1652C7;padding:12px 24px;border-radius:8px;
+<p><a href="{SITE_URL}/pedido/{p['id']}/pagamento?t={p.get('token','')}"
+   style="background:{MARCA['cor_destaque']};color:{MARCA['cor_primaria']};padding:12px 24px;border-radius:8px;
           font-weight:900;text-decoration:none;display:inline-block">
   💛 Finalizar pedido
 </a></p>
@@ -3526,16 +3610,16 @@ def cron_recuperar_pedidos_parados():
             _retira = (p.get('frete_servico') or '').lower().startswith('retirar')
             if not _retira and not entrega_liberada_para(p.get('cep')):
                 continue
-            pag_url = (f"https://www.luquibrinquedos.com.br/pedido/{p['id']}"
+            pag_url = (f"{SITE_URL}/pedido/{p['id']}"
                        f"/pagamento?t={p.get('token') or ''}")
             primeiro = ((p.get('nome') or '').strip().split() or ['amigo(a)'])[0]
             enviar_whatsapp(p['telefone'],
-                f"💛 Oi {primeiro}! Aqui é da *Luqui Brinquedos*.\n\n"
+                f"💛 Oi {primeiro}! Aqui é da *{MARCA['nome']}*.\n\n"
                 f"Vi que o pagamento do seu pedido #{p['id']} "
                 f"({rs(p['total'])}) não foi concluído.\n\n"
                 f"Seus produtos estão guardados. Pra finalizar:\n{pag_url}\n\n"
                 f"Se preferir, é só responder esta mensagem que a gente te "
-                f"ajuda. 🧸")
+                f"ajuda. {MARCA['emoji']}")
             enviar_email(p['email'],
                 f'Seu pedido #{p["id"]} — pagamento não concluído',
                 f"""<p>Oi {primeiro}! 💛</p>
@@ -3672,15 +3756,15 @@ def cron_email_pos_compra():
                 f'Como foi seu pedido #{p["id"]}? 💛',
                 f"""<p>Oi {primeiro}! Tudo bem?</p>
 <p>Faz uma semana que seu pedido <b>#{p['id']}</b> foi confirmado.
-Esperamos que tudo tenha chegado certinho! 🧸</p>
+Esperamos que tudo tenha chegado certinho! {MARCA['emoji']}</p>
 <p>Que tal contar pra gente o que você achou? Sua avaliação ajuda outras famílias
 a escolherem com confiança!</p>
-<p><a href="https://www.luquibrinquedos.com.br/pedido/{p['id']}/tracking?t={p.get('token','')}"
-     style="background:#FFC700;color:#1652C7;padding:12px 24px;border-radius:8px;
+<p><a href="{SITE_URL}/pedido/{p['id']}/tracking?t={p.get('token','')}"
+     style="background:{MARCA['cor_destaque']};color:{MARCA['cor_primaria']};padding:12px 24px;border-radius:8px;
             font-weight:900;text-decoration:none;display:inline-block">
   ⭐ Avaliar produtos
 </a></p>
-<p>Abraço,<br>Luqui Brinquedos 💛</p>""")
+<p>Abraço,<br>{MARCA['nome']} 💛</p>""")
             db_execute("""UPDATE pedidos SET observacao=COALESCE(observacao,'')
                        || ' [avaliacao-enviada]' WHERE id=%s""", [p['id']])
             enviados += 1
@@ -3728,15 +3812,15 @@ def cron_avise_me():
         for c in cadastros:
             try:
                 html = f"""<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
-<h2 style="color:#1652C7">🎉 Boa notícia!</h2>
-<p>Olá! O brinquedo que você pediu pra avisar voltou ao estoque na Luqui Brinquedos:</p>
+<h2 style="color:{MARCA['cor_primaria']}">🎉 Boa notícia!</h2>
+<p>Olá! O {MARCA['item']} que você pediu pra avisar voltou ao estoque na {MARCA['nome']}:</p>
 <div style="background:#F1F5F9;padding:16px;border-radius:10px;margin:14px 0">
   <div style="font-weight:700;font-size:15px">{nome}</div>
   <div style="color:#16a34a;font-weight:800;font-size:22px;margin-top:6px">R$ {preco:.2f}</div>
 </div>
 <p>Corre que pode acabar de novo!</p>
 <p style="margin:18px 0">
-  <a href="{url}" style="background:#FFC700;color:#1652C7;padding:12px 22px;border-radius:8px;
+  <a href="{url}" style="background:{MARCA['cor_destaque']};color:{MARCA['cor_primaria']};padding:12px 22px;border-radius:8px;
        font-weight:900;text-decoration:none;display:inline-block">
     🛒 Ver produto agora
   </a>
@@ -3748,7 +3832,7 @@ def cron_avise_me():
                 if c.get('telefone'):
                     enviar_whatsapp(c['telefone'],
                         f"🎉 *Boa notícia!*\n\n"
-                        f"O brinquedo que você pediu pra avisar voltou ao estoque na Luqui Brinquedos:\n\n"
+                        f"O {MARCA['item']} que você pediu pra avisar voltou ao estoque na {MARCA['nome']}:\n\n"
                         f"*{nome}*\nR$ {preco:.2f}\n\n"
                         f"Corre que pode acabar de novo!\n{url}")
                 db_execute("UPDATE avise_me SET notificado_em=NOW() WHERE id=%s",
@@ -4103,7 +4187,7 @@ def feed_xml():
     linhas = ['<?xml version="1.0" encoding="UTF-8"?>',
               '<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">',
               '<channel>',
-              f'<title>{_xml_escape("Luqui Brinquedos")}</title>',
+              f'<title>{_xml_escape(MARCA["nome"])}</title>',
               f'<link>{base}</link>',
               '<description>Catalogo de produtos</description>']
     incluidos = 0
@@ -4131,7 +4215,7 @@ def feed_xml():
         if p.get('preco_promo') and p.get('preco_venda'):
             linhas.append(f"<g:sale_price>{float(p['preco_promo']):.2f} BRL</g:sale_price>")
         linhas.append('<g:condition>new</g:condition>')
-        linhas.append(f'<g:brand>{_xml_escape(p.get("marca") or "Luqui Brinquedos")}</g:brand>')
+        linhas.append(f'<g:brand>{_xml_escape(p.get("marca") or MARCA["nome"])}</g:brand>')
         if p.get('codigo_barras'):
             linhas.append(f'<g:gtin>{_xml_escape(p["codigo_barras"])}</g:gtin>')
         if p.get('departamento'):
@@ -4778,7 +4862,7 @@ def checkout_frete():
     uf_fixo = cfg('frete_fixo_uf', 'PR')
     if uf == uf_fixo and cidade in cidades_fixo:
         slots = _slots_entrega_local()
-        opcoes.append({'servico': 'Entrega Luqui (local)',
+        opcoes.append({'servico': f"Entrega {MARCA['nome_curto']} (local)",
                        'valor': fixo_valor,
                        'prazo': slots[0]['label'] if slots else 'Agendar',
                        'id': 'LOCAL',
@@ -4971,7 +5055,7 @@ def clube_assinar_post():
          cep, endereco, numero, complemento, bairro, cidade, uf],
         fetch='one')
     aid = nova['id']
-    descricao = f'Clube Luqui — {plano["nome"]}'
+    descricao = f'{MARCA["clube_nome"]} — {plano["nome"]}'
     externa = f'clube-{aid}'
     customer_id = asaas_criar_customer(c['nome'], c['email'],
                                        c['cpf'], c.get('telefone'))
@@ -5143,7 +5227,7 @@ def clube_trocar_plano():
         return jsonify({'erro': 'Falha no gateway'}), 502
     sub = asaas_criar_assinatura(
         customer_id, float(plano['preco_mensal']),
-        descricao=f'Clube Luqui — {plano["nome"]}',
+        descricao=f'{MARCA["clube_nome"]} — {plano["nome"]}',
         billing_type='PIX',
         externa_ref=f'clube-pending',
     )
@@ -5412,12 +5496,12 @@ def esqueci_senha():
             nova = secrets.token_urlsafe(8)[:10]
             db_execute("UPDATE clientes_site SET senha_hash=%s WHERE id=%s",
                        [generate_password_hash(nova), c['id']])
-            enviar_email(email, 'Sua nova senha — Luqui Brinquedos',
+            enviar_email(email, f"Sua nova senha — {MARCA['nome']}",
                 f"""<p>Oi {c['nome'].split()[0]}! 💛</p>
 <p>Recebemos um pedido pra resetar sua senha.</p>
 <p>Sua <b>nova senha temporária</b> é: <code style='background:#FEF3C7;padding:4px 10px;border-radius:4px;font-size:18px'>{nova}</code></p>
-<p>Entre em <a href='https://www.luquibrinquedos.com.br/login'>luquibrinquedos.com.br/login</a> e troque pela senha que preferir em "Minha conta".</p>
-<p>Não foi você? Avisa a gente no WhatsApp (45) 99111-9800.</p>""")
+<p>Entre em <a href='{SITE_URL}/login'>{SITE_HOST.replace('www.', '')}/login</a> e troque pela senha que preferir em "Minha conta".</p>
+<p>Não foi você? Avisa a gente no WhatsApp {MARCA['telefone_exibicao']}.</p>""")
         msg = ('Se esse e-mail tem cadastro, enviamos uma senha temporária. '
                'Veja seu e-mail (inclusive a caixa de spam).')
     return render_template('esqueci_senha.html', msg=msg,
@@ -5675,10 +5759,13 @@ def lista_remover_item(lid, item_id):
 
 
 # ─── Luquizinha do site (chatbot IA) ─────────────────────────────────────────
-LUQUIZINHA_SITE_PROMPT = """Voce eh a Luquizinha 🧸, atendente IA da Luqui
-Brinquedos no site www.luquibrinquedos.com.br. Sua personalidade eh
-calorosa, doce, brincalhona — voce trabalha numa loja de brinquedos da
-familia em Cascavel/PR.
+# Nome da loja, site e endereços vêm da marca. O resto do roteiro é de loja
+# de brinquedos — lojas de outro segmento desligam o assistente
+# (MARCA_ASSISTENTE_ATIVO=0) até ter um roteiro próprio.
+LUQUIZINHA_SITE_PROMPT = f"""Voce eh a {MARCA['assistente_nome']} 🧸, atendente IA da {MARCA['nome']}
+no site {SITE_HOST}. Sua personalidade eh
+calorosa, doce, brincalhona — voce trabalha numa {MARCA['tipo_loja']} da
+familia em {MARCA['endereco']['cidade_uf']}.
 
 SEU TRABALHO: ajudar a pessoa (geralmente uma mae/tia/avo) a encontrar
 o brinquedo perfeito. Sua META eh GARANTIR CONTATO + mostrar produtos
@@ -5750,10 +5837,10 @@ Se a cliente pediu "falar com vendedor" → registrar_lead na hora.
 
 INFO QUE VOCE PODE DAR DIRETO:
 💳 PIX 3% off, cartao 1x sem juros (2x+ tem juros, ate 12x)
-🚚 Cascavel R$ 10 fixo, retire na loja gratis, outras cidades cota no checkout
-📍 Rua Engenheiro Reboucas, 2053 — Cascavel/PR (so mencione se
+🚚 {MARCA['endereco']['cidade']} R$ 10 fixo, retire na loja gratis, outras cidades cota no checkout
+{enderecos_curtos()} (so mencione se
    perguntarem ou se cliente quiser RETIRAR)
-⏰ Seg-sex 9-18h · Sab 9-13h · Dom fechado
+⏰ {' · '.join(MARCA['horario'])}
 
 PROIBIDO:
 - NUNCA mande a cliente pra "olhar no site" — ela JA ESTA no site.
@@ -6133,12 +6220,12 @@ def _luq_tool_registrar_lead(conversa_id, args):
     # Notifica vendedor via PDV (que tem Z-API configurado)
     if PDVPRO_API_KEY:
         try:
-            msg = (f"🎯 Novo lead do SITE Luquizinha\n\n"
+            msg = (f"🎯 Novo lead do SITE {MARCA['assistente_nome']}\n\n"
                    f"👤 Cliente: {nome or '(sem nome)'}\n"
                    f"📱 WhatsApp: {telefone or '(nao informado)'}\n"
                    f"🧸 Crianca: {sexo or '?'} {idade or '?'} anos\n\n"
                    f"💬 {obs or '(sem observacao)'}\n\n"
-                   f"Ver conversa: www.luquibrinquedos.com.br/admin/chats")
+                   f"Ver conversa: {SITE_HOST}/admin/chats")
             requests.post(PDVPRO_URL + '/api/integracao/notificar-vendedores',
                           json={'mensagem': msg},
                           headers={'X-API-Key': PDVPRO_API_KEY}, timeout=8)
@@ -6191,7 +6278,7 @@ def luquizinha_historico():
 def luquizinha_chat():
     """Envia 1 mensagem do cliente e devolve a resposta da IA."""
     if not ANTHROPIC_API_KEY:
-        return jsonify({'erro': 'Luquizinha indisponivel agora'}), 503
+        return jsonify({'erro': f"{MARCA['assistente_nome']} indisponivel agora"}), 503
     d = request.get_json() or {}
     texto = (d.get('texto') or '').strip()[:2000]
     if not texto:
@@ -6208,7 +6295,7 @@ def luquizinha_chat():
                               AND m.criado_em > NOW() - INTERVAL '24 hours'""",
                          [ip], fetch='one') or {}
         if int((cnt or {}).get('n') or 0) >= 30:
-            resp = jsonify({'resposta': 'Vc ja conversou bastante hoje comigo, viu! 💛 Volta amanha que continuamos! Pra falar agora com vendedor: wa.me/5545991119800'})
+            resp = jsonify({'resposta': 'Vc ja conversou bastante hoje comigo, viu! 💛 Volta amanha que continuamos! Pra falar agora com vendedor: wa.me/' + WHATSAPP_LOJA})
             resp.set_cookie('luqz_sid', sid, max_age=60*60*24*30, httponly=False, samesite='Lax')
             return resp
     conv = _luq_get_or_create_conversa(sid)
@@ -6409,7 +6496,7 @@ def admin_sair():
 # ─── Admin: CMS de páginas ────────────────────────────────────────────────
 _PAGINAS_PUBLICAS = [
     ('retirar-na-loja',   '🏪 Retire na loja',         '/retirar-na-loja'),
-    ('clube-sobre',       '🎁 Clube Luqui (texto)',    None),
+    ('clube-sobre',       '🎁 ' + MARCA['clube_nome'] + ' (texto)',    None),
     ('trocas-devolucoes', '↩️ Trocas e devoluções',    '/trocas-devolucoes'),
     ('entregas',          '🚚 Entregas / prazos',      '/entregas'),
     ('formas-pagamento',  '💳 Formas de pagamento',    '/formas-pagamento'),
@@ -6805,17 +6892,17 @@ def admin_pedido_status(pid):
                            f"preparado com muito carinho 💛"),
             'pronto_retirada': (
                 f"🏪 Oi {primeiro}! Seu *Pedido #{pid}* já está *pronto pra retirar* "
-                f"na Luqui Brinquedos! 💛\n\n"
-                f"📍 R. Eng. Rebouças, 2053 — Cascavel/PR\n"
-                f"🕐 Seg a Sex: 8h-18h · Sáb: 9h-13h\n\n"
-                f"Leva um documento com foto. Te esperamos! 🧸"),
+                f"na {MARCA['nome']}! 💛\n\n"
+                f"{enderecos_curtos()}\n"
+                f"🕐 {MARCA['horario_whatsapp']}\n\n"
+                f"Leva um documento com foto. Te esperamos! {MARCA['emoji']}"),
             'enviado': (f"🚚 Oi {primeiro}! Seu *Pedido #{pid}* "
                         f"acabou de sair pra entrega!"
                         + (f"\n\n*Rastreio:* {rastreio}" if rastreio else "")
-                        + f"\n\nAcompanhe: https://www.luquibrinquedos.com.br/pedido/{pid}/tracking?t={p.get('token','')}"),
+                        + f"\n\nAcompanhe: {SITE_URL}/pedido/{pid}/tracking?t={p.get('token','')}"),
             'entregue': (f"💛 *Pedido #{pid} entregue!* Esperamos que ame!\n\n"
                          f"Que tal nos avaliar? "
-                         f"https://www.luquibrinquedos.com.br/pedido/{pid}/tracking?t={p.get('token','')}"),
+                         f"{SITE_URL}/pedido/{pid}/tracking?t={p.get('token','')}"),
         }
         if novo in msgs:
             enviar_whatsapp(p['telefone'], msgs[novo])
@@ -6954,27 +7041,29 @@ def admin_chat_view(cid):
 @requer_admin
 def admin_banner_seed():
     """Insere os 5 banners default (so os que ainda nao existem pelo titulo)."""
+    _prim, _prim_c, _prim_e, _dest = (MARCA['cor_primaria'], MARCA['cor_primaria_clara'],
+                                      MARCA['cor_primaria_escura'], MARCA['cor_destaque'])
     seeds = [
         ('PAGUE NO PIX',
-         'Ganhe <b style="color:#FFC700">3% de desconto</b> em qualquer compra!',
+         f'Ganhe <b style="color:{_dest}">3% de desconto</b> em qualquer compra!',
          '/produtos', 'Ver produtos',
-         'linear-gradient(135deg,#1652C7,#3B82F6)', 1),
+         f'linear-gradient(135deg,{_prim},{_prim_c})', 1),
         ('PARCELE EM 12X',
-         'Sem juros (parcela mínima <b style="color:#FFC700">R$ 50</b>)',
+         f'Sem juros (parcela mínima <b style="color:{_dest}">R$ 50</b>)',
          '/produtos', 'Comprar agora',
-         'linear-gradient(135deg,#0E3D9E,#1652C7)', 2),
+         f'linear-gradient(135deg,{_prim_e},{_prim})', 2),
         ('RETIRE NA LOJA',
-         '📍 Cascavel/PR — <b style="color:#FFC700">frete grátis</b>. Agende o horário no checkout!',
+         f'📍 {MARCA["endereco"]["cidade_uf"]} — <b style="color:{_dest}">frete grátis</b>. Agende o horário no checkout!',
          '/retirar-na-loja', 'Como funciona',
-         'linear-gradient(135deg,#1652C7,#4FB8FF)', 3),
-        ('CLUBE LUQUI 🎁',
-         'Descontos exclusivos + <b style="color:#FFC700">5% acumulativo</b> + 1 ponto a cada R$ 1',
+         f'linear-gradient(135deg,{_prim},#4FB8FF)', 3),
+        (MARCA['clube_nome'].upper() + ' 🎁',
+         f'Descontos exclusivos + <b style="color:{_dest}">5% acumulativo</b> + 1 ponto a cada R$ 1',
          '/clube', 'Quero entrar',
-         'linear-gradient(135deg,#A16207,#FFC700)', 4),
+         f'linear-gradient(135deg,#A16207,{_dest})', 4),
         ('NOVIDADES ✨',
-         'Confere o que <b style="color:#FFC700">chegou</b> de mais legal!',
+         f'Confere o que <b style="color:{_dest}">chegou</b> de mais legal!',
          '/novidades', 'Ver novidades',
-         'linear-gradient(135deg,#1652C7,#3B82F6)', 5),
+         f'linear-gradient(135deg,{_prim},{_prim_c})', 5),
     ]
     inseridos = 0
     for tit, sub, link, cta, cor, ordem in seeds:
@@ -7979,7 +8068,7 @@ def alertar_risco(pid, score, motivos, contexto=''):
             f"IP: {p.get('ip_cliente') or '—'}\n\n"
             f"*Por quê:*\n" + '\n'.join(f'• {m}' for m in motivos) + "\n\n"
             f"⛔ A etiqueta automática NÃO vai sair. Confere e libera em "
-            f"https://www.luquibrinquedos.com.br/admin/pedidos")
+            f"{SITE_URL}/admin/pedidos")
     except Exception as e:
         log.error("alerta risco pedido %s: %s", pid, e)
 
@@ -8309,7 +8398,7 @@ def checkout_finalizar():
     billing = 'PIX' if d['forma_pagto'] == 'pix' else 'BOLETO'
     cobranca = asaas_criar_cobranca(
         customer_id, total, billing,
-        descricao=f'Luqui Brinquedos — Pedido #{pid}',
+        descricao=f"{MARCA['nome']} — Pedido #{pid}",
         parcelas=1, externa_ref=f'pedido-{pid}')
     if not cobranca:
         db_execute("UPDATE pedidos SET status='erro_asaas' WHERE id=%s", [pid])
@@ -8354,7 +8443,9 @@ def admin_asaas_conta():
 # enquanto cliente da região é gente que ele alcança, que retira na loja e que
 # tem nome a zelar na cidade. PIX não tem estorno, então venda pra fora do raio
 # continua acontecendo sem risco de chargeback.
-CEP_LOJA_PADRAO = '85812130'   # R. Eng. Rebouças, 2053 — Cascavel/PR
+# CEP da loja principal (1º endereço da marca); sem CEP cadastrado, usa o de
+# origem do frete. Luqui: R. Eng. Rebouças, 2053 — Cascavel/PR.
+CEP_LOJA_PADRAO = cep_digitos(MARCA['endereco']['cep']) or MARCA['cep_origem']
 
 # Os 452 municipios a ate 300 km da loja, PRECOMPUTADOS, no formato
 # 'NOME|UF' -- nome normalizado por _nome_norm (sem acento, caixa alta).
@@ -8784,8 +8875,9 @@ def _pagarme_endereco(p):
     # retirada no cartão ("Invalid address, must contain 3 parts in
     # address.line_1"). Sem endereço, vai o da loja, onde a entrega acontece.
     if not (p.get('endereco') or '').strip():
-        p = dict(p, endereco='Rua Engenheiro Rebouças', numero='2053',
-                 bairro='Centro', cidade='Cascavel', uf='PR',
+        _loja = MARCA['endereco']
+        p = dict(p, endereco=_loja['logradouro'], numero=_loja['numero'],
+                 bairro=_loja['bairro'], cidade=_loja['cidade'], uf=_loja['uf'],
                  cep=CEP_LOJA_PADRAO)
     num = (p.get('numero') or 'S/N')
     rua = p.get('endereco')
@@ -8807,7 +8899,9 @@ def _pagarme_endereco(p):
 
 def _pagarme_cliente(p):
     tel = _so_digitos(p.get('telefone'))
-    ddd, numero = (tel[:2], tel[2:]) if len(tel) >= 10 else ('45', '991119800')
+    if len(tel) < 10:                   # sem telefone: vai o da loja
+        tel = cep_digitos(MARCA['telefone_e164'])[2:]
+    ddd, numero = tel[:2], tel[2:]
     return {
         'name': (p.get('nome') or 'Cliente')[:64],
         'email': (p.get('email') or '')[:64],
@@ -8867,7 +8961,7 @@ def pagarme_criar_cobranca(pid, cartao, tds_trans_id=None):
         return 404, {'erro': 'pedido não encontrado'}
     cc = {
         'installments': int(p.get('parcelas') or 1),
-        'statement_descriptor': 'LUQUIBRINQ',
+        'statement_descriptor': MARCA['descritor_fatura'],
         'card': {
             'number': cartao['numero'],
             'holder_name': cartao['titular_nome'][:64],
@@ -9197,7 +9291,7 @@ def pedido_pagar_cartao(pid):
     # escolher o provedor)
     code, resp = asaas_criar_cobranca_cartao(
         customer_id, p['total'],
-        f'Luqui Brinquedos — Pedido #{pid}',
+        f"{MARCA['nome']} — Pedido #{pid}",
         p.get('parcelas') or 1, f'pedido-{pid}',
         cc, holder, remote_ip)
 
@@ -9294,7 +9388,7 @@ def pedido_trocar_pra_pix(pid):
         return jsonify({'erro': 'Não consegui gerar o PIX agora. '
                                 'Tente de novo em instantes.'}), 502
     cob = asaas_criar_cobranca(customer_id, total, 'PIX',
-                               f'Luqui Brinquedos — Pedido #{pid}',
+                               f"{MARCA['nome']} — Pedido #{pid}",
                                externa_ref=f'pedido-{pid}')
     if not cob or not cob.get('id'):
         return jsonify({'erro': 'Não consegui gerar o PIX agora. '
@@ -9735,40 +9829,41 @@ def processar_pedido_pago(pid):
 
     try:
         enviar_email(p['email'],
-                     f'Pedido #{pid} confirmado — Luqui Brinquedos',
+                     f"Pedido #{pid} confirmado — {MARCA['nome']}",
                      f"""<p>Olá {p['nome'].split()[0]}! 💛</p>
 <p>Seu pagamento foi <b>confirmado</b> e estamos preparando seu pedido com muito carinho.</p>
 <p><b>Pedido:</b> #{pid}<br>
 <b>Total pago:</b> R$ {p['total']}<br>
 <b>Entrega em:</b> {p['endereco']}, {p['numero']} — {p['cidade']}/{p['uf']}</p>
 <p>Te avisamos quando sair pra entrega! 🚚</p>
-<p><a href="https://www.luquibrinquedos.com.br/pedido/{pid}/acessar?t={p.get('token','')}"
-     style="background:#FFC700;color:#1652C7;padding:12px 24px;border-radius:8px;
+<p><a href="{SITE_URL}/pedido/{pid}/acessar?t={p.get('token','')}"
+     style="background:{MARCA['cor_destaque']};color:{MARCA['cor_primaria']};padding:12px 24px;border-radius:8px;
             font-weight:900;text-decoration:none;display:inline-block">
   👤 Acessar meus pedidos
 </a></p>
 <p style="font-size:13px;color:#64748B">Esse link entra direto na sua conta, sem senha —
 guarda ele só pra você. Lá você acompanha a entrega, baixa a nota fiscal e junta
-pontos do Clube Luqui.</p>
-<p>Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp (45) 99111-9800</a></p>
-<p>Abraço,<br>Luqui Brinquedos 🧸</p>""")
+pontos do {MARCA['clube_nome']}.</p>
+<p>Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp {MARCA['telefone_exibicao']}</a></p>
+<p>Abraço,<br>{MARCA['nome']} {MARCA['emoji']}</p>""")
     except Exception as e:
         log.error("email confirma: %s", e)
 
     try:
         is_retira_p = (p.get('frete_servico') or '').lower().startswith('retirar')
         if is_retira_p:
-            linha_entrega = "Retirada: na loja (R. Eng. Rebouças, 2053)"
+            linha_entrega = ("Retirada: na loja ("
+                             + ' · '.join(e['curto'] for e in MARCA['enderecos']) + ")")
             linha_fechamento = "Te aviso aqui quando estiver pronto pra retirar!"
         else:
             linha_entrega = f"Entrega: {p.get('cidade') or '—'}/{p.get('uf') or '—'}"
             linha_fechamento = "Te aviso quando sair pra entrega!"
         enviar_whatsapp(p['telefone'],
-            f"💛 Oi {p['nome'].split()[0]}! Sou a Luqui Brinquedos.\n\n"
+            f"💛 Oi {p['nome'].split()[0]}! Sou a {MARCA['nome']}.\n\n"
             f"Seu pagamento do *Pedido #{pid}* foi confirmado! 🎉\n"
             f"Total: *R$ {p['total']}*\n"
             f"{linha_entrega}\n\n"
-            f"Já estamos preparando tudo com muito carinho 🧸\n"
+            f"Já estamos preparando tudo com muito carinho {MARCA['emoji']}\n"
             f"{linha_fechamento}")
     except Exception as e:
         log.error("WA cliente: %s", e)
@@ -9781,7 +9876,7 @@ pontos do Clube Luqui.</p>
             f"Total: *R$ {p['total']}*\n"
             f"Forma: {p['forma_pagto']}\n"
             f"Endereço: {p['endereco']}, {p['numero']} - {p['cidade']}/{p['uf']}\n\n"
-            f"Ver: https://www.luquibrinquedos.com.br/admin/pedidos")
+            f"Ver: {SITE_URL}/admin/pedidos")
     except Exception as e:
         log.error("WA admin: %s", e)
 
@@ -9831,7 +9926,7 @@ def webhook_asaas():
             # Email
             try:
                 enviar_email(ass['cliente_email'],
-                    f'🎁 Bem-vindo ao Clube Luqui — {ass["plano_nome"]}',
+                    f'🎁 Bem-vindo ao {MARCA["clube_nome"]} — {ass["plano_nome"]}',
                     f"""<p>Olá {ass['cliente_nome'].split()[0]}! 💛</p>
 <p>Seu pagamento foi confirmado e sua assinatura do
 <b>{ass['plano_nome']}</b> está <b style='color:#16A34A'>ATIVA</b>! 🎉</p>
@@ -9840,8 +9935,8 @@ expedição. Te avisamos com o código de rastreio assim que sair!</p>
 <p>Valor mensal: <b>R$ {ass['preco_mensal']}</b><br>
 Próxima cobrança: dia {(datetime.now(SP_TZ).date()+timedelta(days=30)).strftime('%d/%m/%Y')}</p>
 <p>Bora brincar muito? 🧸<br>
-Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp (45) 99111-9800</a></p>
-<p>Abraço,<br>Luqui Brinquedos</p>""")
+Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp {MARCA['telefone_exibicao']}</a></p>
+<p>Abraço,<br>{MARCA['nome']}</p>""")
             except Exception as e:
                 log.error("email clube ativa: %s", e)
             # WhatsApp cliente
@@ -9850,7 +9945,7 @@ Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp
             try:
                 enviar_whatsapp(cli_tel.get('telefone'),
                     f"🎁 {ass['cliente_nome'].split()[0]}, sua assinatura do "
-                    f"*Clube Luqui* está ativa!\n\n"
+                    f"*{MARCA['clube_nome']}* está ativa!\n\n"
                     f"Plano: *{ass['plano_nome']}* (R$ {ass['preco_mensal']}/mês)\n\n"
                     f"Sua 1ª Caixa Misteriosa sai em até 7 dias úteis 📦\n"
                     f"Bora brincar! 🧸")
@@ -9859,10 +9954,10 @@ Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp
             # WhatsApp admin
             try:
                 enviar_whatsapp(ADMIN_WHATSAPP,
-                    f"🎁 *Novo assinante Clube Luqui!*\n\n"
+                    f"🎁 *Novo assinante {MARCA['clube_nome']}!*\n\n"
                     f"Cliente: {ass['cliente_nome']}\n"
                     f"Plano: {ass['plano_nome']} (R$ {ass['preco_mensal']}/mês)\n\n"
-                    f"Preparar caixa: https://www.luquibrinquedos.com.br/admin/clube/envio-mensal")
+                    f"Preparar caixa: {SITE_URL}/admin/clube/envio-mensal")
             except Exception as e:
                 log.error("WA clube admin: %s", e)
         elif event in ('PAYMENT_OVERDUE',):

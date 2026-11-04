@@ -22,7 +22,7 @@
     {% elif p.status == 'aguardando_pagto' %}
       <div style="background:#FEF3C7;color:#92400E;padding:14px;border-radius:10px;margin-bottom:20px">
         ⏳ <b>Aguardando pagamento</b> ·
-        <a href="/pedido/{{ p.id }}/pagamento?t={{ p.token }}" style="color:#1652C7;font-weight:700">Pagar agora →</a>
+        <a href="/pedido/{{ p.id }}/pagamento?t={{ p.token }}" style="color:{{ marca.cor_primaria }};font-weight:700">Pagar agora →</a>
       </div>
     {% else %}
     <!-- TIMELINE -->
@@ -78,7 +78,7 @@
     </div>
 
     <div style="text-align:center;margin-top:20px;font-size:13px;color:var(--mut)">
-      Dúvidas? <a href="https://wa.me/{{ whatsapp_loja() }}?text=Sobre%20o%20pedido%20%23{{ p.id }}" target="_blank" style="color:var(--azul);font-weight:700">WhatsApp (45) 99111-9800</a>
+      Dúvidas? <a href="https://wa.me/{{ whatsapp_loja() }}?text=Sobre%20o%20pedido%20%23{{ p.id }}" target="_blank" style="color:var(--azul);font-weight:700">WhatsApp {{ marca.telefone_exibicao }}</a>
     </div>
   </div>
 </div>

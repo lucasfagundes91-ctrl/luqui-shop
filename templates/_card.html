@@ -27,7 +27,7 @@
     <button class="btn-mini-add" onclick="carrinhoAdd({{ pid }})">+ Carrinho</button>
     <button class="btn-mini-buy" onclick="comprarAgora({{ pid }})">Comprar</button>
   </div>
-  {% if mostrar_lista %}
+  {% if mostrar_lista and marca.lista_aniversario_ativa %}
   <button class="btn-mini-lista" onclick="addNaLista({{ pid }}, this)">
     🎁 Lista de aniversário
   </button>

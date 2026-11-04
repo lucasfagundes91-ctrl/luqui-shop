@@ -3,26 +3,26 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block titulo %}Luqui Brinquedos — Aqui você compra brincando{% endblock %}</title>
-<meta name="description" content="{% block descricao %}A loja de brinquedos da família — pelúcias, jogos, bonecas, hot wheels, lego e muito mais. Loja física em Cascavel/PR.{% endblock %}">
+<title>{% block titulo %}{{ marca.nome }} — {{ marca.slogan }}{% endblock %}</title>
+<meta name="description" content="{% block descricao %}{{ marca.meta_descricao }}{% endblock %}">
 {# Canonical: sem isso, cada combinação de filtro (?marca=&ordem=&p=) virava
    uma página nova pro Google, com o mesmo conteúdo da categoria. O padrão
    ignora a querystring de propósito; quem precisa de outra URL sobrescreve. #}
 <link rel="canonical" href="{% block canonical %}{{ SITE_URL }}{{ request.path }}{% endblock %}">
 <meta name="robots" content="{% block meta_robots %}index, follow, max-image-preview:large{% endblock %}">
-<link rel="icon" type="image/png" href="/static/favicon.png">
-<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="{{ marca.favicon }}">
+<link rel="apple-touch-icon" href="{{ marca.apple_touch_icon }}">
 {# Blocos: a pagina de produto sobrescreve com o item. Sem isso, compartilhar
    um brinquedo no WhatsApp mostrava a logo da loja em vez do produto. #}
-<meta property="og:title" content="{% block og_titulo %}Luqui Brinquedos — Aqui você compra brincando{% endblock %}">
-<meta property="og:description" content="{% block og_descricao %}Loja de brinquedos da família. Pelúcias, jogos, Hot Wheels, Lego, Pokémon e muito mais. Cascavel/PR — envio pra todo Brasil.{% endblock %}">
-<meta property="og:image" content="{% block og_imagem %}https://www.luquibrinquedos.com.br/static/logo.png{% endblock %}">
-<meta property="og:url" content="{% block og_url %}https://www.luquibrinquedos.com.br/{% endblock %}">
+<meta property="og:title" content="{% block og_titulo %}{{ marca.nome }} — {{ marca.slogan }}{% endblock %}">
+<meta property="og:description" content="{% block og_descricao %}{{ marca.og_descricao }}{% endblock %}">
+<meta property="og:image" content="{% block og_imagem %}{{ SITE_URL }}{{ marca.logo }}{% endblock %}">
+<meta property="og:url" content="{% block og_url %}{{ SITE_URL }}/{% endblock %}">
 <meta property="og:type" content="{% block og_tipo %}website{% endblock %}">
 <style>
   :root{
-    --azul:#1652C7; --azul-d:#0E3D9E; --azul-c:#3B82F6;
-    --amarelo:#FFC700; --amarelo-d:#E0A800;
+    --azul:{{ marca.cor_primaria }}; --azul-d:{{ marca.cor_primaria_escura }}; --azul-c:{{ marca.cor_primaria_clara }};
+    --amarelo:{{ marca.cor_destaque }}; --amarelo-d:{{ marca.cor_destaque_escura }};
     --branco:#FFFFFF; --bg:#F8FAFC; --linha:#E2E8F0;
     --txt:#0F172A; --mut:#64748B; --verde:#16A34A;
     --vermelho:#DC2626;
@@ -96,9 +96,9 @@
   .menu .mlink.insta:hover{ filter:brightness(1.12); }
   .menu .mlink.clube{ background:var(--amarelo); color:var(--azul); }
   .menu .mlink.clube:hover{ background:var(--amarelo-d); }
-  .menu .mlink.lista{ background:#0E3D9E; color:#FFC700;
-    border:1.5px solid #FFC700; }
-  .menu .mlink.lista:hover{ background:#1652C7; }
+  .menu .mlink.lista{ background:{{ marca.cor_primaria_escura }}; color:{{ marca.cor_destaque }};
+    border:1.5px solid {{ marca.cor_destaque }}; }
+  .menu .mlink.lista:hover{ background:{{ marca.cor_primaria }}; }
 
   /* ─── Drawer lateral (todos os departamentos) ─── */
   .drawer-bg{ position:fixed; inset:0; background:rgba(15,23,42,.55);
@@ -146,14 +146,14 @@
   .hero .slide{ background:linear-gradient(135deg, #87CEFA, #4FB8FF);
     border-radius:18px; overflow:hidden; min-height:300px; position:relative;
     display:flex; align-items:center; padding:32px 48px; }
-  .hero .slide h2{ color:#FFC700; font-size:54px; font-weight:900;
-    letter-spacing:-1px; text-shadow:2px 2px 0 #1652C7; line-height:1;
+  .hero .slide h2{ color:{{ marca.cor_destaque }}; font-size:54px; font-weight:900;
+    letter-spacing:-1px; text-shadow:2px 2px 0 {{ marca.cor_primaria }}; line-height:1;
     font-family:'Comic Sans MS','Marker Felt',sans-serif; }
   .hero .slide .sub{ color:#fff; font-size:22px; font-weight:800; margin-top:10px;
-    text-shadow:1px 1px 0 #1652C7; }
+    text-shadow:1px 1px 0 {{ marca.cor_primaria }}; }
   .hero .slide .cta{ display:inline-block; margin-top:18px; background:var(--amarelo);
     color:var(--azul); font-weight:900; padding:14px 28px; border-radius:30px;
-    box-shadow:0 4px 0 #E0A800; font-size:15px; }
+    box-shadow:0 4px 0 {{ marca.cor_destaque_escura }}; font-size:15px; }
 
   /* ─── Badges (parcelamento etc) ─── */
   .badges{ max-width:1200px; margin:14px auto; padding:0 16px;
@@ -235,12 +235,12 @@
     color:#fff; display:flex; gap:30px; align-items:center; }
   .banner-clube .box img{ max-width:220px; }
   .banner-clube h3{ font-family:'Comic Sans MS','Marker Felt',sans-serif;
-    font-size:48px; color:var(--amarelo); text-shadow:2px 2px 0 #1652C7;
+    font-size:48px; color:var(--amarelo); text-shadow:2px 2px 0 {{ marca.cor_primaria }};
     line-height:1; }
   .banner-clube p{ font-size:16px; margin:14px 0; line-height:1.5; }
   .banner-clube .cta{ background:var(--amarelo); color:var(--azul);
     padding:14px 28px; border-radius:30px; font-weight:900;
-    display:inline-block; box-shadow:0 4px 0 #E0A800; }
+    display:inline-block; box-shadow:0 4px 0 {{ marca.cor_destaque_escura }}; }
 
   /* ─── Footer ─── */
   .footer{ background:var(--azul); color:#fff; padding:40px 16px 20px;
@@ -309,29 +309,27 @@
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "ToyStore",
-  "name": "Luqui Brinquedos",
-  "image": "https://www.luquibrinquedos.com.br/static/logo.png",
-  "url": "https://www.luquibrinquedos.com.br",
-  "telephone": "+5545991119800",
-  "email": "contato@luquibrinquedos.com.br",
+  "@type": {{ marca.schema_tipo|jstr }},
+  "name": {{ marca.nome|jstr }},
+  "image": {{ (SITE_URL ~ marca.logo)|jstr }},
+  "url": {{ SITE_URL|jstr }},
+  "telephone": {{ marca.telefone_e164|jstr }},
+  "email": {{ marca.email|jstr }},
   "priceRange": "$$",
   "address": {
     "@type": "PostalAddress",
-    "streetAddress": "R. Engenheiro Rebouças, 2053",
-    "addressLocality": "Cascavel",
-    "addressRegion": "PR",
-    "postalCode": "85812-130",
-    "addressCountry": "BR"
+    "streetAddress": {{ marca.endereco.rua|jstr }},
+    "addressLocality": {{ marca.endereco.cidade|jstr }},
+    "addressRegion": {{ marca.endereco.uf|jstr }},
+{% if marca.endereco.cep %}    "postalCode": {{ marca.endereco.cep|jstr }},
+{% endif %}    "addressCountry": "BR"
   },
   "openingHoursSpecification": [
-    {"@type":"OpeningHoursSpecification","dayOfWeek":["Monday","Tuesday","Wednesday","Thursday","Friday"],"opens":"09:00","closes":"18:00"},
-    {"@type":"OpeningHoursSpecification","dayOfWeek":"Saturday","opens":"09:00","closes":"13:00"}
-  ],
+{% for h in marca.horario_schema %}    {"@type":"OpeningHoursSpecification","dayOfWeek":{{ h.dias|jstr }},"opens":{{ h.abre|jstr }},"closes":{{ h.fecha|jstr }}}{% if not loop.last %},{% endif %}
+{% endfor %}  ],
   "sameAs": [
-    "https://instagram.com/luquibrinquedos",
-    "https://facebook.com/luquibrinquedos"
-  ]
+{% for u in marca.redes %}    {{ u|jstr }}{% if not loop.last %},{% endif %}
+{% endfor %}  ]
 }
 </script>
 {% block extra_head %}{% endblock %}
@@ -391,15 +389,15 @@ gtag('config', '{{ GOOGLE_TAG_ID }}');
   <link rel="stylesheet" href="{{ url_for('static', filename='mobile-kit.css') }}?v=17">
   <script defer src="{{ url_for('static', filename='mobile-kit.js') }}?v=17"></script>
   <script src="{{ url_for('static', filename='luq-dialogo.js') }}?v=2"></script><script>window.luqConfirmar||(window.luqConfirmar=function(m){return Promise.resolve(confirm(m&&m.titulo?m.titulo+"\n\n"+(m.mensagem||""):m))})</script>
-<!-- luqsys-pwa --><link rel="manifest" href="/manifest/app.json"><meta name="theme-color" content="#f5b20a"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Luqui"><link rel="apple-touch-icon" sizes="180x180" href="/static/brand/luqui-icon-180.png"><link rel="apple-touch-icon" sizes="192x192" href="/static/brand/luqui-icon-192.png"><script defer src="/static/pwa.js?v=1"></script><script defer src="/static/pdf-viewer.js?v=2"></script>
+<!-- luqsys-pwa --><link rel="manifest" href="/manifest/app.json"><meta name="theme-color" content="{{ marca.cor_tema }}"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="{{ marca.nome_curto }}"><link rel="apple-touch-icon" sizes="180x180" href="/static/brand/{{ marca.icone }}-180.png"><link rel="apple-touch-icon" sizes="192x192" href="/static/brand/{{ marca.icone }}-192.png"><script defer src="/static/pwa.js?v=1"></script><script defer src="/static/pdf-viewer.js?v=2"></script>
 </head>
 <body>
 
 <!-- TOPO -->
 <header class="topo">
   <div class="container">
-    <a href="/" class="logo" aria-label="Luqui Brinquedos">
-      <img src="/static/logo.png" alt="Luqui Brinquedos">
+    <a href="/" class="logo" aria-label="{{ marca.nome }}">
+      <img src="{{ marca.logo }}" alt="{{ marca.nome }}">
     </a>
     <form class="busca" action="/buscar" method="get">
       <input name="q" placeholder="o que você procura?" autocomplete="off"
@@ -467,10 +465,10 @@ gtag('config', '{{ GOOGLE_TAG_ID }}');
     <a href="/retirar-na-loja">🏪 Retirar</a>
     <span class="sep"></span>
     <a class="mlink promo" href="/promocoes">🔥 PROMOÇÕES</a>
-    <a class="mlink insta" href="https://instagram.com/luquibrinquedos"
-       target="_blank" rel="noopener">📷 Instagram</a>
-    <a class="mlink lista" href="/lista-aniversario">🎂 Lista Aniv</a>
-    {% if clube_ativo %}<a class="mlink clube" href="/clube">🎁 Clube Luqui</a>{% endif %}
+    {% if marca.instagram %}<a class="mlink insta" href="https://instagram.com/{{ marca.instagram }}"
+       target="_blank" rel="noopener">📷 Instagram</a>{% endif %}
+    {% if marca.lista_aniversario_ativa %}<a class="mlink lista" href="/lista-aniversario">🎂 Lista Aniv</a>{% endif %}
+    {% if clube_ativo %}<a class="mlink clube" href="/clube">🎁 {{ marca.clube_nome }}</a>{% endif %}
   </div>
 </nav>
 
@@ -526,8 +524,8 @@ gtag('config', '{{ GOOGLE_TAG_ID }}');
   </div>
   <div class="drawer-f">
     <a href="/promocoes">🔥 Promoções</a>
-    {% if clube_ativo %}<a href="/clube">🎁 Clube Luqui</a>{% endif %}
-    <a href="/sobre">ℹ️ Sobre a Luqui</a>
+    {% if clube_ativo %}<a href="/clube">🎁 {{ marca.clube_nome }}</a>{% endif %}
+    <a href="/sobre">ℹ️ Sobre a {{ marca.nome_curto }}</a>
   </div>
 </aside>
 <script>
@@ -550,7 +548,7 @@ document.addEventListener('keydown', e=>{
 
 {% block conteudo %}{% endblock %}
 
-<!-- ─── Luquizinha (chatbot site) ─── -->
+{% if marca.assistente_ativo %}<!-- ─── Luquizinha (chatbot site) ─── -->
 <!-- Modal central de boas-vindas (so na 1a visita) -->
 <div id="luqz-welcome" style="display:none">
   <div class="luqz-w-bg"></div>
@@ -559,7 +557,7 @@ document.addEventListener('keydown', e=>{
     <div class="luqz-w-avatar">
       <span>🧸</span>
     </div>
-    <h2>Oi! Eu sou a Luquizinha 💛</h2>
+    <h2>Oi! Eu sou a {{ marca.assistente_nome }} 💛</h2>
     <p>Te ajudo a achar o brinquedo <b>perfeito</b> pra criança da sua vida! Conta o que vc procura que eu separo as opções 🎁</p>
     <div class="luqz-w-btns">
       <button class="luqz-w-no">Agora não</button>
@@ -571,10 +569,10 @@ document.addEventListener('keydown', e=>{
 <div id="luqz-widget">
   <div id="luqz-balao" style="display:none">
     <button id="luqz-balao-x">×</button>
-    <p>Oi! 💛 Sou a Luquizinha 🧸<br>Quer ajuda pra escolher um brinquedo?</p>
+    <p>Oi! 💛 Sou a {{ marca.assistente_nome }} 🧸<br>Quer ajuda pra escolher um brinquedo?</p>
     <button id="luqz-balao-cta">Conversar agora</button>
   </div>
-  <button id="luqz-avatar" aria-label="Abrir Luquizinha">
+  <button id="luqz-avatar" aria-label="Abrir {{ marca.assistente_nome }}">
     <span class="luqz-emoji">🧸</span>
     <span id="luqz-badge" style="display:none">1</span>
   </button>
@@ -585,7 +583,7 @@ document.addEventListener('keydown', e=>{
     <div class="luqz-h-info">
       <div class="luqz-h-avatar">🧸</div>
       <div>
-        <b>Luquizinha</b>
+        <b>{{ marca.assistente_nome }}</b>
         <div class="luqz-status">Atendente IA · online</div>
       </div>
     </div>
@@ -593,7 +591,7 @@ document.addEventListener('keydown', e=>{
   </div>
   <div id="luqz-msgs"></div>
   <form id="luqz-form">
-    <input id="luqz-input" type="text" placeholder="Escreva pra Luquizinha..." maxlength="500" autocomplete="off">
+    <input id="luqz-input" type="text" placeholder="Escreva pra {{ marca.assistente_nome }}..." maxlength="500" autocomplete="off">
     <button type="submit" id="luqz-enviar">➤</button>
   </form>
 </div>
@@ -613,31 +611,31 @@ document.addEventListener('keydown', e=>{
   @keyframes luqzWelPop{ from{transform:scale(.85);opacity:0;} to{transform:scale(1);opacity:1;} }
   .luqz-w-x{ position:absolute; top:12px; right:14px; background:transparent;
     border:0; font-size:24px; color:#94A3B8; cursor:pointer; line-height:1; }
-  .luqz-w-x:hover{ color:#1652C7; }
+  .luqz-w-x:hover{ color:{{ marca.cor_primaria }}; }
   .luqz-w-avatar{ width:96px; height:96px; margin:0 auto 14px;
-    background:linear-gradient(135deg,#FFC700,#FFA800); border-radius:50%;
+    background:linear-gradient(135deg,{{ marca.cor_destaque }},#FFA800); border-radius:50%;
     display:flex; align-items:center; justify-content:center;
     box-shadow:0 12px 32px rgba(255,184,0,.5); border:4px solid #fff;
     animation:luqzWelBounce 1.6s ease-in-out infinite; }
   .luqz-w-avatar span{ font-size:52px; line-height:1; }
   @keyframes luqzWelBounce{ 0%,100%{transform:translateY(0);} 50%{transform:translateY(-8px);} }
-  .luqz-w-card h2{ color:#1652C7; font-size:22px; margin-bottom:10px; }
+  .luqz-w-card h2{ color:{{ marca.cor_primaria }}; font-size:22px; margin-bottom:10px; }
   .luqz-w-card p{ color:#475569; font-size:14.5px; line-height:1.5; margin-bottom:22px; }
   .luqz-w-btns{ display:flex; gap:10px; }
   .luqz-w-no{ flex:1; background:#fff; color:#64748B;
     border:1.5px solid #CBD5E1; padding:12px 16px; border-radius:10px;
     font-weight:700; font-size:14px; cursor:pointer; }
   .luqz-w-no:hover{ background:#F1F5F9; }
-  .luqz-w-yes{ flex:1.4; background:#1652C7; color:#fff; border:0;
+  .luqz-w-yes{ flex:1.4; background:{{ marca.cor_primaria }}; color:#fff; border:0;
     padding:12px 16px; border-radius:10px; font-weight:800; font-size:14px;
     cursor:pointer; box-shadow:0 6px 18px rgba(22,82,199,.35); }
-  .luqz-w-yes:hover{ background:#0E3D9E; }
+  .luqz-w-yes:hover{ background:{{ marca.cor_primaria_escura }}; }
 
   /* Avatar fixo */
   #luqz-widget{ position:fixed; bottom:18px; right:18px; z-index:80;
     display:flex; flex-direction:column; align-items:flex-end; gap:8px; }
   #luqz-avatar{ width:64px; height:64px; border-radius:50%;
-    background:linear-gradient(135deg, #FFC700, #FFA800);
+    background:linear-gradient(135deg, {{ marca.cor_destaque }}, #FFA800);
     box-shadow:0 8px 24px rgba(255,184,0,.5); cursor:pointer;
     border:3px solid #fff; display:flex; align-items:center;
     justify-content:center; transition:transform .15s; position:relative;
@@ -660,9 +658,9 @@ document.addEventListener('keydown', e=>{
   #luqz-balao p{ font-size:13.5px; line-height:1.4; margin-bottom:10px; color:#1e293b; }
   #luqz-balao-x{ position:absolute; top:4px; right:8px; background:none;
     font-size:18px; color:#94A3B8; cursor:pointer; padding:0; line-height:1; }
-  #luqz-balao-cta{ background:#1652C7; color:#fff; border:0; padding:8px 14px;
+  #luqz-balao-cta{ background:{{ marca.cor_primaria }}; color:#fff; border:0; padding:8px 14px;
     border-radius:8px; font-weight:700; font-size:13px; cursor:pointer; width:100%; }
-  #luqz-balao-cta:hover{ background:#0E3D9E; }
+  #luqz-balao-cta:hover{ background:{{ marca.cor_primaria_escura }}; }
   @keyframes luqzFadeIn{ from{opacity:0;transform:translateY(8px);} to{opacity:1;transform:none;} }
   /* Modal chat */
   #luqz-chat{ position:fixed; bottom:18px; right:18px; width:380px;
@@ -674,11 +672,11 @@ document.addEventListener('keydown', e=>{
     #luqz-chat{ bottom:0; right:0; left:0; width:100%;
       height:100vh; max-height:100vh; border-radius:0; }
   }
-  .luqz-h{ background:linear-gradient(135deg, #1652C7, #3B82F6);
+  .luqz-h{ background:linear-gradient(135deg, {{ marca.cor_primaria }}, {{ marca.cor_primaria_clara }});
     color:#fff; padding:14px 16px; display:flex; justify-content:space-between;
     align-items:center; flex:none; }
   .luqz-h-info{ display:flex; align-items:center; gap:10px; }
-  .luqz-h-avatar{ width:40px; height:40px; background:#FFC700;
+  .luqz-h-avatar{ width:40px; height:40px; background:{{ marca.cor_destaque }};
     border-radius:50%; display:flex; align-items:center; justify-content:center;
     font-size:22px; }
   .luqz-h b{ font-size:15px; }
@@ -692,7 +690,7 @@ document.addEventListener('keydown', e=>{
     background:#F8FAFC; display:flex; flex-direction:column; gap:8px; }
   .luqz-msg{ max-width:80%; padding:9px 13px; border-radius:14px;
     font-size:14px; line-height:1.4; white-space:pre-wrap; word-break:break-word; }
-  .luqz-msg.user{ background:#1652C7; color:#fff; align-self:flex-end;
+  .luqz-msg.user{ background:{{ marca.cor_primaria }}; color:#fff; align-self:flex-end;
     border-bottom-right-radius:4px; }
   .luqz-msg.bot{ background:#fff; color:#1e293b; align-self:flex-start;
     border-bottom-left-radius:4px; border:1px solid #E2E8F0; }
@@ -724,10 +722,10 @@ document.addEventListener('keydown', e=>{
   #luqz-input{ flex:1; padding:10px 14px; border:1px solid #E2E8F0;
     border-radius:24px; font-size:14px; outline:none;
     transition:border-color .15s; }
-  #luqz-input:focus{ border-color:#1652C7; }
-  #luqz-enviar{ background:#1652C7; color:#fff; border:0; width:40px;
+  #luqz-input:focus{ border-color:{{ marca.cor_primaria }}; }
+  #luqz-enviar{ background:{{ marca.cor_primaria }}; color:#fff; border:0; width:40px;
     height:40px; border-radius:50%; font-size:16px; cursor:pointer; }
-  #luqz-enviar:hover{ background:#0E3D9E; }
+  #luqz-enviar:hover{ background:{{ marca.cor_primaria_escura }}; }
   #luqz-enviar:disabled{ opacity:.5; cursor:not-allowed; }
 </style>
 
@@ -836,7 +834,7 @@ document.addEventListener('keydown', e=>{
       const teveHist = await carregarHistorico();
       if(!teveHist){
         // 1a mensagem sem chamar API — texto fixo
-        appendBot("Oi! 💛 Sou a Luquizinha 🧸 Antes da gente começar, me passa teu WhatsApp com DDD? Assim, se a gente perder a conversa aqui, eu te chamo direto por lá pra terminar teu atendimento ✨");
+        appendBot("Oi! 💛 Sou a {{ marca.assistente_nome }} 🧸 Antes da gente começar, me passa teu WhatsApp com DDD? Assim, se a gente perder a conversa aqui, eu te chamo direto por lá pra terminar teu atendimento ✨");
       }
     }
     setTimeout(()=>input.focus(), 200);
@@ -895,22 +893,22 @@ document.addEventListener('keydown', e=>{
     }, 120000);
   }
 })();
-</script>
+</script>{% endif %}
 
 <!-- FOOTER -->
 <footer class="footer">
   <div class="container">
     <div>
-      <img src="/static/logo.png" alt="Luqui Brinquedos"
+      <img src="{{ marca.logo }}" alt="{{ marca.nome }}"
            style="height:60px;width:auto;background:#fff;padding:8px 12px;border-radius:10px;margin-bottom:14px">
       <p style="font-size:13px;color:#cbd5e1;line-height:1.6">
-        A loja de brinquedos da família.<br>
-        Aqui você compra brincando! 🎈
+        {{ marca.frase_rodape }}<br>
+        {{ marca.slogan }}! 🎈
       </p>
       <p style="font-size:12px;color:#cbd5e1;margin-top:14px">
-        📍 R. Engenheiro Rebouças, 2053 — Centro — Cascavel/PR<br>
-        📞 (45) 99111-9800<br>
-        ✉️ contato@luquibrinquedos.com.br
+        {% for e in marca.enderecos %}📍 {% if marca.enderecos|length > 1 %}{{ e.nome }}: {% endif %}{{ e.linha }}<br>
+        {% endfor %}📞 {{ marca.telefone_exibicao }}<br>
+        ✉️ {{ marca.email }}
       </p>
     </div>
     <div>
@@ -919,8 +917,8 @@ document.addEventListener('keydown', e=>{
       <a href="/novidades">Novidades</a>
       <a href="/promocoes">Promoções</a>
       <a href="/mais-vendidos">Mais vendidos</a>
-      {% if clube_ativo %}<a href="/clube">Clube Luqui</a>{% endif %}
-      <a href="/sobre">Sobre a Luqui</a>
+      {% if clube_ativo %}<a href="/clube">{{ marca.clube_nome }}</a>{% endif %}
+      <a href="/sobre">Sobre a {{ marca.nome_curto }}</a>
       <a href="/minha-conta">Minha conta</a>
     </div>
     <div>
@@ -933,9 +931,9 @@ document.addEventListener('keydown', e=>{
       <a href="/termos">Termos de uso</a>
     </div>
     <div>
-      <h4>Siga a Luqui</h4>
-      <a href="https://instagram.com/luquibrinquedos" target="_blank">📷 Instagram</a>
-      <a href="https://facebook.com/luquibrinquedos" target="_blank">📘 Facebook</a>
+      <h4>Siga a {{ marca.nome_curto }}</h4>
+      {% if marca.instagram %}<a href="https://instagram.com/{{ marca.instagram }}" target="_blank">📷 Instagram</a>{% endif %}
+      {% if marca.facebook %}<a href="https://facebook.com/{{ marca.facebook }}" target="_blank">📘 Facebook</a>{% endif %}
       <a href="https://wa.me/{{ whatsapp_loja() }}" target="_blank">💚 WhatsApp</a>
     </div>
   </div>
@@ -951,10 +949,10 @@ document.addEventListener('keydown', e=>{
           Receber novidades
         </button>
       </form>
-      <p id="news-msg" style="color:#FFC700;margin-top:8px;font-size:12px"></p>
+      <p id="news-msg" style="color:{{ marca.cor_destaque }};margin-top:8px;font-size:12px"></p>
     </div>
-    © {{ ano }} Luqui Brinquedos LTDA · CNPJ 32.650.888/0001-02 ·
-    Site desenvolvido com 💛 pela <a href="https://luqsys.com.br" target="_blank" style="color:#FFC700">Luqsys</a>
+    © {{ ano }} {{ marca.razao_social }} · CNPJ {{ marca.cnpj }} ·
+    Site desenvolvido com 💛 pela <a href="https://luqsys.com.br" target="_blank" style="color:{{ marca.cor_destaque }}">Luqsys</a>
   </div>
 </footer>
 <script>
@@ -986,9 +984,9 @@ async function assinarNewsletter(form){
     <div style="flex:1;min-width:280px;font-size:13px;line-height:1.5">
       🍪 <b>Cookies & Privacidade.</b> Usamos cookies pra manter seu carrinho funcionando e entender quais produtos vocês mais curtem.
       Ao continuar navegando, você concorda. Detalhes em
-      <a href="/privacidade" style="color:#FFC700;text-decoration:underline">nossa política</a>.
+      <a href="/privacidade" style="color:{{ marca.cor_destaque }};text-decoration:underline">nossa política</a>.
     </div>
-    <button onclick="aceitarCookies()" style="background:#FFC700;color:#1652C7;border:0;padding:10px 22px;border-radius:8px;font-weight:900;cursor:pointer;font-size:13px">
+    <button onclick="aceitarCookies()" style="background:{{ marca.cor_destaque }};color:{{ marca.cor_primaria }};border:0;padding:10px 22px;border-radius:8px;font-weight:900;cursor:pointer;font-size:13px">
       Aceitar e fechar
     </button>
   </div>
@@ -1025,7 +1023,7 @@ function luquiConfirm(opts){
   return new Promise(resolve=>{
     const bg = document.createElement('div');
     bg.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
-    const corOk = o.perigo ? '#DC2626' : '#1652C7';
+    const corOk = o.perigo ? '#DC2626' : '{{ marca.cor_primaria }}';
     bg.innerHTML = `
       <div style="background:#fff;border-radius:16px;padding:24px 28px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
         <h3 style="color:${corOk};font-size:18px;font-weight:900;margin-bottom:8px">${o.titulo}</h3>
@@ -1061,13 +1059,13 @@ function mostrarCarrinhoPopup(){
       <div style="width:36px;height:36px;background:#DCFCE7;color:#15803D;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900">✓</div>
       <div style="flex:1">
         <div style="font-weight:800;color:#1e293b;font-size:14px">Adicionado ao carrinho!</div>
-        <div style="font-size:11px;color:#64748B">O brinquedo já está no seu carrinho 🛒</div>
+        <div style="font-size:11px;color:#64748B">O {{ marca.item }} já está no seu carrinho 🛒</div>
       </div>
       <button onclick="document.getElementById('luq-cart-popup').remove()" style="background:transparent;border:0;color:#94A3B8;font-size:20px;cursor:pointer;line-height:1;padding:0 4px">×</button>
     </div>
     <div style="display:flex;gap:6px">
-      <a href="/carrinho" style="flex:1.2;background:#1652C7;color:#fff;padding:9px 12px;border-radius:8px;font-weight:700;font-size:13px;text-align:center;text-decoration:none">Ver carrinho →</a>
-      <button onclick="document.getElementById('luq-cart-popup').remove()" style="flex:1;background:#fff;color:#1652C7;border:1.5px solid #1652C7;padding:9px 12px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">Continuar</button>
+      <a href="/carrinho" style="flex:1.2;background:{{ marca.cor_primaria }};color:#fff;padding:9px 12px;border-radius:8px;font-weight:700;font-size:13px;text-align:center;text-decoration:none">Ver carrinho →</a>
+      <button onclick="document.getElementById('luq-cart-popup').remove()" style="flex:1;background:#fff;color:{{ marca.cor_primaria }};border:1.5px solid {{ marca.cor_primaria }};padding:9px 12px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">Continuar</button>
     </div>`;
   if(!document.getElementById('lqc-pop-css')){
     const st = document.createElement('style');
@@ -1084,7 +1082,7 @@ function mostrarCarrinhoPopup(){
 // via prompt e cadastra em avise_me. O cron /cron/avise-me dispara
 // o aviso quando o estoque sobe.
 async function avisarVoltaCard(pid){
-  const email = prompt('Pra te avisar quando o brinquedo voltar, qual seu e-mail?');
+  const email = prompt('Pra te avisar quando o {{ marca.item }} voltar, qual seu e-mail?');
   if(!email || !email.includes('@')){ if(email) toast('E-mail inválido','err'); return; }
   const tel = prompt('WhatsApp (opcional, com DDD):') || '';
   try {

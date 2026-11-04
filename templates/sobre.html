@@ -1,13 +1,16 @@
 {% extends "base.html" %}
-{% block titulo %}Sobre a Luqui — Loja de brinquedos da família{% endblock %}
+{# Textos da loja de brinquedos (Luqui) ficam como sempre foram; outro
+   segmento (marca.brinquedos falso) cai na versão genérica. #}
+{% set varias = marca.enderecos|length > 1 %}
+{% block titulo %}Sobre a {{ marca.nome_curto }} — {% if marca.brinquedos %}Loja de brinquedos da família{% else %}{{ marca.tipo_loja[:1]|upper }}{{ marca.tipo_loja[1:] }}{% endif %}{% endblock %}
 {% block conteudo %}
 
-<section style="background:linear-gradient(135deg,#1652C7,#3FA89C);color:#fff;padding:80px 16px;text-align:center">
+<section style="background:linear-gradient(135deg,{{ marca.cor_primaria }},#3FA89C);color:#fff;padding:80px 16px;text-align:center">
   <div style="max-width:900px;margin:0 auto">
-    <h1 style="font-family:'Comic Sans MS','Marker Felt',sans-serif;font-size:60px;color:var(--amarelo);text-shadow:3px 3px 0 #0E3D9E;line-height:1">
-      Sobre a Luqui
+    <h1 style="font-family:'Comic Sans MS','Marker Felt',sans-serif;font-size:60px;color:var(--amarelo);text-shadow:3px 3px 0 {{ marca.cor_primaria_escura }};line-height:1">
+      Sobre a {{ marca.nome_curto }}
     </h1>
-    <p style="font-size:22px;font-weight:700;margin-top:20px">Aqui você compra brincando 💛</p>
+    <p style="font-size:22px;font-weight:700;margin-top:20px">{{ marca.slogan }} 💛</p>
   </div>
 </section>
 
@@ -15,17 +18,20 @@
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center;margin-bottom:50px">
     <div>
       <h2 style="color:var(--azul);margin-bottom:18px">Nossa história</h2>
-      <p>A <b>Luqui Brinquedos</b> é uma loja de família, fundada em Cascavel/PR
+      {% if marca.brinquedos %}<p>A <b>{{ marca.nome }}</b> é uma loja de família, fundada em {{ marca.endereco.cidade_uf }}
       com um propósito simples: <b>levar alegria pras crianças e tranquilidade pros pais</b>.</p>
       <p style="margin-top:14px">Selecionamos brinquedos pensando em mais do que diversão — buscamos
       itens que estimulam o desenvolvimento, despertam a criatividade e marcam
       momentos especiais da infância.</p>
-      <p style="margin-top:14px">Mais do que vender, a gente quer fazer parte da história das suas crianças. 🧸</p>
+      <p style="margin-top:14px">Mais do que vender, a gente quer fazer parte da história das suas crianças. 🧸</p>{% else %}<p>A <b>{{ marca.nome }}</b> é uma {{ marca.tipo_loja }} de {{ marca.endereco.cidade_uf }}
+      com um propósito simples: <b>ter o que a sua casa precisa, com preço justo e atendimento de verdade</b>.</p>
+      <p style="margin-top:14px">Selecionamos {{ marca.itens }} pensando no dia a dia — qualidade, variedade
+      e bom preço, pra você resolver tudo num lugar só.</p>{% endif %}
     </div>
     <div style="background:#FEF3C7;border-radius:18px;padding:30px;text-align:center">
-      <div style="font-size:80px">🧸</div>
-      <div style="font-family:'Comic Sans MS',sans-serif;font-size:32px;color:var(--azul);margin-top:10px">Família Luqui</div>
-      <p style="font-size:13px;color:var(--mut);margin-top:6px">Cascavel · Toledo · Brasil inteiro</p>
+      <div style="font-size:80px">{{ marca.emoji }}</div>
+      <div style="font-family:'Comic Sans MS',sans-serif;font-size:32px;color:var(--azul);margin-top:10px">Família {{ marca.nome_curto }}</div>
+      <p style="font-size:13px;color:var(--mut);margin-top:6px">{{ marca.endereco.cidade }} · {% if marca.brinquedos %}Toledo · {% endif %}Brasil inteiro</p>
     </div>
   </div>
 
@@ -43,26 +49,25 @@
     <div style="background:#fff;padding:24px;border-radius:14px;border:2px solid var(--linha);text-align:center">
       <div style="font-size:48px">🚚</div>
       <h3 style="color:var(--azul);margin:10px 0">Entrega rápida</h3>
-      <p style="font-size:13px;color:var(--mut)">Cascavel: entrega local <b>R$ 10</b>. Toledo e Brasil: enviamos pelo Melhor Envio (Correios/JadLog/etc).</p>
+      <p style="font-size:13px;color:var(--mut)">{{ marca.endereco.cidade }}: entrega local <b>R$ 10</b>. Toledo e Brasil: enviamos pelo Melhor Envio (Correios/JadLog/etc).</p>
     </div>
   </div>
 
-  <h2 style="color:var(--azul);margin:50px 0 20px">📍 Visite a loja física</h2>
+  <h2 style="color:var(--azul);margin:50px 0 20px">📍 {% if varias %}Visite nossas lojas físicas{% else %}Visite a loja física{% endif %}</h2>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:30px;align-items:start">
     <div>
-      <p><b>Endereço:</b><br>R. Engenheiro Rebouças, 2053 — Centro<br>Cascavel/PR · CEP 85812-130</p>
+      {% for e in marca.enderecos %}<p{% if not loop.first %} style="margin-top:14px"{% endif %}><b>{% if varias %}{{ e.nome }}{% else %}Endereço:{% endif %}</b><br>{{ e.rua }} — {{ e.bairro }}<br>{{ e.cidade_uf }}{% if e.cep %} · CEP {{ e.cep }}{% endif %}{% if varias and e.obs %}<br>🅿️ {{ e.obs }}{% endif %}</p>{% endfor %}
       <p style="margin-top:14px"><b>Horário de funcionamento:</b><br>
-        Segunda a sexta: 9h às 18h<br>
-        Sábado: 9h às 13h<br>
-        Domingo e feriado: fechado</p>
+        {{ marca.horario_sobre|join('<br>\n        '|safe) }}</p>
       <p style="margin-top:14px"><b>📞 Contato:</b><br>
-        WhatsApp: <a href="https://wa.me/{{ whatsapp_loja() }}" target="_blank" style="color:var(--azul);font-weight:700">(45) 99111-9800</a><br>
-        E-mail: contato@luquibrinquedos.com.br</p>
-      <p style="margin-top:14px;font-size:13px;color:var(--mut)">🅿️ Estacionamento gratuito em frente à loja.</p>
+        WhatsApp: <a href="https://wa.me/{{ whatsapp_loja() }}" target="_blank" style="color:var(--azul);font-weight:700">{{ marca.telefone_exibicao }}</a><br>
+        E-mail: {{ marca.email }}</p>
+      {# Uma loja só: o estacionamento (obs do endereço) vira a linha 🅿️.
+         A Luqui grava "Estacionamento gratuito em frente" — daí o "à loja". #}{% if not varias and marca.endereco.obs %}<p style="margin-top:14px;font-size:13px;color:var(--mut)">🅿️ {{ marca.endereco.obs }}{{ ' à loja' if marca.endereco.obs.endswith(' em frente') }}.</p>{% endif %}
     </div>
     <div style="aspect-ratio:1;border-radius:14px;overflow:hidden;border:2px solid var(--linha)">
       <iframe
-        src="https://www.google.com/maps/embed/v1/place?q=R.+Engenheiro+Rebou%C3%A7as%2C+2053+-+Centro%2C+Cascavel+-+PR%2C+85812-130&key=&output=embed"
+        src="https://www.google.com/maps/embed/v1/place?q={{ marca.endereco.maps_q }}&key=&output=embed"
         style="width:100%;height:100%;border:0"
         loading="lazy"
         referrerpolicy="no-referrer-when-downgrade">
@@ -71,10 +76,10 @@
   </div>
 
   <div style="text-align:center;margin:60px 0 40px">
-    <h2 style="color:var(--azul);margin-bottom:14px">Bora brincar?</h2>
+    <h2 style="color:var(--azul);margin-bottom:14px">{% if marca.brinquedos %}Bora brincar?{% else %}Bora às compras?{% endif %}</h2>
     <p style="color:var(--mut);margin-bottom:20px">Conheça nossa loja online{% if clube_ativo %} e o Clube Caixa Misteriosa{% endif %}</p>
-    <a href="/" class="btn btn-amarelo" style="padding:16px 32px;font-size:15px;margin-right:8px">🛒 Ver brinquedos</a>
-    {% if clube_ativo %}<a href="/clube" class="btn btn-primario" style="padding:16px 32px;font-size:15px">🎁 Clube Luqui</a>{% endif %}
+    <a href="/" class="btn btn-amarelo" style="padding:16px 32px;font-size:15px;margin-right:8px">🛒 Ver {{ marca.itens }}</a>
+    {% if clube_ativo %}<a href="/clube" class="btn btn-primario" style="padding:16px 32px;font-size:15px">🎁 {{ marca.clube_nome }}</a>{% endif %}
   </div>
 </section>
 

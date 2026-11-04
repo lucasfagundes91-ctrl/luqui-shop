@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block titulo %}Lista de Aniversário — Luqui Brinquedos{% endblock %}
+{% block titulo %}Lista de Aniversário — {{ marca.nome }}{% endblock %}
 {% block conteudo %}
 <div style="max-width:900px;margin:40px auto;padding:0 16px">
   <div style="background:linear-gradient(135deg,#87CEFA,#4FB8FF);border-radius:24px;padding:48px 32px;text-align:center;color:#fff">
     <div style="font-size:80px;line-height:1">🎂</div>
-    <h1 style="color:#FFC700;font-family:'Comic Sans MS','Marker Felt',sans-serif;font-size:48px;margin-top:8px;text-shadow:2px 2px 0 #1652C7">Lista de Aniversário</h1>
+    <h1 style="color:{{ marca.cor_destaque }};font-family:'Comic Sans MS','Marker Felt',sans-serif;font-size:48px;margin-top:8px;text-shadow:2px 2px 0 {{ marca.cor_primaria }}">Lista de Aniversário</h1>
     <p style="font-size:18px;font-weight:700;margin-top:10px;max-width:620px;margin-left:auto;margin-right:auto;line-height:1.5">
       A festa do seu filho ou filha vai ser inesquecível com os brinquedos que ele mais quer 💛
     </p>

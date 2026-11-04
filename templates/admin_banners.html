@@ -1,6 +1,6 @@
 {% extends "admin_base.html" %}
 {% set pagina = 'banners' %}
-{% block titulo %}Banners — LuquiShop{% endblock %}
+{% block titulo %}Banners — {{ marca.admin_nome }}{% endblock %}
 {% block conteudo %}
 <style>
   .head-bn{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:14px}
@@ -70,7 +70,7 @@
   <div class="seed-card">
     <div class="info">
       <h3>✨ Banners padrão disponíveis</h3>
-      <p>Faltam <b>{{ 5 - banners|length }}</b> banner{{ 's' if (5 - banners|length) != 1 else '' }} pra completar o set padrão (PIX 3%, parcele 12x, Retire na loja, Clube Luqui, Novidades).</p>
+      <p>Faltam <b>{{ 5 - banners|length }}</b> banner{{ 's' if (5 - banners|length) != 1 else '' }} pra completar o set padrão (PIX 3%, parcele 12x, Retire na loja, {{ marca.clube_nome }}, Novidades).</p>
     </div>
     <form method="post" action="/admin/banners/seed">
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">

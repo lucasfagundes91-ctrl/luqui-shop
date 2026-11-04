@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block titulo %}Assinatura #{{ a.id }} — Clube Luqui{% endblock %}
+{% block titulo %}Assinatura #{{ a.id }} — {{ marca.clube_nome }}{% endblock %}
 {% block conteudo %}
 <div style="max-width:780px;margin:30px auto;padding:0 16px">
   <div style="background:#fff;padding:30px;border-radius:18px">
@@ -25,7 +25,7 @@
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;margin-bottom:24px">
         <div>
           <h1 style="font-size:24px">{{ a.plano_nome }}</h1>
-          <div style="color:var(--mut);font-size:13px">Clube Luqui — Assinatura #{{ a.id }}</div>
+          <div style="color:var(--mut);font-size:13px">{{ marca.clube_nome }} — Assinatura #{{ a.id }}</div>
         </div>
         <div style="text-align:right">
           <div style="font-size:12px;color:var(--mut)">VALOR MENSAL</div>

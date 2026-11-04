@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR"><head><meta charset="UTF-8"><title>Admin · LuquiShop</title>
+<html lang="pt-BR"><head><meta charset="UTF-8"><title>Admin · {{ marca.admin_nome }}</title>
 <style>
   body{font-family:-apple-system,sans-serif;background:#0F172A;min-height:100vh;display:flex;align-items:center;justify-content:center;margin:0}
   .box{background:#fff;padding:32px;border-radius:18px;width:400px;max-width:90%}
@@ -13,10 +13,10 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='mobile-kit.css') }}?v=18">
   <script defer src="{{ url_for('static', filename='mobile-kit.js') }}?v=17"></script>
   <script src="{{ url_for('static', filename='luq-dialogo.js') }}?v=2"></script><script>window.luqConfirmar||(window.luqConfirmar=function(m){return Promise.resolve(confirm(m&&m.titulo?m.titulo+"\n\n"+(m.mensagem||""):m))})</script>
-<!-- luqsys-pwa --><link rel="manifest" href="/manifest/admin.json"><meta name="theme-color" content="#202e5c"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Luqui Gestão"><link rel="apple-touch-icon" sizes="180x180" href="/static/brand/luqui-admin-icon-180.png"><link rel="apple-touch-icon" sizes="192x192" href="/static/brand/luqui-admin-icon-192.png"><script defer src="/static/pwa.js?v=1"></script><script defer src="/static/pdf-viewer.js?v=2"></script>
+<!-- luqsys-pwa --><link rel="manifest" href="/manifest/admin.json"><meta name="theme-color" content="#202e5c"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="{{ marca.gestao_nome }}"><link rel="apple-touch-icon" sizes="180x180" href="/static/brand/{{ marca.icone_admin }}-180.png"><link rel="apple-touch-icon" sizes="192x192" href="/static/brand/{{ marca.icone_admin }}-192.png"><script defer src="/static/pwa.js?v=1"></script><script defer src="/static/pdf-viewer.js?v=2"></script>
 </head><body>
 <div class="box">
-  <img src="/static/logo.png" alt="Luqui Brinquedos"
+  <img src="{{ marca.logo }}" alt="{{ marca.nome }}"
        style="height:64px;width:auto;display:block;margin:0 auto 14px">
   <h2 style="text-align:center;font-size:14px;color:#64748B;letter-spacing:2px">ADMIN</h2>
   <p class="sub" style="text-align:center">Acesso restrito.</p>

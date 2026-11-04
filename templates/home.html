@@ -2,18 +2,20 @@
 {% from "_card.html" import card %}
 {# O título antigo era só "Aqui você compra brincando" — bonito, mas ninguém
    digita isso no Google. Agora carrega o que a pessoa realmente busca. #}
-{% block titulo %}Luqui Brinquedos — Loja de brinquedos em Cascavel/PR | Entrega pra todo o Brasil{% endblock %}
-{% block descricao %}Loja de brinquedos em Cascavel/PR com mais de 800 itens: pelúcias, jogos, bonecas, Hot Wheels, Lego e Pokémon. Compre online com entrega pra todo o Brasil, até 12x ou {{ desconto_pix_pct|int }}% off no PIX, e retire na loja da R. Eng. Rebouças, 2053.{% endblock %}
+{# Textos de vitrine: loja de brinquedos (Luqui) mantém a copy de sempre;
+   outro segmento usa a versão genérica com o nome e os itens da marca. #}
+{% block titulo %}{{ marca.nome }} — {{ marca.tipo_loja[:1]|upper }}{{ marca.tipo_loja[1:] }} em {{ marca.endereco.cidade_uf }} | Entrega pra todo o Brasil{% endblock %}
+{% block descricao %}{% if marca.brinquedos %}Loja de brinquedos em {{ marca.endereco.cidade_uf }} com mais de 800 itens: pelúcias, jogos, bonecas, Hot Wheels, Lego e Pokémon.{% else %}{{ marca.tipo_loja[:1]|upper }}{{ marca.tipo_loja[1:] }} em {{ marca.endereco.cidade_uf }}.{% endif %} Compre online com entrega pra todo o Brasil, até 12x ou {{ desconto_pix_pct|int }}% off no PIX, e retire na loja da {{ marca.endereco.curto }}.{% endblock %}
 {% block conteudo %}
 
 {% if cupom_primeira_compra_ativo %}
 <!-- CUPOM PRIMEIRA COMPRA — primeira coisa que a cliente ve. Antes ficava
      escondido dentro do checkout, mas 96% das pessoas nem chegavam la. -->
 <section style="margin:0 0 14px">
-  <div style="background:linear-gradient(90deg,#1652C7,#3B82F6);color:#fff;padding:14px 20px;border-radius:14px;text-align:center;font-weight:800;font-size:15px;box-shadow:0 6px 18px rgba(22,82,199,.25);display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap">
+  <div style="background:linear-gradient(90deg,{{ marca.cor_primaria }},{{ marca.cor_primaria_clara }});color:#fff;padding:14px 20px;border-radius:14px;text-align:center;font-weight:800;font-size:15px;box-shadow:0 6px 18px rgba(22,82,199,.25);display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap">
     <span style="font-size:22px">🎁</span>
     <span>Primeira compra? Use o cupom
-      <code style="background:#FFC700;color:#1652C7;padding:4px 12px;border-radius:6px;letter-spacing:1.5px;font-size:14px;margin:0 4px">PRIMEIRO10</code>
+      <code style="background:{{ marca.cor_destaque }};color:{{ marca.cor_primaria }};padding:4px 12px;border-radius:6px;letter-spacing:1.5px;font-size:14px;margin:0 4px">PRIMEIRO10</code>
       e ganhe <b>10% OFF</b> em compras a partir de R$ 50</span>
   </div>
 </section>
@@ -47,8 +49,8 @@
     <div class="slide">
       <div>
         <h2>BEM-VINDO 💛</h2>
-        <div class="sub">A loja de brinquedos da família<br>
-          em <b style="color:#FFC700">até 12x</b> sem juros</div>
+        <div class="sub">{{ marca.frase_rodape.rstrip('.') }}<br>
+          em <b style="color:{{ marca.cor_destaque }}">até 12x</b> sem juros</div>
         <a href="/produtos" class="cta">Ver produtos →</a>
       </div>
     </div>
@@ -75,22 +77,22 @@
      então o único texto fixo que o Google lia era o <title>. -->
 <section style="max-width:1200px;margin:18px auto 0;padding:0 16px;text-align:center">
   <h1 style="font-size:17px;font-weight:900;color:var(--azul);line-height:1.45">
-    Loja de brinquedos em Cascavel/PR — com entrega pra todo o Brasil
+    {{ marca.tipo_loja[:1]|upper }}{{ marca.tipo_loja[1:] }} em {{ marca.endereco.cidade_uf }} — com entrega pra todo o Brasil
   </h1>
   <p style="font-size:13px;color:var(--mut);margin-top:8px;max-width:760px;margin-left:auto;margin-right:auto;line-height:1.6">
-    Pelúcias, jogos de tabuleiro, bonecas, Hot Wheels, Lego, Pokémon e brinquedos
-    educativos. Compre online em até 12x ou com {{ desconto_pix_pct|int }}% de desconto no PIX,
-    receba em casa ou retire na loja da <b>R. Engenheiro Rebouças, 2053 — Centro, Cascavel/PR</b>.
+    {% if marca.brinquedos %}Pelúcias, jogos de tabuleiro, bonecas, Hot Wheels, Lego, Pokémon e brinquedos
+    educativos.{% else %}{{ marca.itens[:1]|upper }}{{ marca.itens[1:] }} pra sua casa, direto da {{ marca.nome }}.{% endif %} Compre online em até 12x ou com {{ desconto_pix_pct|int }}% de desconto no PIX,
+    receba em casa ou retire {% if marca.enderecos|length > 1 %}em uma das nossas lojas: {% for e in marca.enderecos %}<b>{{ e.rua }} — {{ e.bairro }}, {{ e.cidade_uf }}</b>{{ ' e ' if loop.revindex == 2 else ('.' if loop.last else ', ') }}{% endfor %}{% else %}na loja da <b>{{ marca.endereco.rua }} — {{ marca.endereco.bairro }}, {{ marca.endereco.cidade_uf }}</b>.{% endif %}
   </p>
 </section>
 
-<!-- AVISO 15% OFF LOJA FÍSICA -->
+{% if marca.desconto_online_pct %}<!-- AVISO 15% OFF LOJA FÍSICA -->
 <section style="margin:14px 0">
-  <div style="background:linear-gradient(135deg,#FFC700,#FFA500);color:#1e3a8a;padding:14px 20px;border-radius:14px;text-align:center;font-weight:800;font-size:15px;box-shadow:0 4px 14px rgba(255,199,0,.25);display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap">
+  <div style="background:linear-gradient(135deg,{{ marca.cor_destaque }},#FFA500);color:#1e3a8a;padding:14px 20px;border-radius:14px;text-align:center;font-weight:800;font-size:15px;box-shadow:0 4px 14px rgba(255,199,0,.25);display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap">
     <span style="font-size:22px">🏷️</span>
-    <span>Comprando online você paga <span style="background:#1e3a8a;color:#FFC700;padding:2px 10px;border-radius:8px">15% menos</span> que na loja física!</span>
+    <span>Comprando online você paga <span style="background:#1e3a8a;color:{{ marca.cor_destaque }};padding:2px 10px;border-radius:8px">{{ marca.desconto_online_pct }}% menos</span> que na loja física!</span>
   </div>
-</section>
+</section>{% endif %}
 
 <!-- BADGES -->
 <section class="badges">
@@ -117,7 +119,7 @@
 <section class="banner-clube">
   <div class="box">
     <div style="flex:1">
-      <h3>Clube Luqui</h3>
+      <h3>{{ marca.clube_nome }}</h3>
       <p>
         🎁 Descontos exclusivos · 5% de desconto acumulativo<br>
         💰 Cada R$ 1 em compras = 1 ponto<br>
@@ -147,7 +149,7 @@
 <!-- MAIS VISITADOS — pageviews reais de /produto/<id> nos últimos 30 dias -->
 <div class="secao">
   <h2>👀 Os mais visitados</h2>
-  <div class="sub">Os brinquedos que mais gente veio olhar aqui no site</div>
+  <div class="sub">Os {{ marca.itens }} que mais gente veio olhar aqui no site</div>
 </div>
 <section class="produtos">
   {% for p in mais_visitados %}{{ card(p, selo='MAIS VISTO', selo_classe='visto') }}{% endfor %}
@@ -173,7 +175,7 @@
      (venda, visita, busca) vendem mais do que uma lista alfabética. -->
 <div class="secao">
   <h2>✨ Chegou faz pouco</h2>
-  <div class="sub">Os últimos brinquedos que entraram na loja</div>
+  <div class="sub">Os últimos {{ marca.itens }} que entraram na loja</div>
   <a class="ver-todos" href="/novidades">ver todas as novidades →</a>
 </div>
 <section class="produtos">
@@ -186,22 +188,22 @@
   {% endfor %}
 </section>
 
-<!-- INSTAGRAM -->
+{% if marca.instagram %}<!-- INSTAGRAM -->
 <section style="max-width:1200px;margin:30px auto;padding:0 16px">
-  <a href="https://instagram.com/luquibrinquedos" target="_blank" rel="noopener"
+  <a href="https://instagram.com/{{ marca.instagram }}" target="_blank" rel="noopener"
      style="display:flex;align-items:center;justify-content:center;gap:18px;flex-wrap:wrap;
             background:linear-gradient(45deg,#F58529,#DD2A7B,#8134AF);color:#fff;
             padding:26px 20px;border-radius:18px;text-align:center;
             box-shadow:0 8px 24px rgba(221,42,123,.25)">
     <span style="font-size:46px;line-height:1">📷</span>
     <span>
-      <b style="display:block;font-size:20px;font-weight:900">Siga a Luqui no Instagram</b>
-      <span style="font-size:14px;opacity:.95">@luquibrinquedos — novidades, promoções e bastidores da loja</span>
+      <b style="display:block;font-size:20px;font-weight:900">Siga a {{ marca.nome_curto }} no Instagram</b>
+      <span style="font-size:14px;opacity:.95">@{{ marca.instagram }} — novidades, promoções e bastidores da loja</span>
     </span>
     <span style="background:#fff;color:#DD2A7B;font-weight:900;padding:12px 22px;border-radius:10px">
       Seguir agora →
     </span>
   </a>
-</section>
+</section>{% endif %}
 
 {% endblock %}

@@ -1,19 +1,19 @@
 {% extends "base.html" %}
-{% block titulo %}Clube Caixa Misteriosa — Luqui Brinquedos{% endblock %}
+{% block titulo %}Clube Caixa Misteriosa — {{ marca.nome }}{% endblock %}
 {% block conteudo %}
 
 <!-- HERO CLUBE -->
-<section style="background:linear-gradient(135deg,#1652C7,#3B82F6);color:#fff;padding:60px 16px;text-align:center;position:relative;overflow:hidden">
+<section style="background:linear-gradient(135deg,{{ marca.cor_primaria }},{{ marca.cor_primaria_clara }});color:#fff;padding:60px 16px;text-align:center;position:relative;overflow:hidden">
   <div style="max-width:900px;margin:0 auto;position:relative;z-index:1">
-    <h1 style="font-family:'Comic Sans MS','Marker Felt',sans-serif;font-size:60px;color:var(--amarelo);text-shadow:3px 3px 0 #0E3D9E;line-height:1">
+    <h1 style="font-family:'Comic Sans MS','Marker Felt',sans-serif;font-size:60px;color:var(--amarelo);text-shadow:3px 3px 0 {{ marca.cor_primaria_escura }};line-height:1">
       Caixa Misteriosa
     </h1>
     <p style="font-size:22px;font-weight:700;margin-top:16px">
       Todo mês uma surpresa nova chega na sua casa! 🎁
     </p>
     <p style="font-size:14px;margin-top:14px;opacity:.9">
-      Brinquedos selecionados a dedo pela equipe Luqui · Livros lúdicos ·
-      Entrega local Cascavel R$ 10 · Cancele quando quiser
+      Brinquedos selecionados a dedo pela equipe {{ marca.nome_curto }} · Livros lúdicos ·
+      Entrega local {{ marca.endereco.cidade }} R$ 10 · Cancele quando quiser
     </p>
   </div>
 </section>
@@ -104,7 +104,7 @@
     <h2 style="color:var(--azul);font-size:32px;font-family:'Comic Sans MS',sans-serif">
       🚚 ENTREGA RÁPIDA
     </h2>
-    <p style="color:var(--azul);font-weight:700;font-size:18px;margin-top:6px">Cascavel R$ 10 fixo · Toledo e Brasil pelo Melhor Envio</p>
+    <p style="color:var(--azul);font-weight:700;font-size:18px;margin-top:6px">{{ marca.endereco.cidade }} R$ 10 fixo · Toledo e Brasil pelo Melhor Envio</p>
     <p style="color:var(--azul);font-size:13px;margin-top:8px;opacity:.85">
       Cota o frete no checkout pelos transportadores Correios, JadLog, etc.
     </p>
@@ -115,9 +115,9 @@
 <section style="max-width:800px;margin:40px auto;padding:30px 16px;text-align:center">
   <h2 style="color:var(--azul);margin-bottom:14px">Ainda com dúvidas?</h2>
   <p style="color:var(--mut);margin-bottom:20px">Chama no WhatsApp que tiramos toda dúvida 💛</p>
-  <a href="https://wa.me/{{ whatsapp_loja() }}?text=Olá!%20Quero%20saber%20mais%20sobre%20o%20Clube%20Luqui"
+  <a href="https://wa.me/{{ whatsapp_loja() }}?text=Olá!%20Quero%20saber%20mais%20sobre%20o%20{{ marca.clube_nome|urlencode }}"
      target="_blank" class="btn btn-amarelo" style="padding:16px 32px;font-size:15px">
-    💚 Falar com a Luqui no WhatsApp
+    💚 Falar com a {{ marca.nome_curto }} no WhatsApp
   </a>
 </section>
 

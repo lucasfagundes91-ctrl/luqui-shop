@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block titulo %}Lista de {{ lista.nome_crianca }} — Luqui Brinquedos{% endblock %}
+{% block titulo %}Lista de {{ lista.nome_crianca }} — {{ marca.nome }}{% endblock %}
 {% block conteudo %}
 <div style="max-width:1100px;margin:30px auto;padding:0 16px">
   <a href="/minhas-listas" style="color:var(--mut);font-size:13px">← Voltar pras minhas listas</a>
@@ -16,9 +16,9 @@
     <div style="background:#F8FAFC;border-radius:10px;padding:14px;margin-top:18px">
       <div style="font-size:12px;color:var(--mut);font-weight:700;margin-bottom:4px">📋 LINK PRA COMPARTILHAR</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <code style="flex:1;min-width:200px;background:#fff;padding:8px 12px;border-radius:6px;font-size:13px;word-break:break-all">https://www.luquibrinquedos.com.br/lista/{{ lista.slug }}</code>
+        <code style="flex:1;min-width:200px;background:#fff;padding:8px 12px;border-radius:6px;font-size:13px;word-break:break-all">{{ SITE_URL }}/lista/{{ lista.slug }}</code>
         <button onclick="copiarLink()" class="btn btn-primario" style="padding:8px 16px;font-size:13px">📋 Copiar</button>
-        <a target="_blank" href="https://wa.me/?text={{ ('Olha a lista de aniversário do(a) ' + lista.nome_crianca + '! 🎂 https://www.luquibrinquedos.com.br/lista/' + lista.slug)|urlencode }}" class="btn btn-verde" style="padding:8px 16px;font-size:13px">💬 WhatsApp</a>
+        <a target="_blank" href="https://wa.me/?text={{ ('Olha a lista de aniversário do(a) ' + lista.nome_crianca + '! 🎂 ' + SITE_URL + '/lista/' + lista.slug)|urlencode }}" class="btn btn-verde" style="padding:8px 16px;font-size:13px">💬 WhatsApp</a>
       </div>
     </div>
   </div>
@@ -63,7 +63,7 @@
 
 <script>
 function copiarLink(){
-  const url = 'https://www.luquibrinquedos.com.br/lista/{{ lista.slug }}';
+  const url = '{{ SITE_URL }}/lista/{{ lista.slug }}';
   navigator.clipboard.writeText(url).then(()=>toast('Link copiado! 📋')).catch(()=>toast('Erro ao copiar','err'));
 }
 async function removerItem(id){

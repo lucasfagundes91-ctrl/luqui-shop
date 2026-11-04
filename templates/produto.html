@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block titulo %}{{ p.descricao }} — Luqui Brinquedos{% endblock %}
-{% block descricao %}{{ p.descricao_longa or p.descricao }} — Compre na Luqui Brinquedos. Frete pra todo Brasil, parcelado em até 12x, 3% off no PIX.{% endblock %}
-{% block og_titulo %}{{ p.descricao }} — Luqui Brinquedos{% endblock %}
+{% block titulo %}{{ p.descricao }} — {{ marca.nome }}{% endblock %}
+{% block descricao %}{{ p.descricao_longa or p.descricao }} — Compre na {{ marca.nome }}. Frete pra todo Brasil, parcelado em até 12x, 3% off no PIX.{% endblock %}
+{% block og_titulo %}{{ p.descricao }} — {{ marca.nome }}{% endblock %}
 {% block og_descricao %}{{ (p.descricao_longa or p.descricao)|truncate(200) }} — R$ {{ '%.2f'|format(p.preco_promo or p.preco_venda or 0) }}{% endblock %}
-{% block og_imagem %}{{ p.foto_url or 'https://www.luquibrinquedos.com.br/static/logo.png' }}{% endblock %}
+{% block og_imagem %}{{ p.foto_url or (SITE_URL ~ marca.logo) }}{% endblock %}
 {% block og_url %}{{ SITE_URL }}{{ url_produto(p) }}{% endblock %}
 {% block canonical %}{{ SITE_URL }}{{ url_produto(p) }}{% endblock %}
 {% block og_tipo %}product{% endblock %}
@@ -16,7 +16,7 @@
   "description": {{ (p.descricao_longa or p.descricao)|tojson }},
   {% if p.foto_url %}"image": {{ p.foto_url|tojson }},{% endif %}
   "sku": {{ (p.codigo_barras or p.id|string)|tojson }},
-  "brand": {"@type":"Brand","name":"Luqui Brinquedos"},
+  "brand": {"@type":"Brand","name":{{ marca.nome|jstr }}},
   {# As estrelas já existiam na página e não iam pro Google — é o que faz o
      resultado aparecer com ★★★★★ na busca. Só sai quando há avaliação
      aprovada de verdade: inventar rating é motivo de penalidade. #}
@@ -37,7 +37,7 @@
     "priceValidUntil": "{{ preco_valido_ate }}",
     "itemCondition": "https://schema.org/NewCondition",
     "availability": "{{ 'https://schema.org/InStock' if (p.estoque_atual and p.estoque_atual|float > 0) else 'https://schema.org/OutOfStock' }}",
-    "seller": {"@type":"Organization","name":"Luqui Brinquedos"}
+    "seller": {"@type":"Organization","name":{{ marca.nome|jstr }}}
   }
 }
 </script>
@@ -131,10 +131,10 @@
 
       <!-- Cupom 1a compra: aparece SE produto >= R$50 (limite minimo do cupom) -->
       {% if cupom_primeira_compra_ativo and preco_final|float >= 50 %}
-      <div style="margin:0 0 14px;padding:12px 14px;background:linear-gradient(90deg,#1652C7,#3B82F6);color:#fff;border-radius:10px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:10px">
+      <div style="margin:0 0 14px;padding:12px 14px;background:linear-gradient(90deg,{{ marca.cor_primaria }},{{ marca.cor_primaria_clara }});color:#fff;border-radius:10px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:10px">
         <span style="font-size:18px">🎁</span>
         <span>
-          1ª compra? Cupom <code style="background:#FFC700;color:#1652C7;padding:2px 8px;border-radius:4px;font-weight:800;letter-spacing:1px">PRIMEIRO10</code>
+          1ª compra? Cupom <code style="background:{{ marca.cor_destaque }};color:{{ marca.cor_primaria }};padding:2px 8px;border-radius:4px;font-weight:800;letter-spacing:1px">PRIMEIRO10</code>
           tira <b>10% OFF</b> ({{ rs(preco_final|float * 0.9) }} no PIX no checkout)
         </span>
       </div>
@@ -144,7 +144,7 @@
            >= 3 pra evitar parecer pouco. Pra estoque baixo, urgencia. -->
       {% if visitas_30d and visitas_30d >= 3 %}
       <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#92400E;background:#FEF3C7;padding:8px 12px;border-radius:8px;margin-bottom:10px;font-weight:700">
-        👀 {{ visitas_30d }} pessoas viram esse brinquedo nos últimos 30 dias
+        👀 {{ visitas_30d }} pessoas viram esse {{ marca.item }} nos últimos 30 dias
       </div>
       {% endif %}
       {% if p.estoque_atual and p.estoque_atual|float > 0 and p.estoque_atual|float <= 3 %}
@@ -206,7 +206,7 @@
         </button>
       </div>
       {% endif %}
-      {% if em_estoque %}
+      {% if em_estoque and marca.lista_aniversario_ativa %}
       <button class="btn-mini-lista" style="margin-top:8px;width:100%;padding:10px;background:transparent;color:var(--azul);border:1px dashed var(--azul);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer"
               onclick="addNaLista({{ p.id }}, this)">
         🎁 Adicionar à lista de aniversário
@@ -277,7 +277,7 @@
       </a>
 
       <div style="display:flex;gap:6px;margin-top:10px;font-size:12px">
-        <a href="https://wa.me/?text={{ ('Olha esse brinquedo: ' + p.descricao + ' — ' + SITE_URL + url_produto(p))|urlencode }}"
+        <a href="https://wa.me/?text={{ ('Olha esse ' + marca.item + ': ' + p.descricao + ' — ' + SITE_URL + url_produto(p))|urlencode }}"
            target="_blank" style="flex:1;padding:8px;background:#F1F5F9;color:var(--azul);text-align:center;border-radius:6px;text-decoration:none;font-weight:600">
           📲 Indicar pra um amigo
         </a>
@@ -351,7 +351,7 @@
       {% for a in avaliacoes %}
       <div style="border-top:1px solid var(--linha);padding:14px 0">
         <div style="display:flex;justify-content:space-between;font-size:13px">
-          <b>{{ a.cliente_nome or 'Cliente Luqui' }}</b>
+          <b>{{ a.cliente_nome or 'Cliente ' + marca.nome_curto }}</b>
           <span style="color:#F59E0B;font-size:15px">{{ '★' * a.estrelas }}<span style="opacity:.3">{{ '★' * (5 - a.estrelas) }}</span></span>
         </div>
         {% if a.titulo %}<div style="font-weight:700;margin:6px 0">{{ a.titulo }}</div>{% endif %}

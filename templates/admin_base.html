@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="UTF-8">
-<title>{% block titulo %}LuquiShop Admin{% endblock %}</title>
+<title>{% block titulo %}{{ marca.admin_titulo }}{% endblock %}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:-apple-system,sans-serif;background:#F8FAFC;color:#0F172A}
@@ -65,11 +65,11 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='mobile-kit.css') }}?v=18">
   <script defer src="{{ url_for('static', filename='mobile-kit.js') }}?v=17"></script>
   <script src="{{ url_for('static', filename='luq-dialogo.js') }}?v=2"></script><script>window.luqConfirmar||(window.luqConfirmar=function(m){return Promise.resolve(confirm(m&&m.titulo?m.titulo+"\n\n"+(m.mensagem||""):m))})</script>
-<!-- luqsys-pwa --><link rel="manifest" href="/manifest/admin.json"><meta name="theme-color" content="#202e5c"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Luqui Gestão"><link rel="apple-touch-icon" sizes="180x180" href="/static/brand/luqui-admin-icon-180.png"><link rel="apple-touch-icon" sizes="192x192" href="/static/brand/luqui-admin-icon-192.png"><script defer src="/static/pwa.js?v=1"></script><script defer src="/static/pdf-viewer.js?v=2"></script>
+<!-- luqsys-pwa --><link rel="manifest" href="/manifest/admin.json"><meta name="theme-color" content="#202e5c"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="{{ marca.gestao_nome }}"><link rel="apple-touch-icon" sizes="180x180" href="/static/brand/{{ marca.icone_admin }}-180.png"><link rel="apple-touch-icon" sizes="192x192" href="/static/brand/{{ marca.icone_admin }}-192.png"><script defer src="/static/pwa.js?v=1"></script><script defer src="/static/pdf-viewer.js?v=2"></script>
 </head><body>
 <div class="layout">
   <aside class="sb">
-    <img src="/static/logo.png" alt="Luqui Brinquedos"
+    <img src="{{ marca.logo }}" alt="{{ marca.nome }}"
          style="height:50px;width:auto;display:block;margin:0 auto 14px;background:#fff;padding:6px 10px;border-radius:8px">
     <h1 style="font-size:11px;color:#FFC700;text-align:center;letter-spacing:2px;margin-bottom:20px">ADMIN</h1>
     <a href="/admin" {% if pagina == 'home' %}class="on"{% endif %}>📊 Dashboard</a>
@@ -83,7 +83,7 @@
     <a href="/admin/cupons" {% if pagina == 'cupons' %}class="on"{% endif %}>🎟️ Cupons</a>
     <a href="/admin/paginas" {% if pagina == 'paginas' %}class="on"{% endif %}>📝 Páginas do site</a>
     <a href="/admin/avaliacoes" {% if pagina == 'avaliacoes' %}class="on"{% endif %}>⭐ Avaliações</a>
-    <a href="/admin/chats" {% if pagina == 'chats' %}class="on"{% endif %}>🧸 Chats Luquizinha</a>
+    {% if marca.assistente_ativo %}<a href="/admin/chats" {% if pagina == 'chats' %}class="on"{% endif %}>🧸 Chats {{ marca.assistente_nome }}</a>{% endif %}
     <a href="/admin/melhorenvio" {% if pagina == 'melhorenvio' %}class="on"{% endif %}>📮 Melhor Envio</a>
     <a href="/" target="_blank">🔗 Ver site público</a>
     <div class="sb-rodape">
@@ -147,5 +147,5 @@ function luquiFecharModal(){ document.getElementById('luqui-modal-overlay').styl
   else { init(); }
 })();
 </script>
-<script src="https://bankpro.luqsys.com.br/static/pedir-ajuste.js?v=1" data-sistema="Luqui Shop" defer></script>
+<script src="https://bankpro.luqsys.com.br/static/pedir-ajuste.js?v=1" data-sistema="{{ marca.sistema_ajuste }}" defer></script>
 </body></html>

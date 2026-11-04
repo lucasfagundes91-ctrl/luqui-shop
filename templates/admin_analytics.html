@@ -1,6 +1,6 @@
 {% extends "admin_base.html" %}
 {% set pagina = 'analytics' %}
-{% block titulo %}Visitas do site — LuquiShop Admin{% endblock %}
+{% block titulo %}Visitas do site — {{ marca.admin_titulo }}{% endblock %}
 {% block conteudo %}
 <h2>📈 Visitas do site</h2>
 
@@ -106,7 +106,7 @@
 <div class="card">
   <h3 style="margin-bottom:14px">🔎 O que as pessoas procuram</h3>
   <p style="color:#64748B;font-size:12px;margin-bottom:12px">
-    Busca do site + Luquizinha. Termo em <b style="color:#DC2626">vermelho</b> é procura
+    Busca do site{% if marca.assistente_ativo %} + {{ marca.assistente_nome }}{% endif %}. Termo em <b style="color:#DC2626">vermelho</b> é procura
     que não achou nada — vale conferir se falta cadastrar ou comprar esse produto.
     Alimenta a vitrine "Bombando nas buscas" da home.
   </p>

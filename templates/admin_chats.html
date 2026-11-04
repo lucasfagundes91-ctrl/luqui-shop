@@ -1,6 +1,6 @@
 {% extends "admin_base.html" %}
 {% set pagina = 'chats' %}
-{% block titulo %}Chats Luquizinha — LuquiShop{% endblock %}
+{% block titulo %}Chats {{ marca.assistente_nome }} — {{ marca.admin_nome }}{% endblock %}
 {% block conteudo %}
 <style>
   .head-ch{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:14px}
@@ -35,7 +35,7 @@
 {% set leads = conversas|selectattr('lead_marcado')|list|length if conversas else 0 %}
 
 <div class="head-ch">
-  <h2>🧸 Conversas da Luquizinha (site)</h2>
+  <h2>🧸 Conversas da {{ marca.assistente_nome }} (site)</h2>
   {% if conversas %}
     <div class="badges">
       <span class="badge azul">💬 {{ conversas|length }} conversa{{ 's' if conversas|length != 1 else '' }}</span>
@@ -108,7 +108,7 @@
   <div class="vazio">
     <div class="emoji">🧸</div>
     <h3 style="color:#475569;margin-bottom:8px">Nenhuma conversa ainda</h3>
-    <p>Quando alguém usar o chatbot Luquizinha no site, as conversas aparecem aqui.</p>
+    <p>Quando alguém usar o chatbot {{ marca.assistente_nome }} no site, as conversas aparecem aqui.</p>
   </div>
 {% endif %}
 {% endblock %}

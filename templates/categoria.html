@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block titulo %}{{ categoria_nome }}{% if pagina > 1 %} — página {{ pagina }}{% endif %} | Comprar {{ categoria_nome|lower }} online — Luqui Brinquedos{% endblock %}
-{% block descricao %}{{ categoria_nome }} na Luqui Brinquedos: {{ total }} produtos com entrega pra todo o Brasil, parcelado em até 12x e retirada na loja em Cascavel/PR.{% endblock %}
+{% block titulo %}{{ categoria_nome }}{% if pagina > 1 %} — página {{ pagina }}{% endif %} | Comprar {{ categoria_nome|lower }} online — {{ marca.nome }}{% endblock %}
+{% block descricao %}{{ categoria_nome }} na {{ marca.nome }}: {{ total }} produtos com entrega pra todo o Brasil, parcelado em até 12x e retirada na loja em {{ marca.endereco.cidade_uf }}.{% endblock %}
 {# Filtro e ordenação criam URL nova com o mesmo conteúdo — essas saem do
    índice e apontam pra categoria limpa. Paginação continua indexável (com
    canonical própria), senão o produto que só aparece na página 3 some. #}
@@ -53,14 +53,14 @@
   .filtro-link.on { background:#eaf2ff; font-weight:600; }
   .filtro-link .cb { width:16px; height:16px; border:1.5px solid #bbb; border-radius:3px;
     display:inline-flex; align-items:center; justify-content:center; font-size:11px;
-    color:#1652C7; flex-shrink:0; }
-  .filtro-link.on .cb { border-color:#1652C7; background:#1652C7; color:#fff; }
+    color:{{ marca.cor_primaria }}; flex-shrink:0; }
+  .filtro-link.on .cb { border-color:{{ marca.cor_primaria }}; background:{{ marca.cor_primaria }}; color:#fff; }
   .filtro-link .nm { flex:1; }
   .filtro-link .qt { color:#888; font-size:11.5px; }
   .filtros-ativos { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
-  .filtros-ativos .chip { background:#1652C7; color:#fff; padding:4px 10px; border-radius:14px;
+  .filtros-ativos .chip { background:{{ marca.cor_primaria }}; color:#fff; padding:4px 10px; border-radius:14px;
     font-size:12px; text-decoration:none; }
-  .filtros-ativos .chip:hover { background:#0E3D9E; }
+  .filtros-ativos .chip:hover { background:{{ marca.cor_primaria_escura }}; }
   .filtros-ativos .limpar { color:#666; padding:4px 10px; text-decoration:underline; font-size:12px; }
 </style>
 
@@ -162,9 +162,9 @@
             <button class="btn-mini-add" onclick="carrinhoAdd({{ p.id }})">+ Carrinho</button>
             <button class="btn-mini-buy" onclick="comprarAgora({{ p.id }})">Comprar</button>
           </div>
-          <button class="btn-mini-lista" onclick="addNaLista({{ p.id }}, this)">
+          {% if marca.lista_aniversario_ativa %}<button class="btn-mini-lista" onclick="addNaLista({{ p.id }}, this)">
             🎁 Lista de aniversário
-          </button>
+          </button>{% endif %}
           {% else %}
           <button class="btn-mini-add" disabled style="background:#e2e8f0;color:#64748b;cursor:not-allowed;width:100%;margin-top:6px">
             😔 Indisponível

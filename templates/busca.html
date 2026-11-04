@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block titulo %}Busca: {{ termo }} — Luqui Brinquedos{% endblock %}
+{% block titulo %}Busca: {{ termo }} — {{ marca.nome }}{% endblock %}
 {# busca interna e listagem filtrada não vão pro índice: os filtros combinam em URLs infinitas #}
 {% block meta_robots %}{% if termo_q or filtros_ativos %}noindex, follow{% else %}index, follow, max-image-preview:large{% endif %}{% endblock %}
 {% block conteudo %}
@@ -50,14 +50,14 @@
   .filtro-link.on { background:#eaf2ff; font-weight:600; }
   .filtro-link .cb { width:16px; height:16px; border:1.5px solid #bbb; border-radius:3px;
     display:inline-flex; align-items:center; justify-content:center; font-size:11px;
-    color:#1652C7; flex-shrink:0; }
-  .filtro-link.on .cb { border-color:#1652C7; background:#1652C7; color:#fff; }
+    color:{{ marca.cor_primaria }}; flex-shrink:0; }
+  .filtro-link.on .cb { border-color:{{ marca.cor_primaria }}; background:{{ marca.cor_primaria }}; color:#fff; }
   .filtro-link .nm { flex:1; }
   .filtro-link .qt { color:#888; font-size:11.5px; }
   .filtros-ativos { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
-  .filtros-ativos .chip { background:#1652C7; color:#fff; padding:4px 10px;
+  .filtros-ativos .chip { background:{{ marca.cor_primaria }}; color:#fff; padding:4px 10px;
     border-radius:14px; font-size:12px; text-decoration:none; }
-  .filtros-ativos .chip:hover { background:#0E3D9E; }
+  .filtros-ativos .chip:hover { background:{{ marca.cor_primaria_escura }}; }
   .filtros-ativos .limpar { color:#666; padding:4px 10px; text-decoration:underline;
     font-size:12px; }
   /* Departamento minimizado por padrão pra não dominar — usuário expande */
@@ -166,9 +166,9 @@
             <button class="btn-mini-add" onclick="carrinhoAdd({{ p.id }})">+ Carrinho</button>
             <button class="btn-mini-buy" onclick="comprarAgora({{ p.id }})">Comprar</button>
           </div>
-          <button class="btn-mini-lista" onclick="addNaLista({{ p.id }}, this)">
+          {% if marca.lista_aniversario_ativa %}<button class="btn-mini-lista" onclick="addNaLista({{ p.id }}, this)">
             🎁 Lista de aniversário
-          </button>
+          </button>{% endif %}
           {% else %}
           <button class="btn-mini-add" disabled style="background:#e2e8f0;color:#64748b;cursor:not-allowed;width:100%;margin-top:6px">
             😔 Indisponível

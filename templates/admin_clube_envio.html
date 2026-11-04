@@ -1,6 +1,6 @@
 {% extends "admin_base.html" %}
 {% set pagina = 'envio_mensal' %}
-{% block titulo %}Envio Mensal — Clube Luqui{% endblock %}
+{% block titulo %}Envio Mensal — {{ marca.clube_nome }}{% endblock %}
 {% block conteudo %}
 <style>
   .hero-envio{background:linear-gradient(135deg,#FFC700 0%,#E0A800 100%);color:#082B7A;padding:22px 26px;border-radius:14px;margin-bottom:18px;
@@ -22,7 +22,7 @@
 <div class="hero-envio">
   <div>
     <h2>🎁 Caixa Misteriosa</h2>
-    <p>Mês a mês envia a caixa pros assinantes ativos do Clube Luqui</p>
+    <p>Mês a mês envia a caixa pros assinantes ativos do {{ marca.clube_nome }}</p>
   </div>
 </div>
 

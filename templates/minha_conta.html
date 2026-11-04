@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block titulo %}Minha conta — Luqui Brinquedos{% endblock %}
+{% block titulo %}Minha conta — {{ marca.nome }}{% endblock %}
 {% block conteudo %}
 <div style="max-width:1000px;margin:30px auto;padding:0 16px">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
@@ -11,11 +11,11 @@
   </div>
 
   {% if clube_ativo and assinatura %}
-    <div style="background:linear-gradient(135deg,#1652C7,#3FA89C);color:#fff;padding:24px;border-radius:18px;margin-bottom:14px">
+    <div style="background:linear-gradient(135deg,{{ marca.cor_primaria }},#3FA89C);color:#fff;padding:24px;border-radius:18px;margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px">
         <div>
-          <div style="font-size:12px;letter-spacing:2px;opacity:.9">CLUBE LUQUI</div>
-          <h3 style="font-family:'Comic Sans MS',sans-serif;font-size:30px;color:var(--amarelo);text-shadow:2px 2px 0 #0E3D9E">{{ assinatura.plano_nome }}</h3>
+          <div style="font-size:12px;letter-spacing:2px;opacity:.9">{{ marca.clube_nome|upper }}</div>
+          <h3 style="font-family:'Comic Sans MS',sans-serif;font-size:30px;color:var(--amarelo);text-shadow:2px 2px 0 {{ marca.cor_primaria_escura }}">{{ assinatura.plano_nome }}</h3>
           <p style="font-size:13px;margin-top:6px">
             {{ rs(assinatura.preco_mensal) }}/mês · Status:
             <b style="text-transform:uppercase">{{ assinatura.status }}</b>
@@ -71,7 +71,7 @@
 
     <script>
     async function pausarClube(){
-      const ok = await luquiConfirm({titulo:'Pausar Clube Luqui?',
+      const ok = await luquiConfirm({titulo:'Pausar {{ marca.clube_nome }}?',
         msg:'Sua assinatura fica pausada por 30 dias. Você não recebe a caixa misteriosa nesse período.',
         ok:'Pausar', cancel:'Cancelar'});
       if(!ok) return;
@@ -102,7 +102,7 @@
       location.reload();
     }
     async function cancelarClube(){
-      const ok = await luquiConfirm({titulo:'Cancelar Clube Luqui?',
+      const ok = await luquiConfirm({titulo:'Cancelar {{ marca.clube_nome }}?',
         msg:'Você perde os benefícios do plano (caixa misteriosa, descontos exclusivos, acumulação de pontos extra). Tem certeza?',
         ok:'Cancelar assinatura', cancel:'Manter assinatura', perigo:true});
       if(!ok) return;
@@ -115,7 +115,7 @@
     </script>
   {% elif clube_ativo %}
     <a href="/clube" style="display:block;background:#fef3c7;color:#92400e;padding:14px;border-radius:10px;margin-bottom:24px;font-weight:600;text-align:center">
-      🎁 Você ainda não tem assinatura do Clube Luqui. Conhecer planos →
+      🎁 Você ainda não tem assinatura do {{ marca.clube_nome }}. Conhecer planos →
     </a>
   {% endif %}
 
@@ -138,13 +138,13 @@
   </div>
   {% endif %}
 
-  <a href="/minhas-listas" style="display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid var(--linha);padding:18px;border-radius:12px;margin-bottom:24px;text-decoration:none;color:var(--txt)">
+  {% if marca.lista_aniversario_ativa %}<a href="/minhas-listas" style="display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid var(--linha);padding:18px;border-radius:12px;margin-bottom:24px;text-decoration:none;color:var(--txt)">
     <div>
       <b style="color:var(--azul)">🎂 Listas de aniversário</b><br>
       <span style="font-size:13px;color:var(--mut)">Crie uma lista pro seu filho e compartilhe com a família</span>
     </div>
     <span style="color:var(--azul);font-size:18px">→</span>
-  </a>
+  </a>{% endif %}
 
   <script>
   async function baixarNFe(pid, btn){

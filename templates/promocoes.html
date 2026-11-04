@@ -1,17 +1,17 @@
 {% extends "base.html" %}
 {% from "_card.html" import card %}
-{% block titulo %}🔥 Promoções — Luqui Brinquedos{% endblock %}
+{% block titulo %}🔥 Promoções — {{ marca.nome }}{% endblock %}
 {% block conteudo %}
 
 {% set ativos = itens|selectattr('estoque_atual', 'gt', 0)|list %}
 
-<section style="background:linear-gradient(135deg,#1652C7,#3B82F6);color:#fff;padding:44px 16px;text-align:center">
+<section style="background:linear-gradient(135deg,{{ marca.cor_primaria }},{{ marca.cor_primaria_clara }});color:#fff;padding:44px 16px;text-align:center">
   <div style="max-width:820px;margin:0 auto">
-    <h1 style="font-size:40px;font-weight:900;color:#FFC700;text-shadow:2px 2px 0 rgba(0,0,0,.15)">🔥 Promoções</h1>
+    <h1 style="font-size:40px;font-weight:900;color:{{ marca.cor_destaque }};text-shadow:2px 2px 0 rgba(0,0,0,.15)">🔥 Promoções</h1>
     <p style="font-size:17px;margin-top:8px">
       {% if ativos %}
         <b>{{ ativos|length }}</b> ofertas com preço baixado
-        {% if economia_max > 0 %}— economize até <b style="color:#FFC700">{{ rs(economia_max) }}</b>{% endif %}
+        {% if economia_max > 0 %}— economize até <b style="color:{{ marca.cor_destaque }}">{{ rs(economia_max) }}</b>{% endif %}
       {% else %}
         Nenhuma promoção ativa agora — volta logo!
       {% endif %}
@@ -54,18 +54,18 @@
 </div>
 {% endif %}
 
-<!-- INSTAGRAM: promoção relâmpago sai primeiro por lá -->
+{% if marca.instagram %}<!-- INSTAGRAM: promoção relâmpago sai primeiro por lá -->
 <section style="max-width:1200px;margin:30px auto;padding:0 16px">
-  <a href="https://instagram.com/luquibrinquedos" target="_blank" rel="noopener"
+  <a href="https://instagram.com/{{ marca.instagram }}" target="_blank" rel="noopener"
      style="display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;
             background:linear-gradient(45deg,#F58529,#DD2A7B,#8134AF);color:#fff;
             padding:22px 20px;border-radius:18px;text-align:center">
     <span style="font-size:38px;line-height:1">📷</span>
     <span>
       <b style="display:block;font-size:18px;font-weight:900">As promoções relâmpago saem no Instagram</b>
-      <span style="font-size:13px;opacity:.95">Siga @luquibrinquedos e não perde nenhuma</span>
+      <span style="font-size:13px;opacity:.95">Siga @{{ marca.instagram }} e não perde nenhuma</span>
     </span>
     <span style="background:#fff;color:#DD2A7B;font-weight:900;padding:10px 20px;border-radius:10px">Seguir →</span>
   </a>
-</section>
+</section>{% endif %}
 {% endblock %}

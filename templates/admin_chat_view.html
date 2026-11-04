@@ -1,6 +1,6 @@
 {% extends "admin_base.html" %}
 {% set pagina = 'chats' %}
-{% block titulo %}Chat #{{ conv.id }} — LuquiShop{% endblock %}
+{% block titulo %}Chat #{{ conv.id }} — {{ marca.admin_nome }}{% endblock %}
 {% block conteudo %}
 <a href="/admin/chats" style="color:#64748B;font-size:13px">← Voltar pra lista</a>
 <h2 style="margin-top:6px">🧸 Conversa #{{ conv.id }}</h2>
