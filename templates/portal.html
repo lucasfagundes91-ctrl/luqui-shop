@@ -10,7 +10,7 @@
 <meta name="theme-color" content="{{ marca.cor_tema }}">
 <meta property="og:title" content="{{ marca.portal_nome }}">
 <meta property="og:description" content="{{ marca.nome_curto }} e {{ marca.portal_parceiro.nome }} — escolha a loja.">
-<meta property="og:image" content="{{ SITE_URL }}{{ marca.logo }}">
+<meta property="og:image" content="{{ SITE_URL }}{{ marca.portal_logo }}">
 <style>
   :root { --tinta:#17202e; --mut:#5f6b7a; --fundo:#f3f4f1; --linha:#e7e8e4; }
   * { box-sizing:border-box; }
@@ -92,7 +92,7 @@
 {% endmacro %}
 
 <header class="topo">
-  <span class="selo"><img src="{{ marca.logo }}" alt="{{ marca.portal_nome }}"></span>
+  <span class="selo"><img src="{{ marca.portal_logo }}" alt="{{ marca.portal_nome }}"></span>
   <h1>Bem-vindo ao {{ marca.portal_nome }}</h1>
   <p>Duas lojas no centro de Cascavel. Escolha onde quer comprar:</p>
 </header>

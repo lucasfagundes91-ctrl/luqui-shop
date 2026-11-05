@@ -325,7 +325,7 @@
         <h3 style="margin-bottom:14px">Resumo</h3>
         {% for it in itens %}
         <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px">
-          <span>{{ it.qtd }}× {{ it.descricao[:30] }}{% if it.descricao|length > 30 %}...{% endif %}{% if it.vendedor == 'parceiro' %}<br><span style="display:inline-block;background:#FFF7ED;color:#C2410C;border:1px solid #FED7AA;border-radius:6px;padding:1px 7px;font-size:11px;font-weight:700;margin-top:3px">🏬 Vendido por {{ it.vendedor_nome }}</span>{% endif %}</span>
+          <span>{{ it.qtd }}× {{ it.descricao[:30] }}{% if it.descricao|length > 30 %}...{% endif %}{% if it.vendedor == 'parceiro' %}<br><span style="display:inline-block;background:#FFF7ED;color:#C2410C;border:1px solid #FED7AA;border-radius:6px;padding:1px 7px;font-size:11px;font-weight:700;margin-top:3px">🏬 Vendido por {{ parceiro_nome }}</span>{% endif %}</span>
           <span>{{ rs(it.preco * it.qtd) }}</span>
         </div>
         {% endfor %}

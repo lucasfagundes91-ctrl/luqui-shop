@@ -207,6 +207,7 @@ def _carrega():
     m['cor_destaque_texto'] = _env('cor_destaque_texto', m['cor_destaque'])
     m['portal'] = _env_bool('portal', False)
     m['portal_nome'] = _env('portal_nome', 'CDP Shopping')
+    m['portal_logo'] = _env('portal_logo', m['logo'])
     m['portal_descricao'] = _env('portal_descricao', m['segmento'])
     parceiro = {
         'nome': 'Luqui Brinquedos',

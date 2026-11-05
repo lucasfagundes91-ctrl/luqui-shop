@@ -14,7 +14,7 @@
     </div>
     <div class="desc">{{ p.descricao }}</div>
   </a>
-  {% if p.vendedor == 'parceiro' %}<div style="font-size:11px;font-weight:700;color:#C2410C;margin:2px 0">🏬 Vendido por {{ p.vendedor_nome or 'loja parceira' }}</div>{% endif %}
+  {% if p.vendedor == 'parceiro' %}<div style="font-size:11px;font-weight:700;color:#C2410C;margin:2px 0">🏬 Vendido por {{ parceiro_nome }}</div>{% endif %}
   {% if promo %}
     <div class="preco-velho">{{ rs(p.preco_venda) }}</div>
     <div class="preco">{{ rs(promo) }}</div>

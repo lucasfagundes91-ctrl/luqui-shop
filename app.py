@@ -174,7 +174,7 @@ def _ctx_flags():
             'cupom_aniversario_ativo': CUPOM_ANIVERSARIO_ATIVO,
             'cupom_primeira_compra_ativo': CUPOM_PRIMEIRA_COMPRA_ATIVO,
             'SITE_URL': SITE_URL,
-            'marca': MARCA}
+            'marca': MARCA, 'parceiro_nome': PARCEIRO_NOME}
 
 
 # Também como global: macro importada sem contexto ({% from "_card.html"
@@ -4677,7 +4677,7 @@ def carrinho_add():
             'foto_url': prod.get('foto_url'),
             # Item da loja parceira: vendido, faturado e retirado lá.
             **({'vendedor': 'parceiro',
-                'vendedor_nome': prod.get('vendedor_nome') or PARCEIRO_NOME}
+                'vendedor_nome': PARCEIRO_NOME}
                if eh_item_parceiro(pid) else {}),
         })
     carrinho_salvar(itens)
