@@ -24,6 +24,10 @@
   .selo img { height:62px; display:block; }
   .topo h1 { margin:18px 0 0; font-size:30px; letter-spacing:-.5px; }
   .topo p { margin:6px 0 0; font-size:16px; opacity:.92; }
+  .topo p.sobre { max-width:640px; margin:10px auto 0; line-height:1.45; position:relative; z-index:1; }
+  .fatos { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin:14px auto 4px; max-width:640px; position:relative; z-index:1; }
+  .fatos span { background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.3); border-radius:999px; padding:6px 13px; font-size:14px; }
+  .fatos b { font-size:17px; margin-right:2px; }
 
   main { position:relative; z-index:1; max-width:1000px; margin:-64px auto 0; padding:0 16px; display:grid; gap:22px; grid-template-columns:1fr 1fr; }
   @media (max-width:760px) { main { grid-template-columns:1fr; } .topo h1 { font-size:25px; } }
@@ -94,7 +98,15 @@
 <header class="topo">
   <span class="selo"><img src="{{ marca.portal_logo }}" alt="{{ marca.portal_nome }}"></span>
   <h1>Bem-vindo ao {{ marca.portal_nome }}</h1>
+  {% if marca.portal_sobre %}
+  <p class="sobre">{{ marca.portal_sobre }}</p>
+  <div class="fatos">
+    <span><b>59</b> anos</span><span><b>3</b> andares de lojas</span><span><b>1</b> andar de recreação e eventos infantis</span>
+  </div>
+  <p>Compre online nas lojas do shopping:</p>
+  {% else %}
   <p>Duas lojas no centro de Cascavel. Escolha onde quer comprar:</p>
+  {% endif %}
 </header>
 
 <main>
