@@ -95,6 +95,50 @@ _SQL_PAGOS = "('" + "','".join(STATUS_PAGOS) + "')"
 
 PDVPRO_URL = os.environ.get('PDVPRO_URL', 'https://pdvpro.luqsys.com.br')
 PDVPRO_API_KEY = os.environ.get('PDVPRO_API_KEY', '')
+
+# ─── Loja parceira (nov/2026) ────────────────────────────────────────────────
+# O site da Luqui vende brinquedo que está no estoque da Casa dos Plásticos
+# (EF Pyl). O PDV da Luqui devolve esses itens em /api/integracao/produtos com
+# id >= PARCEIRO_ID_OFFSET e vendedor='parceiro'. Cada loja vende, emite a nota
+# e recebe o seu: o pedido do parceiro vai pro PDV DELE e é cobrado na conta
+# Asaas DELE. Tudo desligado sem as variáveis abaixo — aí item de parceiro nem
+# entra no carrinho.
+PARCEIRO_ID_OFFSET = 900000000
+PARCEIRO_PDV_URL = (os.environ.get('PARCEIRO_PDV_URL') or '').rstrip('/')
+PARCEIRO_PDV_KEY = os.environ.get('PARCEIRO_PDV_KEY', '')
+PARCEIRO_NOME = os.environ.get('PARCEIRO_NOME') or 'Casa dos Plásticos'
+PARCEIRO_ORIGEM = os.environ.get('PARCEIRO_ORIGEM') or 'Luqui'
+PARCEIRO_RETIRADA = (os.environ.get('PARCEIRO_RETIRADA')
+                     or 'R. Souza Naves, 3768 — Centro — Cascavel/PR')
+# Cobrança do pedido do parceiro: na conta Asaas DELE (mesma chave que o site
+# da CDP usa). Carrinho misto = 2 pedidos e 2 cobranças, cada uma na conta de
+# quem vende. A externalReference é "<prefixo>-pedido-<id>" (não começa com
+# "pedido-"), então o webhook da conta da EF Pyl, que aponta pro site da CDP,
+# ignora; quem confirma é o webhook extra (PARCEIRO_ASAAS_WEBHOOK_TOKEN) ou o
+# /cron/reconciliar-pedidos-site, que consulta a conta da EF Pyl.
+PARCEIRO_ASAAS_API_KEY = os.environ.get('PARCEIRO_ASAAS_API_KEY', '')
+PARCEIRO_ASAAS_WEBHOOK_TOKEN = os.environ.get('PARCEIRO_ASAAS_WEBHOOK_TOKEN', '')
+PARCEIRO_REF_PREFIXO = (os.environ.get('PARCEIRO_REF_PREFIXO') or 'luqui').strip('-')
+PARCEIRO_ATIVO = bool(PARCEIRO_PDV_URL and PARCEIRO_PDV_KEY and PARCEIRO_ASAAS_API_KEY)
+
+
+def eh_item_parceiro(produto_id):
+    try:
+        return int(produto_id or 0) >= PARCEIRO_ID_OFFSET
+    except (TypeError, ValueError):
+        return False
+
+
+def parceiro_ref(pid):
+    return f'{PARCEIRO_REF_PREFIXO}-pedido-{pid}'
+
+
+def parceiro_cartao_liberado():
+    """Ponto de extensão: cartão no pedido da parceira. Hoje sempre False —
+    a EF Pyl ainda não tem Pagar.me. Ao ligar: credenciais Pagar.me próprias
+    dela + pagarme_criar_cobranca/pedido_pagar_cartao escolhendo a conta pelo
+    pedidos.vendedor. Até lá o pedido dela só fecha no PIX/boleto."""
+    return False
 ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'lucasfagundes91@hotmail.com')
 ADMIN_SENHA_PADRAO = os.environ.get('ADMIN_SENHA') or secrets.token_urlsafe(16)
 WHATSAPP_LOJA = os.environ.get('WHATSAPP_LOJA',
@@ -918,6 +962,13 @@ def init_db():
         # Em 27/07 o cartao VISA final 2746 pagou dois pedidos de CPFs, nomes,
         # e-mails e ESTADOS diferentes — Natal/RN e Salvador/BA. Sem guardar o
         # final, esse sinal, que e o mais forte de todos, era invisivel.
+        # Venda pela loja parceira (nov/2026): brinquedo do estoque da EF Pyl
+        # vendido no site da Luqui. Carrinho misto vira 2 pedidos, cada um com
+        # a SUA cobrança (conta Asaas de quem vende); o da parceira aponta pro
+        # da loja em pedido_principal_id (só pra tela mostrar "1 de 2 / 2 de 2").
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS vendedor VARCHAR(20)",
+        "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pedido_principal_id INT",
+        "CREATE INDEX IF NOT EXISTS idx_pedidos_principal ON pedidos(pedido_principal_id)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cartao_final VARCHAR(4)",
         "ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cartao_bandeira VARCHAR(20)",
         "CREATE INDEX IF NOT EXISTS idx_pedidos_cartao ON pedidos(cartao_final, criado_em DESC)",
@@ -1839,11 +1890,12 @@ def _nfe_chave_do_pedido(ped):
     autoriza, e o pedido guarda a `ref`, nao a chave.
     """
     ref = (ped or {}).get('nfe_ref')
-    if not ref or not PDVPRO_API_KEY:
+    pdv_url, pdv_key = _pdv_do_pedido(ped)
+    if not ref or not pdv_key:
         return None
     try:
-        r = requests.get(PDVPRO_URL + f'/api/integracao/nfe/{ref}',
-                         headers={'X-API-Key': PDVPRO_API_KEY}, timeout=10)
+        r = requests.get(pdv_url + f'/api/integracao/nfe/{ref}',
+                         headers={'X-API-Key': pdv_key}, timeout=10)
         if not r.ok:
             return None
         d = r.json() or {}
@@ -2586,7 +2638,8 @@ def integracao_pedidos_site():
                cep, endereco, numero, bairro, complemento,
                entrega_agendada, embrulho_presente, embrulho_tipo,
                embrulho_mensagem,
-               aceito_em, aceito_por, pronto_em, frete_servico
+               aceito_em, aceito_por, pronto_em, frete_servico,
+               vendedor, pedido_principal_id
         FROM pedidos {sql_where}
         ORDER BY criado_em DESC LIMIT %s""",
         params + [limit], fetch='all') or []
@@ -4553,6 +4606,8 @@ def carrinho_add():
     qtd = max(1, int(d.get('quantidade') or 1))
     if not pid:
         return jsonify({'erro': 'Produto inválido'}), 400
+    if eh_item_parceiro(pid) and not PARCEIRO_ATIVO:
+        return jsonify({'erro': 'Produto indisponível no momento'}), 400
     prod = buscar_produto(pid)
     if not prod:
         return jsonify({'erro': 'Produto não encontrado'}), 404
@@ -4576,6 +4631,10 @@ def carrinho_add():
             'preco': preco,
             'qtd': qtd,
             'foto_url': prod.get('foto_url'),
+            # Item da loja parceira: vendido, faturado e retirado lá.
+            **({'vendedor': 'parceiro',
+                'vendedor_nome': prod.get('vendedor_nome') or PARCEIRO_NOME}
+               if eh_item_parceiro(pid) else {}),
         })
     carrinho_salvar(itens)
     sub, qtot = carrinho_total(itens)
@@ -4634,8 +4693,13 @@ def checkout_view():
     pontos_info = None
     if cli and cli.get('cpf'):
         pontos_info = pdv_consultar_pontos(cli['cpf'])
+    tem_parceiro = any(eh_item_parceiro(i.get('produto_id')) for i in itens)
+    so_parceiro = tem_parceiro and all(eh_item_parceiro(i.get('produto_id')) for i in itens)
     resp = render_template('checkout.html',
                            itens=itens, subtotal=sub,
+                           tem_parceiro=tem_parceiro, so_parceiro=so_parceiro,
+                           parceiro_nome=PARCEIRO_NOME,
+                           parceiro_retirada=PARCEIRO_RETIRADA,
                            categorias=listar_categorias(),
                            cliente=cli,
                            carrinho=itens,
@@ -4881,6 +4945,17 @@ def checkout_frete():
                        'prazo': slots[0]['label'] if slots else 'Agendar',
                        'id': 'LOCAL',
                        'agendamento': slots})
+    # Carrinho com item da loja parceira: nesta fase só retirada (TUDO na
+    # Casa dos Plásticos, inclusive o que é da Luqui) ou entrega local.
+    if any(eh_item_parceiro(it.get('produto_id')) for it in (carrinho_ler() or [])):
+        for o in opcoes:
+            if o.get('id') == 'RETIRA':
+                o['servico'] = f'Retirar na loja — {PARCEIRO_NOME}'
+                o['endereco'] = PARCEIRO_RETIRADA
+        return jsonify({'opcoes': opcoes, 'so_retirada_local': True,
+                        'aviso': (f'Seu carrinho tem itens da {PARCEIRO_NOME}: '
+                                  f'retirada na loja ({PARCEIRO_RETIRADA}) ou '
+                                  f'entrega em Cascavel.')})
     # Tenta Melhor Envio se tiver CEP + carrinho + conexão
     if fora_regiao:
         return jsonify({'opcoes': opcoes, 'fora_regiao': True,
@@ -6901,13 +6976,16 @@ def admin_pedido_status(pid):
     if not rastreio and novo == 'enviado':
         rastreio = me_backfill_rastreio(p)
     # Se cancelou e tem venda no PDV Pro, cancela NF e volta estoque
-    if novo == 'cancelado' and p.get('pdv_venda_id') and PDVPRO_API_KEY:
+    # Pedido da loja parceira: a venda/NF é do PDV dela (o estorno do dinheiro
+    # é na conta Asaas dela — manual, pelo painel do Asaas da parceira).
+    _pdv_url, _pdv_key = _pdv_do_pedido(p)
+    if novo == 'cancelado' and p.get('pdv_venda_id') and _pdv_key:
         try:
             requests.post(
-                PDVPRO_URL + '/api/integracao/cancelar-venda',
+                _pdv_url + '/api/integracao/cancelar-venda',
                 json={'venda_id': p['pdv_venda_id'],
                       'justificativa': 'Pedido site cancelado'},
-                headers={'X-API-Key': PDVPRO_API_KEY}, timeout=30)
+                headers={'X-API-Key': _pdv_key}, timeout=30)
         except Exception as e:
             log.error("cancelar NF: %s", e)
     # Se virou 'pronto_retirada', carimba pronto_em pro contador de fila bater
@@ -7278,22 +7356,22 @@ def cpf_valido(cpf):
     return True
 
 
-def _asaas_headers():
-    return {'access_token': ASAAS_API_KEY,
+def _asaas_headers(api_key=None):
+    return {'access_token': api_key or ASAAS_API_KEY,
             'Content-Type': 'application/json',
             'User-Agent': 'LuquiShop/1.0'}
 
 
-def asaas_criar_customer(nome, email, cpf, telefone=None):
+def asaas_criar_customer(nome, email, cpf, telefone=None, api_key=None):
     """Cria ou atualiza customer no Asaas. Devolve o id (sempre tenta reusar)."""
-    if not ASAAS_API_KEY:
+    if not (api_key or ASAAS_API_KEY):
         return None
     cpf_d = ''.join(c for c in (cpf or '') if c.isdigit())
     # Tenta buscar pelo CPF primeiro
     try:
         r = requests.get(f'{ASAAS_BASE}/customers',
                          params={'cpfCnpj': cpf_d} if cpf_d else {'email': email},
-                         headers=_asaas_headers(), timeout=10)
+                         headers=_asaas_headers(api_key), timeout=10)
         if r.status_code == 200:
             data = r.json().get('data') or []
             if data:
@@ -7309,7 +7387,7 @@ def asaas_criar_customer(nome, email, cpf, telefone=None):
             'notificationDisabled': True}
     try:
         r = requests.post(f'{ASAAS_BASE}/customers',
-                          json=body, headers=_asaas_headers(), timeout=12)
+                          json=body, headers=_asaas_headers(api_key), timeout=12)
         if r.status_code in (200, 201):
             return r.json().get('id')
         log.error("asaas customer create %s: %s", r.status_code, r.text[:300])
@@ -7320,9 +7398,10 @@ def asaas_criar_customer(nome, email, cpf, telefone=None):
 
 def asaas_criar_cobranca(customer_id, valor, billing_type, descricao,
                          vencimento=None, parcelas=1, due_days=3,
-                         externa_ref=None):
-    """Cria payment. billing_type: PIX, BOLETO, CREDIT_CARD, UNDEFINED."""
-    if not ASAAS_API_KEY or not customer_id:
+                         externa_ref=None, api_key=None):
+    """Cria payment. billing_type: PIX, BOLETO, CREDIT_CARD, UNDEFINED.
+    `api_key`: outra conta Asaas (pedido da loja parceira); padrão = a nossa."""
+    if not (api_key or ASAAS_API_KEY) or not customer_id:
         return None
     if not vencimento:
         vencimento = (datetime.now(SP_TZ).date()
@@ -7341,7 +7420,7 @@ def asaas_criar_cobranca(customer_id, valor, billing_type, descricao,
         body['value'] = round(float(valor) / parcelas, 2)
     try:
         r = requests.post(f'{ASAAS_BASE}/payments',
-                          json=body, headers=_asaas_headers(), timeout=15)
+                          json=body, headers=_asaas_headers(api_key), timeout=15)
         if r.status_code in (200, 201):
             return r.json()
         log.error("asaas payment create %s: %s", r.status_code, r.text[:300])
@@ -7454,13 +7533,13 @@ def asaas_criar_cobranca_cartao(customer_id, valor, descricao, parcelas,
         return 0, {'errors': [{'description': str(e)}]}
 
 
-def asaas_buscar_cobranca(payment_id):
+def asaas_buscar_cobranca(payment_id, api_key=None):
     """Objeto completo da cobrança. Serve pra ler `creditCard` (bandeira + 4
     últimos) de quem pagou pela fatura hospedada, onde o site nunca vê o
     cartão."""
     try:
         r = requests.get(f'{ASAAS_BASE}/payments/{payment_id}',
-                         headers=_asaas_headers(), timeout=10)
+                         headers=_asaas_headers(api_key), timeout=10)
         if r.status_code == 200:
             return r.json()
     except Exception as e:
@@ -7468,11 +7547,11 @@ def asaas_buscar_cobranca(payment_id):
     return {}
 
 
-def asaas_buscar_pix_qr(payment_id):
+def asaas_buscar_pix_qr(payment_id, api_key=None):
     """Pega payload + QR code base64 do PIX."""
     try:
         r = requests.get(f'{ASAAS_BASE}/payments/{payment_id}/pixQrCode',
-                         headers=_asaas_headers(), timeout=10)
+                         headers=_asaas_headers(api_key), timeout=10)
         if r.status_code == 200:
             return r.json()
     except Exception as e:
@@ -7507,13 +7586,13 @@ def asaas_status_conta():
         return {'ok': False, 'erro': str(e)}
 
 
-def asaas_buscar_boleto_info(payment_id):
+def asaas_buscar_boleto_info(payment_id, api_key=None):
     """Pega identificationField (linha digitável) + barCode + bankSlipUrl
     do boleto. Usado pra mostrar copia-cola na própria página."""
     try:
         r = requests.get(
             f'{ASAAS_BASE}/payments/{payment_id}/identificationField',
-            headers=_asaas_headers(), timeout=10)
+            headers=_asaas_headers(api_key), timeout=10)
         if r.status_code == 200:
             return r.json()
     except Exception as e:
@@ -8103,6 +8182,434 @@ def alertar_risco(pid, score, motivos, contexto=''):
 
 
 # ─── Checkout: finalizar pedido ───────────────────────────────────────────────
+def _asaas_key_do_pedido(p):
+    """Conta Asaas de quem vende: pedido da loja parceira é cobrado na dela."""
+    return PARCEIRO_ASAAS_API_KEY if (p or {}).get('vendedor') == 'parceiro' else None
+
+
+def _pdv_do_pedido(p):
+    """(url, chave) do PDV que fatura o pedido."""
+    if (p or {}).get('vendedor') == 'parceiro':
+        return PARCEIRO_PDV_URL, PARCEIRO_PDV_KEY
+    return PDVPRO_URL, PDVPRO_API_KEY
+
+
+def _vendedor_nome_do_pedido(p):
+    return PARCEIRO_NOME if (p or {}).get('vendedor') == 'parceiro' else MARCA['nome']
+
+
+def _pedidos_do_grupo(p):
+    """O pedido e o irmão do mesmo carrinho (loja primeiro, parceira depois).
+    Pedido sem irmão devolve só ele."""
+    if not p:
+        return []
+    principal = p.get('pedido_principal_id') or p['id']
+    rows = db_execute("""SELECT * FROM pedidos WHERE id=%s OR pedido_principal_id=%s
+                         ORDER BY (vendedor='parceiro') NULLS FIRST, id""",
+                      [principal, principal], fetch='all') or []
+    return rows or [p]
+
+
+def _retirada_do_pedido(p):
+    """Onde retira: pedido da parceira, ou da loja com irmão da parceira
+    (carrinho misto), retira TUDO na parceira."""
+    if (p or {}).get('vendedor') == 'parceiro' or (
+            p and db_execute("SELECT 1 FROM pedidos WHERE pedido_principal_id=%s",
+                             [p['id']], fetch='one')):
+        return f'{PARCEIRO_NOME} — {PARCEIRO_RETIRADA}'
+    return ' · '.join(e['curto'] for e in MARCA['enderecos'])
+
+
+def _inserir_pedido_site(d, cli, itens, v, vendedor=None, principal_id=None):
+    """INSERT de um pedido do checkout (mesmas colunas do fluxo normal) + itens
+    e reserva da lista de aniversário. Devolve (id, token)."""
+    ped_token = secrets.token_urlsafe(18)
+    embrulho = bool(d.get('embrulho_presente'))
+    embrulho_msg = ((d.get('embrulho_mensagem') or '').strip()[:300]) if embrulho else None
+    embrulho_tipo_raw = (d.get('embrulho_tipo') or '').strip().lower()
+    embrulho_tipo = embrulho_tipo_raw if (embrulho and embrulho_tipo_raw in ('menino', 'menina')) else None
+    ped = db_execute("""
+        INSERT INTO pedidos
+          (cliente_id, email, nome, telefone, cpf, cep, endereco, numero,
+           complemento, bairro, cidade, uf, subtotal, frete, desconto, total,
+           forma_pagto, parcelas, frete_servico, frete_prazo, observacao,
+           cupom_codigo, cupom_desconto, embrulho_presente, embrulho_mensagem,
+           embrulho_tipo, juros_valor, entrega_agendada,
+           pontos_resgatados, desconto_pontos, melhorenvio_servico_id, token,
+           ip_cliente, vendedor, pedido_principal_id)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        RETURNING id""",
+        [cli['id'] if cli else None,
+         d['email'].strip().lower(), d['nome'].strip(), d['telefone'].strip(),
+         d['cpf'].strip(),
+         (d.get('cep') or '').strip() or None,
+         (d.get('endereco') or '').strip() or None,
+         (d.get('numero') or '').strip() or None,
+         d.get('complemento') or None,
+         (d.get('bairro') or '').strip() or None,
+         (d.get('cidade') or '').strip() or None,
+         (d.get('uf') or '').strip().upper() or None,
+         v['subtotal'], v['frete'], v['desconto'], v['total'],
+         v['forma'], v.get('parcelas', 1),
+         (v['frete_servico'] or '')[:40], d.get('frete_prazo') or '', d.get('observacao') or None,
+         v.get('cupom_codigo'), v.get('cupom_desconto', 0),
+         embrulho, embrulho_msg, embrulho_tipo, v.get('juros', 0),
+         ((d.get('entrega_agendada') or '').strip()[:40]) or None,
+         v.get('pontos_resgatados', 0), v.get('desconto_pontos', 0),
+         None, ped_token, _rl_ip(), vendedor, principal_id],
+        fetch='one')
+    pid = ped['id']
+    for it in itens:
+        db_execute("""INSERT INTO pedido_itens
+            (pedido_id, produto_pdv_id, codigo_barras, descricao,
+             preco_unitario, quantidade, subtotal, foto_url)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
+            [pid, it['produto_id'], it.get('codigo_barras'),
+             it['descricao'], it['preco'], it['qtd'],
+             float(it['preco']) * float(it['qtd']),
+             it.get('foto_url')])
+        lista_item_id = it.get('lista_item_id')
+        if lista_item_id:
+            try:
+                db_execute("""UPDATE lista_aniversario_itens
+                              SET comprado_por_nome=%s, pedido_id=%s,
+                                  comprado_em=NOW()
+                              WHERE id=%s AND comprado_em IS NULL""",
+                           [d['nome'].strip()[:120], pid, int(lista_item_id)])
+            except Exception as e:
+                log.error(f"reservar lista item {lista_item_id}: {e}")
+    return pid, ped_token
+
+
+def _asaas_cobrar_pedido(pid, d, forma, total, descricao, ref, api_key=None):
+    """Cria customer + cobrança PIX/boleto na conta `api_key` (None = a nossa)
+    e grava no pedido. Devolve True/False."""
+    customer_id = asaas_criar_customer(d['nome'], d['email'], d['cpf'],
+                                       d['telefone'], api_key=api_key)
+    if not customer_id:
+        return False
+    billing = 'PIX' if forma == 'pix' else 'BOLETO'
+    cob = asaas_criar_cobranca(customer_id, total, billing, descricao=descricao,
+                               parcelas=1, externa_ref=ref, api_key=api_key)
+    if not cob:
+        return False
+    cob_id = cob.get('id')
+    pix_payload, pix_image, boleto_url, boleto_barcode = '', '', None, None
+    if forma == 'pix':
+        pix = asaas_buscar_pix_qr(cob_id, api_key=api_key) or {}
+        pix_payload, pix_image = pix.get('payload', ''), pix.get('encodedImage', '')
+    else:
+        boleto_url = cob.get('bankSlipUrl')
+        boleto_barcode = (asaas_buscar_boleto_info(cob_id, api_key=api_key) or {}
+                          ).get('identificationField') or ''
+    db_execute("""UPDATE pedidos SET asaas_cobranca_id=%s, asaas_link=%s,
+                  asaas_pix_qrcode=%s, asaas_pix_qr_image=%s,
+                  asaas_boleto_url=%s, asaas_boleto_barcode=%s
+                  WHERE id=%s""",
+               [cob_id, cob.get('invoiceUrl'), pix_payload, pix_image,
+                boleto_url, boleto_barcode, pid])
+    return True
+
+
+def _checkout_finalizar_com_parceiro(d, itens, is_retira):
+    """Checkout de carrinho com item da loja parceira (Casa dos Plásticos).
+
+    Cada loja vende, emite a nota e recebe o seu: o carrinho vira até 2
+    pedidos, cada um com a SUA cobrança — itens da loja na nossa conta (PIX,
+    boleto ou cartão, como sempre), itens da parceira na conta Asaas dela
+    (PIX/boleto; cartão só quando ela tiver Pagar.me). Cupom e pontos valem
+    no carrinho inteiro e são repartidos entre os dois pedidos proporcional
+    ao subtotal de cada um. Entrega: retirada (TUDO na Casa dos Plásticos)
+    ou entrega local em Cascavel. Se o cliente pagar só uma das cobranças, só
+    aquele pedido anda; a outra expira como qualquer pedido não pago."""
+    if not PARCEIRO_ATIVO:
+        return jsonify({'erro': 'Há um item indisponível no carrinho. '
+                                'Remova-o e tente de novo.'}), 400
+    itens_l = [i for i in itens if not eh_item_parceiro(i.get('produto_id'))]
+    itens_p = [i for i in itens if eh_item_parceiro(i.get('produto_id'))]
+    forma_l = d['forma_pagto']
+    if forma_l in ('pix', 'boleto'):
+        forma_p = forma_l
+    else:
+        forma_p = (d.get('forma_pagto_parceiro') or 'pix').strip().lower()
+    if forma_p not in ('pix', 'boleto'):
+        # cartão no pedido da parceira: ver parceiro_cartao_liberado()
+        return jsonify({'erro': f'Os itens da {PARCEIRO_NOME} são pagos por PIX '
+                                f'ou boleto.'}), 400
+    if not itens_l and forma_l == 'cartao':
+        return jsonify({'erro': f'Os itens da {PARCEIRO_NOME} são pagos por PIX '
+                                f'ou boleto — troque a forma de pagamento.'}), 400
+
+    # Dados fiscais: o PDV da loja conhece também os ids virtuais da parceira.
+    if PDVPRO_API_KEY and PDVPRO_URL:
+        try:
+            ids = [int(it.get('produto_id') or 0) for it in itens if it.get('produto_id')]
+            r = requests.post(PDVPRO_URL + '/api/integracao/validar-fiscal',
+                              json={'ids': ids}, headers={'X-API-Key': PDVPRO_API_KEY},
+                              timeout=8)
+            if r.status_code == 200:
+                resp = r.json() or {}
+                if not resp.get('ok') and resp.get('problemas'):
+                    falt = []
+                    for _pid, info in (resp['problemas'] or {}).items():
+                        faltando = [f for f in (info.get('faltando') or []) if f != 'CFOP']
+                        if faltando:
+                            falt.append(f"{info.get('descricao','')} (falta: {', '.join(faltando)})")
+                    if falt:
+                        return jsonify({'erro': ('Não conseguimos emitir nota fiscal pra '
+                                                 'esses produtos no momento. Por favor, '
+                                                 'fale com a loja pelo WhatsApp: '
+                                                 + '; '.join(falt[:3]))}), 400
+        except Exception as e:
+            log.warning(f"falha ao validar fiscal no PDV (segue): {e}")
+
+    # Estoque AO VIVO na parceira (o espelho pode estar minutos atrasado).
+    est = None
+    try:
+        r = requests.post(PARCEIRO_PDV_URL + '/api/integracao/parceiro/estoque',
+                          json={'ids': [int(i['produto_id']) - PARCEIRO_ID_OFFSET for i in itens_p]},
+                          headers={'X-API-Key': PARCEIRO_PDV_KEY}, timeout=8)
+        if r.status_code == 200:
+            est = (r.json() or {}).get('estoque')
+    except Exception as e:
+        log.warning("estoque parceiro: %s", e)
+    if est is None:
+        return jsonify({'erro': f'Não conseguimos confirmar o estoque da {PARCEIRO_NOME} '
+                                f'agora. Tente de novo em instantes.'}), 503
+    falta = [i['descricao'] for i in itens_p
+             if float(est.get(str(int(i['produto_id']) - PARCEIRO_ID_OFFSET)) or 0) < float(i['qtd'])]
+    if falta:
+        return jsonify({'erro': 'Acabou o estoque de: ' + '; '.join(falta[:3])
+                                + '. Ajuste o carrinho e tente de novo.'}), 400
+
+    # Entrega: retirada (tudo na parceira) ou entrega local fixa.
+    if is_retira:
+        frete = 0.0
+        # pedidos.frete_servico é VARCHAR(40): o endereço vem de _retirada_do_pedido.
+        frete_servico = f'Retirar na loja — {PARCEIRO_NOME}'[:40]
+    else:
+        try:
+            fixo_valor = float(cfg('frete_fixo_cascavel', '10') or 10)
+        except (TypeError, ValueError):
+            fixo_valor = 10.0
+        cidades_fixo = [c.strip().lower() for c in
+                        cfg('frete_fixo_cidades', 'Cascavel').split(',') if c.strip()]
+        local_ok = ((d.get('uf') or '').strip().upper() == cfg('frete_fixo_uf', 'PR')
+                    and (d.get('cidade') or '').strip().lower() in cidades_fixo)
+        escolheu_local = (str(d.get('frete_id') or '') == 'LOCAL'
+                          or 'local' in (d.get('frete_servico') or '').lower())
+        if not (local_ok and escolheu_local):
+            return jsonify({'erro': f'Itens da {PARCEIRO_NOME}: retirada na loja '
+                                    f'({PARCEIRO_RETIRADA}) ou entrega em Cascavel.'}), 400
+        frete = fixo_valor
+        frete_servico = d.get('frete_servico') or f"Entrega {MARCA['nome_curto']} (local)"
+
+    pct = {'pix': float(cfg('desconto_pix_pct', '3')),
+           'boleto': float(cfg('desconto_boleto_pct', '3'))}
+    sub_l = round(sum(float(i['preco']) * float(i['qtd']) for i in itens_l), 2)
+    sub_p = round(sum(float(i['preco']) * float(i['qtd']) for i in itens_p), 2)
+    frete_l, frete_p = (frete, 0.0) if itens_l else (0.0, frete)
+    desc_l = round(sub_l * pct.get(forma_l, 0) / 100, 2)
+    desc_p = round(sub_p * pct[forma_p] / 100, 2)
+
+    # Cupom (inclui PRIMEIRO10) e pontos do Clube: calculados sobre o carrinho
+    # INTEIRO, como sempre, e repartidos entre os dois pedidos proporcional ao
+    # subtotal de itens de cada um — a NF de cada loja sai com o desconto que
+    # coube a ela. Centavo que sobra fica no pedido da loja. Nenhum pedido fica
+    # abaixo do mínimo da cobrança: o excedente passa pro outro.
+    sub_tot = round(sub_l + sub_p, 2)
+    cupom_codigo = (d.get('cupom_codigo') or '').strip().upper()
+    if cupom_codigo == 'PRIMEIRO10' and not CUPOM_PRIMEIRA_COMPRA_ATIVO:
+        cupom_codigo = ''
+    cupom_desconto, cupom_row = 0.0, None
+    if cupom_codigo:
+        cupom_row = db_execute("""SELECT * FROM cupons WHERE UPPER(codigo)=%s AND ativo
+                          AND (valido_ate IS NULL OR valido_ate >= CURRENT_DATE)
+                          AND (usos_max IS NULL OR usos < usos_max)""",
+                               [cupom_codigo], fetch='one')
+        if cupom_row and sub_tot >= float(cupom_row['valor_min'] or 0):
+            if cupom_row['tipo'] == 'pct':
+                cupom_desconto = round(sub_tot * float(cupom_row['valor']) / 100, 2)
+            else:
+                cupom_desconto = min(float(cupom_row['valor']), sub_tot)
+        else:
+            cupom_row = None
+    if not cupom_row:
+        cupom_codigo = ''
+
+    # Pontos: máx 25% do total após descontos PIX/cupom (carrinho inteiro).
+    pontos_resgatados = desconto_pontos = 0.0
+    try:
+        pontos_pedidos = float(d.get('pontos_usar') or 0)
+    except (TypeError, ValueError):
+        pontos_pedidos = 0.0
+    if pontos_pedidos > 0 and CLUBE_LUQUI_ATIVO:
+        info_pontos = pdv_consultar_pontos(d.get('cpf'))
+        if info_pontos and info_pontos.get('cliente_existe'):
+            vpp = float(info_pontos.get('valor_por_ponto') or 0)
+            pontos_pedidos = min(pontos_pedidos, float(info_pontos.get('saldo') or 0))
+            valor = round(pontos_pedidos * vpp, 2)
+            limite_max = round(max(0, sub_tot + frete - desc_l - desc_p - cupom_desconto) * 0.25, 2)
+            if valor > limite_max:
+                valor = limite_max
+                pontos_pedidos = round(limite_max / vpp, 2) if vpp > 0 else 0
+            if valor > 0:
+                pontos_resgatados, desconto_pontos = pontos_pedidos, valor
+
+    min_l = valor_minimo_para(forma_l) if itens_l else 0.0
+    min_p = valor_minimo_para(forma_p)
+
+    def _centavos_baixo(v):
+        return int(round(v * 100, 6)) / 100.0
+
+    def _repartir(pontos_valor):
+        """Reparte cupom+pontos e devolve os valores de cada pedido, ou None se
+        algum pedido ficar abaixo do mínimo mesmo passando o excedente."""
+        extra = round(cupom_desconto + pontos_valor, 2)
+        if not itens_l:
+            ex_l, ex_p = 0.0, extra
+        else:
+            ex_p = _centavos_baixo(extra * sub_p / sub_tot) if sub_tot else 0.0
+            ex_l = round(extra - ex_p, 2)
+        livre_l = round(sub_l + frete_l - desc_l, 2)
+        livre_p = round(sub_p + frete_p - desc_p, 2)
+        if itens_l and livre_l - ex_l < min_l:
+            mv = min(ex_l, round(min_l - (livre_l - ex_l), 2))
+            ex_l, ex_p = round(ex_l - mv, 2), round(ex_p + mv, 2)
+        if itens_l and livre_p - ex_p < min_p:
+            mv = min(ex_p, round(min_p - (livre_p - ex_p), 2))
+            ex_l, ex_p = round(ex_l + mv, 2), round(ex_p - mv, 2)
+        base_l, base_p = round(livre_l - ex_l, 2), round(livre_p - ex_p, 2)
+        if (itens_l and base_l < min_l) or base_p < min_p or base_l < 0:
+            return None
+        # quanto de cada parte é pontos (pro relatório) e quanto é cupom
+        pts_p = _centavos_baixo(pontos_valor * ex_p / extra) if extra else 0.0
+        pts_l = round(pontos_valor - pts_p, 2)
+        r = {'ex_l': ex_l, 'ex_p': ex_p, 'pts_l': pts_l, 'pts_p': pts_p,
+             'cup_l': round(ex_l - pts_l, 2), 'cup_p': round(ex_p - pts_p, 2),
+             'parcelas': 1, 'juros_l': 0.0, 'total_l': base_l, 'total_p': base_p}
+        if itens_l and forma_l == 'cartao':
+            parcelas = max(1, min(int(cfg('parcelamento_max', '12')), int(d.get('parcelas') or 1)))
+            max_sem_juros = int(cfg('parcelas_sem_juros_max', '1'))
+            juros_am = float(cfg('juros_parcelamento_am', '2.49')) / 100.0
+            r['parcelas'] = parcelas
+            if parcelas > max_sem_juros and base_l > 0 and juros_am > 0:
+                fator = (juros_am * (1 + juros_am) ** parcelas) / ((1 + juros_am) ** parcelas - 1)
+                r['total_l'] = round(round(base_l * fator, 2) * parcelas, 2)
+                r['juros_l'] = round(r['total_l'] - base_l, 2)
+        return r
+
+    rep = _repartir(desconto_pontos)
+    if rep is None:
+        m = f'{max(min_l, min_p):.2f}'.replace('.', ',')
+        return jsonify({'erro': f"A parte de cada loja precisa dar pelo menos R$ {m} — "
+                                f"use menos pontos/cupom ou adicione um item."}), 400
+
+    def _valores(rep_, com_pontos):
+        vl = {'subtotal': sub_l, 'frete': frete_l, 'total': rep_['total_l'],
+              'desconto': round(desc_l + rep_['ex_l'], 2), 'forma': forma_l,
+              'parcelas': rep_['parcelas'], 'frete_servico': frete_servico,
+              'cupom_codigo': cupom_codigo or None, 'cupom_desconto': rep_['cup_l'],
+              'juros': rep_['juros_l'], 'desconto_pontos': rep_['pts_l']}
+        vp = {'subtotal': sub_p, 'frete': frete_p, 'total': rep_['total_p'],
+              'desconto': round(desc_p + rep_['ex_p'], 2), 'forma': forma_p,
+              'frete_servico': frete_servico, 'cupom_codigo': cupom_codigo or None,
+              'cupom_desconto': rep_['cup_p'], 'desconto_pontos': rep_['pts_p']}
+        # O resgate é UM só, no PDV da loja, ligado ao pedido principal.
+        (vl if itens_l else vp)['pontos_resgatados'] = pontos_resgatados if com_pontos else 0
+        return vl, vp
+
+    vl, vp = _valores(rep, True)
+    cli = cliente_logado()
+    pid_l = tok_l = None
+    if itens_l:
+        pid_l, tok_l = _inserir_pedido_site(d, cli, itens_l, vl)
+    pid_p, tok_p = _inserir_pedido_site(d, cli, itens_p, vp, vendedor='parceiro',
+                                        principal_id=pid_l)
+    if cupom_row:   # cupom conta uma vez, mesmo valendo nos dois pedidos
+        db_execute("UPDATE cupons SET usos=usos+1 WHERE id=%s", [cupom_row['id']])
+
+    if cli:
+        try:
+            db_execute("""UPDATE clientes_site SET nome=%s, telefone=%s, cpf=%s,
+                    cep=COALESCE(NULLIF(%s,''), cep), endereco=COALESCE(NULLIF(%s,''), endereco),
+                    numero=COALESCE(NULLIF(%s,''), numero), complemento=COALESCE(NULLIF(%s,''), complemento),
+                    bairro=COALESCE(NULLIF(%s,''), bairro), cidade=COALESCE(NULLIF(%s,''), cidade),
+                    uf=COALESCE(NULLIF(%s,''), uf) WHERE id=%s""",
+                [d['nome'].strip(), d['telefone'].strip(), d['cpf'].strip(),
+                 (d.get('cep') or '').strip(), (d.get('endereco') or '').strip(),
+                 (d.get('numero') or '').strip(), (d.get('complemento') or '').strip(),
+                 (d.get('bairro') or '').strip(), (d.get('cidade') or '').strip(),
+                 (d.get('uf') or '').strip().upper(), cli['id']])
+        except Exception as e:
+            log.warning(f"falha ao atualizar dados do cliente {cli['id']}: {e}")
+
+    for _pid in (pid_l, pid_p):
+        if not _pid:
+            continue
+        try:
+            _sc, _mt = avaliar_risco_pedido(_pid)
+            alertar_risco(_pid, _sc, _mt, contexto=' — pedido criado, ainda não pago')
+        except Exception as e:
+            log.error("antifraude checkout pedido %s: %s", _pid, e)
+    try:
+        reavaliar_vizinhos(pid_l or pid_p, _rl_ip())
+    except Exception as e:
+        log.error("antifraude vizinhos: %s", e)
+
+    # Pontos: UM resgate no PDV da loja, ligado ao pedido principal, ANTES das
+    # cobranças. Falhou → nenhum dos dois pedidos leva o desconto de pontos.
+    if pontos_resgatados > 0:
+        principal = pid_l or pid_p
+        ok_pts, msg_pts = pdv_resgatar_pontos(d['cpf'], pontos_resgatados, principal)
+        if not ok_pts:
+            log.error(f"Pedido {principal}: falha resgatar pontos ({msg_pts}) — "
+                      f"desfazendo o desconto nos dois pedidos")
+            rep = _repartir(0.0)
+            vl, vp = _valores(rep, False)
+            for _pid, v in ((pid_l, vl), (pid_p, vp)):
+                if _pid:
+                    db_execute("""UPDATE pedidos SET pontos_resgatados=%s, desconto_pontos=%s,
+                                  cupom_desconto=%s, desconto=%s, total=%s, juros_valor=%s
+                                  WHERE id=%s""",
+                               [v.get('pontos_resgatados', 0), v['desconto_pontos'],
+                                v['cupom_desconto'], v['desconto'], v['total'],
+                                v.get('juros', 0), _pid])
+    total_l, total_p = rep['total_l'], rep['total_p']
+
+    # Cobrança da parceira PRIMEIRO: se a conta dela falhar, nada foi cobrado.
+    desc_p_txt = f"{PARCEIRO_NOME} — Pedido #{pid_p} (site {MARCA['nome']})"
+    if not _asaas_cobrar_pedido(pid_p, d, forma_p, total_p, desc_p_txt,
+                                parceiro_ref(pid_p), api_key=PARCEIRO_ASAAS_API_KEY):
+        db_execute("UPDATE pedidos SET status='erro_asaas' WHERE id IN (%s,%s)",
+                   [pid_p, pid_l or pid_p])
+        return jsonify({'erro': 'Falha ao gerar cobrança. '
+                                'Tente novamente ou peça pelo WhatsApp.'}), 502
+
+    if pid_l:
+        if forma_l == 'cartao':
+            customer_id = asaas_criar_customer(d['nome'], d['email'], d['cpf'], d['telefone'])
+            if not customer_id:
+                db_execute("UPDATE pedidos SET status='erro_asaas' WHERE id=%s", [pid_l])
+                return jsonify({'erro': 'Falha ao criar cliente Asaas. '
+                                        'Tente novamente ou peça pelo WhatsApp.'}), 502
+            db_execute("UPDATE pedidos SET asaas_link=%s WHERE id=%s",
+                       [f'customer:{customer_id}', pid_l])
+        elif not _asaas_cobrar_pedido(pid_l, d, forma_l, total_l,
+                                      f"{MARCA['nome']} — Pedido #{pid_l}",
+                                      f'pedido-{pid_l}'):
+            db_execute("UPDATE pedidos SET status='erro_asaas' WHERE id=%s", [pid_l])
+            return jsonify({'erro': 'Falha ao gerar cobrança. '
+                                    'Tente novamente ou peça pelo WhatsApp.'}), 502
+
+    session['carrinho'] = []
+    session.modified = True
+    pid_ini, tok_ini = (pid_l, tok_l) if pid_l else (pid_p, tok_p)
+    return jsonify({'ok': True, 'pedido_id': pid_ini,
+                    'pedidos': [x for x in (pid_l, pid_p) if x],
+                    'pagamento_url': f'/pedido/{pid_ini}/pagamento?t={tok_ini}'})
+
+
 @app.route('/api/checkout/finalizar', methods=['POST'])
 def checkout_finalizar():
     d = request.get_json() or {}
@@ -8156,6 +8663,10 @@ def checkout_finalizar():
         if not entrega_liberada_para(cep_digs):
             log.info("entrega barrada por estado: cep=%s uf=%s", cep_digs, uf_d)
             return jsonify({'erro': entrega_aviso_regiao()}), 400
+    # Carrinho com item da loja parceira tem fluxo próprio (2 pedidos, cada
+    # um cobrado na conta de quem vende). Sem item dela, segue igual a sempre.
+    if any(eh_item_parceiro(it.get('produto_id')) for it in itens):
+        return _checkout_finalizar_com_parceiro(d, itens, is_retira)
     # Valida que cada produto tem dados fiscais no PDV Pro (NCM/CFOP/CSOSN).
     # Sem isso a NF-e nao emite e o pedido fica sem nota — bloqueia ANTES de
     # cobrar do cliente em vez de descobrir depois do pagamento.
@@ -9447,7 +9958,8 @@ def pedido_pagamento(pid):
         and p.get('asaas_cobranca_id')
         and not p.get('asaas_pix_qr_image')):
         try:
-            pix = asaas_buscar_pix_qr(p['asaas_cobranca_id']) or {}
+            pix = asaas_buscar_pix_qr(p['asaas_cobranca_id'],
+                                      api_key=_asaas_key_do_pedido(p)) or {}
             img = pix.get('encodedImage', '')
             payload = pix.get('payload', '') or p.get('asaas_pix_qrcode', '')
             if img:
@@ -9473,8 +9985,24 @@ def pedido_pagamento(pid):
     if usa_pagarme:
         tds_js = pagarme_cfg()[3]
         tds_dados = pagarme_dados_3ds(pid)
+    # Carrinho com item da loja parceira = 2 pedidos, 2 cobranças. Cada página
+    # mostra a sua e aponta pra outra ("1 de 2 / 2 de 2").
+    grupo = []
+    if p.get('vendedor') == 'parceiro' or p.get('pedido_principal_id') or \
+            db_execute("SELECT 1 FROM pedidos WHERE pedido_principal_id=%s", [pid], fetch='one'):
+        for g in _pedidos_do_grupo(p):
+            grupo.append({'id': g['id'], 'vendedor_nome': _vendedor_nome_do_pedido(g),
+                          'total': g['total'], 'forma': g['forma_pagto'],
+                          'status': g['status'], 'atual': g['id'] == pid,
+                          'url': f"/pedido/{g['id']}/pagamento?t={g.get('token') or ''}"})
+        if len(grupo) < 2 and p.get('vendedor') != 'parceiro':
+            grupo = []
     return render_template('pedido_pagamento.html',
-                           p=p, itens=itens,
+                           p=p, itens=itens, grupo=grupo,
+                           vendedor_nome=_vendedor_nome_do_pedido(p),
+                           retirada_txt=(_retirada_do_pedido(p)
+                                         if (p.get('frete_servico') or '').lower().startswith('retirar')
+                                         else None),
                            categorias=listar_categorias(),
                            cliente=cliente_logado(),
                            usa_pagarme=usa_pagarme,
@@ -9514,11 +10042,12 @@ def pedido_nfe(pid):
         return jsonify({'erro': 'faca login'}), 401
     if not p.get('nfe_ref'):
         return jsonify({'erro': 'nf ainda nao emitida'}), 404
-    if not PDVPRO_API_KEY:
+    pdv_url, pdv_key = _pdv_do_pedido(p)
+    if not pdv_key:
         return jsonify({'erro': 'integracao nao configurada'}), 503
     try:
-        r = requests.get(PDVPRO_URL + f'/api/integracao/nfe/{p["nfe_ref"]}',
-                         headers={'X-API-Key': PDVPRO_API_KEY}, timeout=10)
+        r = requests.get(pdv_url + f'/api/integracao/nfe/{p["nfe_ref"]}',
+                         headers={'X-API-Key': pdv_key}, timeout=10)
         if r.status_code == 200:
             return jsonify(r.json())
         return jsonify({'erro': 'NF indisponivel'}), 502
@@ -9583,14 +10112,24 @@ def _enviar_pedido_pro_pdv(pid):
         # no mesmo momento em que decide gerar a etiqueta.
         'emitir_nfe': False,
     }
+    pdv_url, pdv_key = _pdv_do_pedido(p)
+    if p.get('vendedor') == 'parceiro':
+        # Vendido e faturado pela loja parceira: vai pro PDV DELA, com o id
+        # real do produto lá e a origem (a idempotência de lá é por origem).
+        pdv_payload['origem'] = PARCEIRO_ORIGEM
+        for it in pdv_payload['itens']:
+            it['produto_id'] = int(it['produto_id']) - PARCEIRO_ID_OFFSET
+    if not pdv_key:
+        log.error("pedido %s: PDV de %s sem chave configurada", pid, p.get('vendedor') or 'loja')
+        return False, None
     try:
         # Incrementa tentativas ANTES de tentar — assim mesmo se travar a
         # gente sabe quantas vezes foi tentado.
         db_execute("UPDATE pedidos SET pdv_tentativas=COALESCE(pdv_tentativas,0)+1, "
                    "pdv_ultima_tentativa=NOW() WHERE id=%s", [pid])
-        r = requests.post(PDVPRO_URL + '/api/integracao/pedido',
+        r = requests.post(pdv_url + '/api/integracao/pedido',
                           json=pdv_payload,
-                          headers={'X-API-Key': PDVPRO_API_KEY}, timeout=20)
+                          headers={'X-API-Key': pdv_key}, timeout=20)
         if r.status_code != 200:
             log.error("PDV /pedido %s status %s: %s", pid, r.status_code, r.text[:300])
             return False, None
@@ -9625,6 +10164,7 @@ def cron_reconciliar_pedidos_site():
     pro admin pra investigar manualmente."""
     if not _cron_token_ok():
         return 'forbidden', 403
+    parceiro_conf = _reconciliar_pagamentos_parceiro()
     pendentes = db_execute("""
         SELECT id, total, pdv_tentativas, pago_em
         FROM pedidos
@@ -9661,7 +10201,41 @@ def cron_reconciliar_pedidos_site():
         'reenviados': reenviados,
         'falhas': falhas,
         'alertas_admin': len(alertas),
+        'parceiro': parceiro_conf,
     })
+
+
+def _reconciliar_pagamentos_parceiro():
+    """Pedido da loja parceira é cobrado na conta Asaas DELA, cujo webhook
+    aponta pro site dela. Sem o webhook extra (PARCEIRO_ASAAS_WEBHOOK_TOKEN),
+    é aqui que a gente fica sabendo que foi pago: consulta a cobrança lá."""
+    if not PARCEIRO_ATIVO:
+        return None
+    rows = db_execute("""SELECT id, asaas_cobranca_id FROM pedidos
+                          WHERE vendedor='parceiro' AND pago_em IS NULL
+                            AND status IN ('aguardando_pagto','atrasado')
+                            AND asaas_cobranca_id IS NOT NULL
+                            AND criado_em > NOW() - INTERVAL '10 days'
+                          ORDER BY id LIMIT 40""", fetch='all') or []
+    pagos = cancelados = 0
+    for r in rows:
+        cob = asaas_buscar_cobranca(r['asaas_cobranca_id'],
+                                    api_key=PARCEIRO_ASAAS_API_KEY) or {}
+        st = (cob.get('status') or '').upper()
+        if cob.get('externalReference') not in (None, '', parceiro_ref(r['id'])):
+            log.error("reconciliar parceiro: cobranca %s não é do pedido %s",
+                      r['asaas_cobranca_id'], r['id'])
+            continue
+        if st in ('RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH'):
+            _evento_pagamento_pedido(r['id'], 'PAYMENT_CONFIRMED', parceiro=True)
+            pagos += 1
+        elif st in ('REFUNDED', 'DELETED') or cob.get('deleted'):
+            db_execute("UPDATE pedidos SET status='cancelado' WHERE id=%s", [r['id']])
+            cancelados += 1
+        elif st == 'OVERDUE':
+            db_execute("UPDATE pedidos SET status='atrasado' WHERE id=%s AND status<>'atrasado'",
+                       [r['id']])
+    return {'conferidos': len(rows), 'pagos': pagos, 'cancelados': cancelados}
 
 
 # ─── Meta Conversions API ─────────────────────────────────────────────────────
@@ -9799,7 +10373,8 @@ def processar_pedido_pago(pid):
     # onde o dinheiro entra.
     if not p.get('cartao_final') and p.get('asaas_cobranca_id'):
         try:
-            cob = asaas_buscar_cobranca(p['asaas_cobranca_id']) or {}
+            cob = asaas_buscar_cobranca(p['asaas_cobranca_id'],
+                                        api_key=_asaas_key_do_pedido(p)) or {}
             cc = cob.get('creditCard') or {}
             if cc.get('creditCardNumber'):
                 db_execute("UPDATE pedidos SET cartao_final=%s, cartao_bandeira=%s "
@@ -9856,14 +10431,23 @@ def processar_pedido_pago(pid):
     except Exception as e:
         log.error("etiqueta auto pedido %s: %s", pid, e)
 
+    vend_nome = _vendedor_nome_do_pedido(p)
+    eh_parc = p.get('vendedor') == 'parceiro'
+    is_retira_p = (p.get('frete_servico') or '').lower().startswith('retirar')
+    linha_vend_html = (f"<b>Vendido e faturado por:</b> {vend_nome}<br>" if eh_parc else '')
+    if is_retira_p:
+        linha_entrega_html = f"<b>Retirada:</b> {_retirada_do_pedido(p)}"
+    else:
+        linha_entrega_html = (f"<b>Entrega em:</b> {p['endereco']}, {p['numero']} — "
+                              f"{p['cidade']}/{p['uf']}")
     try:
         enviar_email(p['email'],
-                     f"Pedido #{pid} confirmado — {MARCA['nome']}",
+                     f"Pedido #{pid} confirmado — {vend_nome}",
                      f"""<p>Olá {p['nome'].split()[0]}! 💛</p>
 <p>Seu pagamento foi <b>confirmado</b> e estamos preparando seu pedido com muito carinho.</p>
-<p><b>Pedido:</b> #{pid}<br>
+<p>{linha_vend_html}<b>Pedido:</b> #{pid}<br>
 <b>Total pago:</b> R$ {p['total']}<br>
-<b>Entrega em:</b> {p['endereco']}, {p['numero']} — {p['cidade']}/{p['uf']}</p>
+{linha_entrega_html}</p>
 <p>Te avisamos quando sair pra entrega! 🚚</p>
 <p><a href="{SITE_URL}/pedido/{pid}/acessar?t={p.get('token','')}"
      style="background:{MARCA['cor_destaque']};color:{MARCA['cor_primaria']};padding:12px 24px;border-radius:8px;
@@ -9879,10 +10463,8 @@ pontos do {MARCA['clube_nome']}.</p>
         log.error("email confirma: %s", e)
 
     try:
-        is_retira_p = (p.get('frete_servico') or '').lower().startswith('retirar')
         if is_retira_p:
-            linha_entrega = ("Retirada: na loja ("
-                             + ' · '.join(e['curto'] for e in MARCA['enderecos']) + ")")
+            linha_entrega = f"Retirada: na loja ({_retirada_do_pedido(p)})"
             linha_fechamento = "Te aviso aqui quando estiver pronto pra retirar!"
         else:
             linha_entrega = f"Entrega: {p.get('cidade') or '—'}/{p.get('uf') or '—'}"
@@ -9890,6 +10472,7 @@ pontos do {MARCA['clube_nome']}.</p>
         enviar_whatsapp(p['telefone'],
             f"💛 Oi {p['nome'].split()[0]}! Sou a {MARCA['nome']}.\n\n"
             f"Seu pagamento do *Pedido #{pid}* foi confirmado! 🎉\n"
+            + (f"Vendido e faturado por: *{vend_nome}*\n" if eh_parc else '') +
             f"Total: *R$ {p['total']}*\n"
             f"{linha_entrega}\n\n"
             f"Já estamos preparando tudo com muito carinho {MARCA['emoji']}\n"
@@ -9899,7 +10482,8 @@ pontos do {MARCA['clube_nome']}.</p>
 
     try:
         enviar_whatsapp(ADMIN_WHATSAPP,
-            f"🛒 *Novo pedido pago #{pid}*\n\n"
+            f"🛒 *Novo pedido pago #{pid}*"
+            + (f" — *{vend_nome}*" if eh_parc else '') + "\n\n"
             f"Cliente: {p['nome']}\n"
             f"Telefone: {p['telefone']}\n"
             f"Total: *R$ {p['total']}*\n"
@@ -9924,14 +10508,25 @@ def webhook_asaas():
         return jsonify({'erro': 'webhook não configurado'}), 503
     recv = (request.headers.get('asaas-access-token')
             or request.headers.get('Asaas-Access-Token') or '').strip()
-    if not secrets.compare_digest(recv, ASAAS_WEBHOOK_TOKEN):
+    # Webhook extra na conta Asaas da loja parceira (token próprio): a conta
+    # dela também manda os eventos dos pedidos do site DELA ("pedido-N", que
+    # colidiria com os nossos ids) — daqui só vale ref "<prefixo>-pedido-N".
+    via_parceiro = bool(PARCEIRO_ASAAS_WEBHOOK_TOKEN) and secrets.compare_digest(
+        recv, PARCEIRO_ASAAS_WEBHOOK_TOKEN)
+    if not via_parceiro and not secrets.compare_digest(recv, ASAAS_WEBHOOK_TOKEN):
         log.warning("webhook/asaas: token inválido")
         return jsonify({'erro': 'token inválido'}), 401
     d = request.get_json(silent=True) or {}
     event = d.get('event')
     payment = d.get('payment') or {}
     ref = payment.get('externalReference') or ''
-    log.info("webhook/asaas: %s ref=%s", event, ref)
+    log.info("webhook/asaas: %s ref=%s%s", event, ref, ' (conta parceira)' if via_parceiro else '')
+    pref_parc = f'{PARCEIRO_REF_PREFIXO}-pedido-'
+    if via_parceiro:
+        num = ref[len(pref_parc):] if ref.startswith(pref_parc) else ''
+        if not num.isdigit():
+            return jsonify({'ok': True, 'ignorado': 'ref de outro site'})
+        return _evento_pagamento_pedido(int(num), event, parceiro=True)
     # Assinatura do clube?
     if ref.startswith('clube-'):
         try:
@@ -10003,8 +10598,15 @@ Dúvidas? <a href='https://wa.me/{cfg('whatsapp_loja', WHATSAPP_LOJA)}'>WhatsApp
         pid = int(ref.split('-')[1])
     except (IndexError, ValueError):
         return jsonify({'erro': 'ref inválida'}), 400
+    return _evento_pagamento_pedido(pid, event, parceiro=False)
+
+
+def _evento_pagamento_pedido(pid, event, parceiro=False):
+    """Aplica um evento de pagamento do Asaas no pedido. `parceiro` diz de que
+    conta veio: a nossa só mexe em pedido nosso; a da parceira, só no dela —
+    assim um id igual nas duas contas nunca confirma o pedido errado."""
     p = db_execute("SELECT * FROM pedidos WHERE id=%s", [pid], fetch='one')
-    if not p:
+    if not p or (p.get('vendedor') == 'parceiro') != bool(parceiro):
         return jsonify({'erro': 'pedido não encontrado'}), 404
     if event in ('PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'):
         # Uma compra no CARTÃO gera DOIS eventos: PAYMENT_CONFIRMED na hora e
