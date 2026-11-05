@@ -23,6 +23,32 @@ if(typeof gtag !== 'undefined'){
 {% endif %}
 <div style="max-width:780px;margin:30px auto;padding:0 16px">
   <div style="background:#fff;padding:30px;border-radius:18px">
+    {% if grupo %}
+    <div style="background:#FFF7ED;border:1px solid #FED7AA;color:#7C2D12;padding:14px;
+                border-radius:12px;margin-bottom:20px;font-size:13.5px;line-height:1.6">
+      {% if grupo|length > 1 %}
+      <b>🧾 Seu carrinho virou {{ grupo|length }} pedidos, cada um com a sua cobrança</b>
+      — cada loja recebe e emite a nota do que vende:
+      {% else %}
+      <b>🏬 Pedido vendido e faturado por {{ vendedor_nome }}.</b>
+      {% endif %}
+      {% for g in grupo %}
+      <div style="margin-top:6px;{% if g.atual %}font-weight:700{% endif %}">
+        {% if grupo|length > 1 %}{{ loop.index }} de {{ grupo|length }}: {% endif %}<b>{{ g.vendedor_nome }}</b>
+        — Pedido #{{ g.id }} — {{ rs(g.total) }}
+        {% if g.status == 'pago' %}· ✅ pago
+        {% elif g.atual %}{% if grupo|length > 1 %}· 👇 pague abaixo{% endif %}
+        {% elif g.status in ('aguardando_pagto', 'atrasado') %}· <a href="{{ g.url }}" style="color:#C2410C;font-weight:800">pagar esta cobrança →</a>
+        {% else %}· {{ g.status }}{% endif %}
+      </div>
+      {% endfor %}
+      {% if retirada_txt %}<div style="margin-top:8px">📍 Retirada: {{ retirada_txt }}</div>{% endif %}
+      {% if grupo|length > 1 %}
+      <div style="margin-top:8px;font-size:12px;color:#9A3412">Cada pedido só segue depois que
+        a SUA cobrança é paga. Se pagar só uma, a outra expira sozinha.</div>
+      {% endif %}
+    </div>
+    {% endif %}
     {% if p.status == 'pago' %}
       <div style="text-align:center">
         <div style="font-size:60px">✅</div>

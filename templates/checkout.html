@@ -283,7 +283,7 @@
             <div style="font-size:24px">📱</div><b>PIX</b>
             <div style="font-size:11px;color:var(--verde);font-weight:700">-{{ desconto_pix_pct|int }}% off</div>
           </label>
-          <label class="forma" id="forma-cartao" style="border:2px solid var(--linha);padding:14px;border-radius:10px;cursor:pointer;text-align:center">
+          <label class="forma" id="forma-cartao" style="border:2px solid var(--linha);padding:14px;border-radius:10px;cursor:pointer;text-align:center{% if so_parceiro %};display:none{% endif %}">
             <input type="radio" name="forma_pagto" value="cartao" onchange="aoTrocarForma()" style="display:none">
             <div style="font-size:24px">💳</div><b>Cartão</b>
             <div style="font-size:11px;color:var(--mut)">até {{ parcelamento_max }}x</div>
@@ -294,6 +294,22 @@
             <div style="font-size:11px;color:var(--verde);font-weight:700">-{{ desconto_boleto_pct|int }}% off</div>
           </label>
         </div>
+        {% if tem_parceiro %}
+        <div id="aviso-parceiro" style="margin-top:12px;background:#FFF7ED;border:1px solid #FED7AA;
+             color:#9A3412;padding:12px;border-radius:10px;font-size:12.5px;line-height:1.5">
+          🏬 <b>Itens da {{ parceiro_nome }}</b> são vendidos e faturados por ela, numa
+          <b>cobrança separada</b> (PIX ou boleto).{% if not so_parceiro %} Você vai ver
+          <b>duas cobranças</b> na próxima tela: uma da {{ marca.nome }} e outra da {{ parceiro_nome }}.{% endif %}
+          Retirada de tudo na {{ parceiro_nome }} ({{ parceiro_retirada }}) ou entrega em Cascavel.
+          {% if not so_parceiro %}
+          <div style="margin-top:8px">Se pagar a parte da {{ marca.nome_curto }} no cartão, a da
+            {{ parceiro_nome }} vai por:
+            <select name="forma_pagto_parceiro" style="margin-left:4px;padding:4px;border-radius:6px">
+              <option value="pix">PIX</option><option value="boleto">Boleto</option>
+            </select></div>
+          {% endif %}
+        </div>
+        {% endif %}
         <div id="aviso-cartao-regiao" style="display:none;margin-top:12px;background:#EFF6FF;
              border:1px solid #BFDBFE;color:#1E40AF;padding:12px;border-radius:10px;font-size:12.5px;line-height:1.5">
         </div>
@@ -309,7 +325,7 @@
         <h3 style="margin-bottom:14px">Resumo</h3>
         {% for it in itens %}
         <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px">
-          <span>{{ it.qtd }}× {{ it.descricao[:30] }}{% if it.descricao|length > 30 %}...{% endif %}</span>
+          <span>{{ it.qtd }}× {{ it.descricao[:30] }}{% if it.descricao|length > 30 %}...{% endif %}{% if it.vendedor == 'parceiro' %}<br><span style="display:inline-block;background:#FFF7ED;color:#C2410C;border:1px solid #FED7AA;border-radius:6px;padding:1px 7px;font-size:11px;font-weight:700;margin-top:3px">🏬 Vendido por {{ it.vendedor_nome }}</span>{% endif %}</span>
           <span>{{ rs(it.preco * it.qtd) }}</span>
         </div>
         {% endfor %}
