@@ -114,7 +114,7 @@
       {% if p.preco_promo %}
         <div style="font-size:14px;color:var(--mut);text-decoration:line-through">{{ rs(p.preco_venda) }}</div>
         <div class="preco-big" style="color:var(--verde);font-weight:900;font-size:42px;line-height:1">{{ rs(p.preco_promo) }}</div>
-        <div style="background:var(--amarelo);color:var(--azul);padding:6px 14px;border-radius:20px;display:inline-block;font-weight:800;font-size:13px;margin-top:10px">
+        <div style="background:var(--amarelo);color:var(--sobre-amarelo);padding:6px 14px;border-radius:20px;display:inline-block;font-weight:800;font-size:13px;margin-top:10px">
           🔥 EM PROMOÇÃO
         </div>
       {% else %}
@@ -141,7 +141,7 @@
       <div style="margin:0 0 14px;padding:12px 14px;background:linear-gradient(90deg,{{ marca.cor_primaria }},{{ marca.cor_primaria_clara }});color:#fff;border-radius:10px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:10px">
         <span style="font-size:18px">🎁</span>
         <span>
-          1ª compra? Cupom <code style="background:{{ marca.cor_destaque }};color:{{ marca.cor_primaria }};padding:2px 8px;border-radius:4px;font-weight:800;letter-spacing:1px">PRIMEIRO10</code>
+          1ª compra? Cupom <code style="background:{{ marca.cor_destaque }};color:{{ marca.cor_sobre_destaque }};padding:2px 8px;border-radius:4px;font-weight:800;letter-spacing:1px">PRIMEIRO10</code>
           tira <b>10% OFF</b> ({{ rs(preco_final|float * 0.9) }} no PIX no checkout)
         </span>
       </div>

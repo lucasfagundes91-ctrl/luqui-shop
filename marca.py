@@ -200,6 +200,11 @@ def _carrega():
     # Portal (CDP Shopping): a raiz "/" vira a entrada do shopping, com a loja
     # deste deploy e a loja parceira lado a lado; a vitrine desta loja vai pra
     # /loja. Desligado (padrão) o site é exatamente o de sempre.
+    # Texto SOBRE o fundo de destaque (botão amarelo da Luqui = texto azul) e o
+    # destaque usado COMO texto em fundo escuro. Loja com destaque escuro (CDP:
+    # laranja) troca pra branco / laranja claro, senão fica ilegível.
+    m['cor_sobre_destaque'] = _env('cor_sobre_destaque', m['cor_primaria'])
+    m['cor_destaque_texto'] = _env('cor_destaque_texto', m['cor_destaque'])
     m['portal'] = _env_bool('portal', False)
     m['portal_nome'] = _env('portal_nome', 'CDP Shopping')
     m['portal_descricao'] = _env('portal_descricao', m['segmento'])

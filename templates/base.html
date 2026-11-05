@@ -23,6 +23,7 @@
   :root{
     --azul:{{ marca.cor_primaria }}; --azul-d:{{ marca.cor_primaria_escura }}; --azul-c:{{ marca.cor_primaria_clara }};
     --amarelo:{{ marca.cor_destaque }}; --amarelo-d:{{ marca.cor_destaque_escura }};
+    --sobre-amarelo:{{ marca.cor_sobre_destaque }}; --amarelo-txt:{{ marca.cor_destaque_texto }};
     --branco:#FFFFFF; --bg:#F8FAFC; --linha:#E2E8F0;
     --txt:#0F172A; --mut:#64748B; --verde:#16A34A;
     --vermelho:#DC2626;
@@ -49,7 +50,7 @@
   .busca input:focus{ border-color:var(--amarelo); }
   .busca button{ position:absolute; right:6px; top:6px; bottom:6px;
     background:var(--amarelo); padding:0 20px; border-radius:30px;
-    color:var(--azul); font-weight:800; font-size:14px; }
+    color:var(--sobre-amarelo); font-weight:800; font-size:14px; }
   .topo-ico{ display:flex; gap:18px; align-items:center; flex:none; }
   .topo-ico a{ display:flex; align-items:center; gap:8px; color:var(--azul);
     font-weight:700; font-size:13px; padding:8px 10px; border-radius:8px; }
@@ -84,7 +85,7 @@
     gap:4px; line-height:1.2; white-space:nowrap; border-radius:6px;
     background:transparent; cursor:pointer; }
   .menu a:hover, .menu a.atual, .menu button.mlink:hover{ background:var(--azul-d); }
-  .menu .deptos-btn{ background:var(--amarelo); color:var(--azul);
+  .menu .deptos-btn{ background:var(--amarelo); color:var(--sobre-amarelo);
     font-weight:900; padding:11px 12px; border-radius:8px; margin:6px 4px 6px 0;
     font-size:13px; box-shadow:0 2px 0 var(--amarelo-d); }
   .menu .deptos-btn:hover{ background:var(--amarelo-d); }
@@ -94,9 +95,9 @@
   .menu .mlink.insta{ background:linear-gradient(45deg,#F58529,#DD2A7B,#8134AF);
     color:#fff; }
   .menu .mlink.insta:hover{ filter:brightness(1.12); }
-  .menu .mlink.clube{ background:var(--amarelo); color:var(--azul); }
+  .menu .mlink.clube{ background:var(--amarelo); color:var(--sobre-amarelo); }
   .menu .mlink.clube:hover{ background:var(--amarelo-d); }
-  .menu .mlink.lista{ background:{{ marca.cor_primaria_escura }}; color:{{ marca.cor_destaque }};
+  .menu .mlink.lista{ background:{{ marca.cor_primaria_escura }}; color:var(--amarelo-txt);
     border:1.5px solid {{ marca.cor_destaque }}; }
   .menu .mlink.lista:hover{ background:{{ marca.cor_primaria }}; }
 
@@ -146,14 +147,16 @@
   .hero .slide{ background:linear-gradient(135deg, #87CEFA, #4FB8FF);
     border-radius:18px; overflow:hidden; min-height:300px; position:relative;
     display:flex; align-items:center; padding:32px 48px; }
-  .hero .slide h2{ color:{{ marca.cor_destaque }}; font-size:54px; font-weight:900;
+  .hero .slide h2{ color:var(--amarelo-txt); font-size:54px; font-weight:900;
     letter-spacing:-1px; text-shadow:2px 2px 0 {{ marca.cor_primaria }}; line-height:1;
     font-family:'Comic Sans MS','Marker Felt',sans-serif; }
   .hero .slide .sub{ color:#fff; font-size:22px; font-weight:800; margin-top:10px;
     text-shadow:1px 1px 0 {{ marca.cor_primaria }}; }
   .hero .slide .cta{ display:inline-block; margin-top:18px; background:var(--amarelo);
-    color:var(--azul); font-weight:900; padding:14px 28px; border-radius:30px;
+    color:var(--sobre-amarelo); font-weight:900; padding:14px 28px; border-radius:30px;
     box-shadow:0 4px 0 {{ marca.cor_destaque_escura }}; font-size:15px; }
+
+  {% if marca.cor_destaque_texto != marca.cor_destaque %}.hero .slide .sub b{ color:var(--amarelo-txt) !important; }{% endif %}
 
   /* ─── Badges (parcelamento etc) ─── */
   .badges{ max-width:1200px; margin:14px auto; padding:0 16px;
@@ -187,7 +190,7 @@
   .prod-card .selo{ position:absolute; top:10px; left:10px;
     background:var(--vermelho); color:#fff; font-size:10px; font-weight:800;
     padding:3px 8px; border-radius:6px; letter-spacing:.5px; }
-  .prod-card .selo.promo{ background:var(--amarelo); color:var(--azul); }
+  .prod-card .selo.promo{ background:var(--amarelo); color:var(--sobre-amarelo); }
   .prod-card .foto{ width:100%; aspect-ratio:1; background:#F1F5F9;
     border-radius:10px; overflow:hidden; display:flex;
     align-items:center; justify-content:center; margin-bottom:10px; }
@@ -235,10 +238,10 @@
     color:#fff; display:flex; gap:30px; align-items:center; }
   .banner-clube .box img{ max-width:220px; }
   .banner-clube h3{ font-family:'Comic Sans MS','Marker Felt',sans-serif;
-    font-size:48px; color:var(--amarelo); text-shadow:2px 2px 0 {{ marca.cor_primaria }};
+    font-size:48px; color:var(--amarelo-txt); text-shadow:2px 2px 0 {{ marca.cor_primaria }};
     line-height:1; }
   .banner-clube p{ font-size:16px; margin:14px 0; line-height:1.5; }
-  .banner-clube .cta{ background:var(--amarelo); color:var(--azul);
+  .banner-clube .cta{ background:var(--amarelo); color:var(--sobre-amarelo);
     padding:14px 28px; border-radius:30px; font-weight:900;
     display:inline-block; box-shadow:0 4px 0 {{ marca.cor_destaque_escura }}; }
 
@@ -248,7 +251,7 @@
   .footer .container{ max-width:1200px; margin:0 auto;
     display:grid; grid-template-columns:1.5fr 1fr 1fr 1fr; gap:30px; }
   .footer h4{ font-size:14px; margin-bottom:14px; text-transform:uppercase;
-    letter-spacing:1px; color:var(--amarelo); }
+    letter-spacing:1px; color:var(--amarelo-txt); }
   .footer a{ display:block; padding:5px 0; color:#cbd5e1; font-size:13px; }
   .footer a:hover{ color:#fff; }
   .footer .copy{ max-width:1200px; margin:30px auto 0; padding-top:20px;
@@ -275,7 +278,7 @@
     font-size:14px; }
   .btn:hover{ opacity:.92; }
   .btn-primario{ background:var(--azul); color:#fff; }
-  .btn-amarelo{ background:var(--amarelo); color:var(--azul);
+  .btn-amarelo{ background:var(--amarelo); color:var(--sobre-amarelo);
     box-shadow:0 4px 0 var(--amarelo-d); }
   .btn-verde{ background:var(--verde); color:#fff; }
   .btn-ghost{ background:transparent; color:var(--azul);
@@ -947,7 +950,7 @@ document.addEventListener('keydown', e=>{
         <input name="email" type="email" required placeholder="seu@email.com"
                style="flex:1;min-width:220px;padding:12px;border:0;border-radius:8px;font-size:14px">
         <button type="submit"
-                style="background:var(--amarelo);color:var(--azul);font-weight:900;border:0;padding:12px 24px;border-radius:8px;cursor:pointer;font-size:14px">
+                style="background:var(--amarelo);color:var(--sobre-amarelo);font-weight:900;border:0;padding:12px 24px;border-radius:8px;cursor:pointer;font-size:14px">
           Receber novidades
         </button>
       </form>
@@ -988,7 +991,7 @@ async function assinarNewsletter(form){
       Ao continuar navegando, você concorda. Detalhes em
       <a href="/privacidade" style="color:{{ marca.cor_destaque }};text-decoration:underline">nossa política</a>.
     </div>
-    <button onclick="aceitarCookies()" style="background:{{ marca.cor_destaque }};color:{{ marca.cor_primaria }};border:0;padding:10px 22px;border-radius:8px;font-weight:900;cursor:pointer;font-size:13px">
+    <button onclick="aceitarCookies()" style="background:{{ marca.cor_destaque }};color:{{ marca.cor_sobre_destaque }};border:0;padding:10px 22px;border-radius:8px;font-weight:900;cursor:pointer;font-size:13px">
       Aceitar e fechar
     </button>
   </div>

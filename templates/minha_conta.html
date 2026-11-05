@@ -26,7 +26,7 @@
           {% if assinatura.status == 'ativa' %}
             <button onclick="pausarClube()" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer">⏸ Pausar 1 mês</button>
           {% elif assinatura.status == 'pausada' %}
-            <button onclick="reativarClube()" style="background:var(--amarelo);color:var(--azul);border:0;padding:8px 16px;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer">▶ Reativar</button>
+            <button onclick="reativarClube()" style="background:var(--amarelo);color:var(--sobre-amarelo);border:0;padding:8px 16px;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer">▶ Reativar</button>
           {% endif %}
           <button onclick="abrirTrocaPlano()" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer">🔄 Trocar plano</button>
           <button onclick="cancelarClube()" style="background:rgba(220,38,38,.2);color:#fff;border:1px solid rgba(255,255,255,.3);padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer">Cancelar</button>

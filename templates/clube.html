@@ -58,7 +58,7 @@
         {% set destaque = 'essencial' in p.slug %}
         <div style="background:#fff;border:{{ '3px solid var(--amarelo)' if destaque else '2px solid var(--linha)' }};border-radius:18px;padding:30px;position:relative;{{ 'transform:scale(1.03)' if destaque else '' }}">
           {% if destaque %}
-            <div style="position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--amarelo);color:var(--azul);padding:4px 18px;border-radius:20px;font-size:11px;font-weight:900;letter-spacing:1px">
+            <div style="position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--amarelo);color:var(--sobre-amarelo);padding:4px 18px;border-radius:20px;font-size:11px;font-weight:900;letter-spacing:1px">
               ⭐ MAIS POPULAR
             </div>
           {% endif %}

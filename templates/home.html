@@ -15,7 +15,7 @@
   <div style="background:linear-gradient(90deg,{{ marca.cor_primaria }},{{ marca.cor_primaria_clara }});color:#fff;padding:14px 20px;border-radius:14px;text-align:center;font-weight:800;font-size:15px;box-shadow:0 6px 18px rgba(22,82,199,.25);display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap">
     <span style="font-size:22px">🎁</span>
     <span>Primeira compra? Use o cupom
-      <code style="background:{{ marca.cor_destaque }};color:{{ marca.cor_primaria }};padding:4px 12px;border-radius:6px;letter-spacing:1.5px;font-size:14px;margin:0 4px">PRIMEIRO10</code>
+      <code style="background:{{ marca.cor_destaque }};color:{{ marca.cor_sobre_destaque }};padding:4px 12px;border-radius:6px;letter-spacing:1.5px;font-size:14px;margin:0 4px">PRIMEIRO10</code>
       e ganhe <b>10% OFF</b> em compras a partir de R$ 50</span>
   </div>
 </section>
@@ -50,7 +50,7 @@
       <div>
         <h2>BEM-VINDO 💛</h2>
         <div class="sub">{{ marca.frase_rodape.rstrip('.') }}<br>
-          em <b style="color:{{ marca.cor_destaque }}">até 12x</b> sem juros</div>
+          em <b style="color:var(--amarelo-txt)">até 12x</b> sem juros</div>
         <a href="/produtos" class="cta">Ver produtos →</a>
       </div>
     </div>
