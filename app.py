@@ -2460,21 +2460,54 @@ def _verifica_api_key_pdv():
     return recv and PDVPRO_API_KEY and recv == PDVPRO_API_KEY
 
 
+def _escopo_fila():
+    """Quem está lendo a fila de pedidos do site: 'loja' (PDV desta loja) ou
+    'parceiro' (PDV da loja parceira, com a chave PARCEIRO_PDV_KEY). Cada um vê
+    e mexe só nos pedidos que ele fatura. None = não autorizado."""
+    recv = (request.headers.get('X-API-Key') or '').strip()
+    if not recv:
+        return None
+    if PDVPRO_API_KEY and secrets.compare_digest(recv, PDVPRO_API_KEY):
+        return 'loja'
+    if PARCEIRO_ATIVO and secrets.compare_digest(recv, PARCEIRO_PDV_KEY):
+        return 'parceiro'
+    return None
+
+
+def _sql_escopo(esc):
+    return ("COALESCE(vendedor,'')='parceiro'" if esc == 'parceiro'
+            else "COALESCE(vendedor,'')<>'parceiro'")
+
+
+def _pedido_no_escopo(pid, esc):
+    return bool(db_execute(f"SELECT 1 FROM pedidos WHERE id=%s AND {_sql_escopo(esc)}",
+                           [pid], fetch='one'))
+
+
+def _txt_retirada_wa(p):
+    """(loja, endereço) da retirada pro WhatsApp: pedido da parceira (ou
+    carrinho misto) retira TUDO na parceira; senão (MARCA, None)."""
+    if PARCEIRO_ATIVO and _retirada_do_pedido(p).startswith(PARCEIRO_NOME):
+        return PARCEIRO_NOME, '📍 ' + PARCEIRO_RETIRADA
+    return MARCA['nome'], None
+
+
 @app.route('/api/integracao/pedidos-site/fila')
 def integracao_pedidos_fila():
     """Contador da fila pra alerta ativo do PDV Pro.
     Retorna: pendentes (pago e ainda nao aceito), em_separacao (aceito e
     nao pronto), prontos_retira (pronto e frete_servico=Retirar). Polling
     cada 15-20s desde o PDV Pro pra mostrar badge pulsante."""
-    if not _verifica_api_key_pdv():
+    esc = _escopo_fila()
+    if not esc:
         return jsonify({'erro': 'unauthorized'}), 401
-    r = db_execute("""
+    r = db_execute(f"""
         SELECT
           COUNT(*) FILTER (WHERE status='pago' AND aceito_em IS NULL) AS pendentes,
           COUNT(*) FILTER (WHERE status='pago' AND aceito_em IS NOT NULL AND pronto_em IS NULL) AS em_separacao,
           COUNT(*) FILTER (WHERE status='pago' AND pronto_em IS NOT NULL AND frete_servico ILIKE 'Retirar%%') AS prontos_retira,
           MAX(criado_em) FILTER (WHERE status='pago' AND aceito_em IS NULL) AS ultimo_pago_em
-        FROM pedidos
+        FROM pedidos WHERE {_sql_escopo(esc)}
     """, fetch='one') or {}
     ultimo = r.get('ultimo_pago_em')
     return jsonify({
@@ -2490,8 +2523,11 @@ def integracao_pedido_aceitar(pid):
     """Marca pedido como aceito por um operador da caixa. Tira da fila de
     alerta dos outros caixas. Idempotente — se já aceito, retorna o que
     está no banco."""
-    if not _verifica_api_key_pdv():
+    esc = _escopo_fila()
+    if not esc:
         return jsonify({'erro': 'unauthorized'}), 401
+    if not _pedido_no_escopo(pid, esc):
+        return jsonify({'erro': 'pedido não encontrado'}), 404
     d = request.get_json() or {}
     quem = (d.get('operador') or 'caixa').strip()[:80]
     r = db_execute("""
@@ -2512,8 +2548,11 @@ def integracao_pedido_mudar_status(pid):
     """Atualiza status do pedido a partir do PDV Pro (sem precisar abrir o
     admin do site). Aceita: preparando, pronto_retirada, enviado, entregue.
     Dispara WhatsApp pro cliente com a mensagem adequada."""
-    if not _verifica_api_key_pdv():
+    esc = _escopo_fila()
+    if not esc:
         return jsonify({'erro': 'unauthorized'}), 401
+    if not _pedido_no_escopo(pid, esc):
+        return jsonify({'erro': 'pedido não encontrado'}), 404
     d = request.get_json() or {}
     novo = (d.get('status') or '').strip()
     rastreio = (d.get('rastreio') or '').strip() or None
@@ -2543,8 +2582,8 @@ def integracao_pedido_mudar_status(pid):
                            f"preparado com muito carinho 💛"),
             'pronto_retirada': (
                 f"🏪 Oi {primeiro}! Seu *Pedido #{pid}* já está *pronto pra retirar* "
-                f"na {MARCA['nome']}! 💛\n\n"
-                f"{enderecos_curtos()}\n"
+                f"na {_txt_retirada_wa(p)[0]}! 💛\n\n"
+                f"{_txt_retirada_wa(p)[1] or enderecos_curtos()}\n"
                 f"🕐 {MARCA['horario_whatsapp']}\n\n"
                 f"Leva um documento com foto. Te esperamos! {MARCA['emoji']}"),
             'enviado': (f"🚚 Oi {primeiro}! Seu *Pedido #{pid}* "
@@ -2566,14 +2605,17 @@ def integracao_pedido_mudar_status(pid):
 def integracao_pedido_marcar_pronto(pid):
     """Marca pedido como pronto pra retirar/postar. Dispara WhatsApp pro
     cliente avisando."""
-    if not _verifica_api_key_pdv():
+    esc = _escopo_fila()
+    if not esc:
         return jsonify({'erro': 'unauthorized'}), 401
+    if not _pedido_no_escopo(pid, esc):
+        return jsonify({'erro': 'pedido não encontrado'}), 404
     r = db_execute("""
         UPDATE pedidos
         SET pronto_em = COALESCE(pronto_em, NOW()),
             aceito_em = COALESCE(aceito_em, NOW())
         WHERE id=%s AND status='pago'
-        RETURNING id, telefone, nome, frete_servico
+        RETURNING id, telefone, nome, frete_servico, vendedor
     """, [pid], fetch='one')
     if not r:
         return jsonify({'erro': 'pedido não encontrado ou não está pago'}), 404
@@ -2582,8 +2624,8 @@ def integracao_pedido_marcar_pronto(pid):
         is_retira = (r.get('frete_servico') or '').lower().startswith('retirar')
         if is_retira:
             msg = (f"Oi {(r['nome'] or '').split()[0]}! 💛 Seu pedido #{pid} "
-                   f"ja esta pronto pra retirar na {MARCA['nome']}!\n\n"
-                   f"{enderecos_curtos(traco=' - ')}\n"
+                   f"ja esta pronto pra retirar na {_txt_retirada_wa(r)[0]}!\n\n"
+                   f"{_txt_retirada_wa(r)[1] or enderecos_curtos(traco=' - ')}\n"
                    f"🕐 {MARCA['horario_whatsapp']}\n\n"
                    f"Leva um documento com foto. Te esperamos! {MARCA['emoji']}")
         else:
@@ -2606,7 +2648,8 @@ def integracao_pedidos_site():
 
     O filtro de data existe pro relatório de Entregas do PDV: sem ele, só dava
     pra pegar os N mais recentes e um período antigo vinha vazio."""
-    if not _verifica_api_key_pdv():
+    esc = _escopo_fila()
+    if not esc:
         return jsonify({'erro': 'unauthorized'}), 401
     status = (request.args.get('status') or '').strip()
     inicio = (request.args.get('inicio') or '').strip()
@@ -2615,7 +2658,7 @@ def integracao_pedidos_site():
         limit = max(1, min(1000, int(request.args.get('limit') or 50)))
     except ValueError:
         limit = 50
-    where = []
+    where = [_sql_escopo(esc)]
     params = []
     if status:
         where.append('status=%s')
@@ -2658,7 +2701,8 @@ def integracao_pedidos_site():
 @app.route('/api/integracao/pedidos-site/<int:pid>/itens')
 def integracao_pedido_itens(pid):
     """Itens do pedido pra PDV listar/cotar ME."""
-    if not _verifica_api_key_pdv():
+    esc = _escopo_fila()
+    if not esc or not _pedido_no_escopo(pid, esc):
         return jsonify({'erro': 'unauthorized'}), 401
     itens = db_execute("""SELECT * FROM pedido_itens WHERE pedido_id=%s
                           ORDER BY id""", [pid], fetch='all') or []
@@ -6999,8 +7043,8 @@ def admin_pedido_status(pid):
                            f"preparado com muito carinho 💛"),
             'pronto_retirada': (
                 f"🏪 Oi {primeiro}! Seu *Pedido #{pid}* já está *pronto pra retirar* "
-                f"na {MARCA['nome']}! 💛\n\n"
-                f"{enderecos_curtos()}\n"
+                f"na {_txt_retirada_wa(p)[0]}! 💛\n\n"
+                f"{_txt_retirada_wa(p)[1] or enderecos_curtos()}\n"
                 f"🕐 {MARCA['horario_whatsapp']}\n\n"
                 f"Leva um documento com foto. Te esperamos! {MARCA['emoji']}"),
             'enviado': (f"🚚 Oi {primeiro}! Seu *Pedido #{pid}* "
