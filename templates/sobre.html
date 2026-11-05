@@ -78,7 +78,7 @@
   <div style="text-align:center;margin:60px 0 40px">
     <h2 style="color:var(--azul);margin-bottom:14px">{% if marca.brinquedos %}Bora brincar?{% else %}Bora às compras?{% endif %}</h2>
     <p style="color:var(--mut);margin-bottom:20px">Conheça nossa loja online{% if clube_ativo %} e o Clube Caixa Misteriosa{% endif %}</p>
-    <a href="/" class="btn btn-amarelo" style="padding:16px 32px;font-size:15px;margin-right:8px">🛒 Ver {{ marca.itens }}</a>
+    <a href="{{ marca.home_url }}" class="btn btn-amarelo" style="padding:16px 32px;font-size:15px;margin-right:8px">🛒 Ver {{ marca.itens }}</a>
     {% if clube_ativo %}<a href="/clube" class="btn btn-primario" style="padding:16px 32px;font-size:15px">🎁 {{ marca.clube_nome }}</a>{% endif %}
   </div>
 </section>

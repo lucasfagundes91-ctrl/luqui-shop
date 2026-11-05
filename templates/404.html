@@ -5,7 +5,7 @@
   <div style="font-size:80px">{{ marca.emoji }}</div>
   <h1 style="color:var(--azul);margin:14px 0;font-size:32px">{% if marca.brinquedos %}Eita, esse brinquedo a gente não tem aqui!{% else %}Eita, essa página a gente não tem aqui!{% endif %}</h1>
   <p style="color:var(--mut);margin-bottom:30px">A página que você procurou não existe ou foi movida. Mas tem muita coisa legal te esperando 💛</p>
-  <a href="/" class="btn btn-amarelo" style="padding:14px 32px">Voltar pra loja</a>
+  <a href="{{ marca.home_url }}" class="btn btn-amarelo" style="padding:14px 32px">Voltar pra loja</a>
 </div>
 
 {% if sugestoes %}

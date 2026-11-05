@@ -2,7 +2,7 @@
 {% block titulo %}{{ titulo }} — {{ marca.nome }}{% endblock %}
 {% block conteudo %}
 <div style="max-width:860px;margin:30px auto;padding:0 16px">
-  <a href="/" style="color:var(--mut);font-size:13px">← Voltar pra loja</a>
+  <a href="{{ marca.home_url }}" style="color:var(--mut);font-size:13px">← Voltar pra loja</a>
   <div style="background:#fff;padding:36px;border-radius:18px;margin-top:14px">
     <h1 style="color:var(--azul);margin-bottom:18px">{{ titulo }}</h1>
     <div style="line-height:1.7;color:var(--txt);font-size:14px">{{ conteudo|safe }}</div>

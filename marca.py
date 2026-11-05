@@ -197,6 +197,20 @@ def _carrega():
     m['admin_nome'] = _env('admin_nome', 'LuquiShop' if luqui else m['nome'])
     m['admin_titulo'] = _env('admin_titulo', m['admin_nome'] + ' Admin')
     m['gestao_nome'] = _env('gestao_nome', m['nome_curto'] + ' Gestão')
+    # Portal (CDP Shopping): a raiz "/" vira a entrada do shopping, com a loja
+    # deste deploy e a loja parceira lado a lado; a vitrine desta loja vai pra
+    # /loja. Desligado (padrão) o site é exatamente o de sempre.
+    m['portal'] = _env_bool('portal', False)
+    m['portal_nome'] = _env('portal_nome', 'CDP Shopping')
+    m['portal_descricao'] = _env('portal_descricao', m['segmento'])
+    m['portal_parceiro'] = _env_json('portal_parceiro', {
+        'nome': 'Luqui Brinquedos',
+        'url': 'https://www.luquibrinquedos.com.br',
+        'logo': '/static/logo.png',
+        'descricao': 'Brinquedos, jogos, pelúcias, bonecas, Hot Wheels, Lego e muito mais.',
+        'cor': '#1652C7',
+    })
+    m['home_url'] = '/loja' if m['portal'] else '/'
     # data-sistema do botão "Pedir ajuste" (BankPro)
     m['sistema_ajuste'] = _env('sistema_ajuste', 'Luqui Shop' if luqui else m['nome'])
     return m

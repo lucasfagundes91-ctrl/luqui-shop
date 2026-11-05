@@ -4289,6 +4289,20 @@ def __version():
 
 
 @app.route('/')
+def raiz():
+    # CDP Shopping: a raiz é a entrada do shopping (escolher a loja).
+    if MARCA.get('portal'):
+        return render_template('portal.html')
+    return home()
+
+
+@app.route('/loja')
+def loja_home():
+    if not MARCA.get('portal'):
+        return redirect('/', code=301)
+    return home()
+
+
 def home():
     # ordem=recentes: a vitrine de baixo mostrava sempre os mesmos produtos
     # do começo do alfabeto (ABC, A CASA...). Agora é o que chegou por último.
@@ -5335,7 +5349,7 @@ def auth_google_start():
         return 'Login com Google não configurado', 503
     state = secrets.token_urlsafe(24)
     session['google_oauth_state'] = state
-    next_url = request.args.get('next') or url_for('home')
+    next_url = request.args.get('next') or MARCA['home_url']
     session['google_oauth_next'] = next_url
     redirect_uri = url_for('auth_google_callback', _external=True, _scheme='https')
     params = {
@@ -5365,7 +5379,7 @@ def auth_google_callback():
                                erro='Sessão expirada ou inválida — tente entrar de novo.',
                                categorias=listar_categorias(),
                                carrinho=carrinho_ler()), 400
-    next_url = session.pop('google_oauth_next', None) or url_for('home')
+    next_url = session.pop('google_oauth_next', None) or MARCA['home_url']
     redirect_uri = url_for('auth_google_callback', _external=True, _scheme='https')
     # Troca code por access token
     try:
@@ -5434,7 +5448,7 @@ def login():
             session.permanent = True
             session['cliente_id'] = c['id']
             adotar_pedidos_convidado(c['id'], email, cpf=c.get('cpf'))
-            return redirect(request.args.get('next') or url_for('home'))
+            return redirect(request.args.get('next') or MARCA['home_url'])
         erro = 'E-mail ou senha incorretos.'
     return render_template('login.html', erro=erro,
                            categorias=listar_categorias(),
@@ -5476,7 +5490,7 @@ def cadastrar():
             adotar_pedidos_convidado(nv['id'], d['email'].lower(), cpf=cpf_digs)
             # Respeita ?next= (ex: vindo do checkout, volta pra la com
             # os dados ja preenchidos pelo cadastro recem-criado)
-            return redirect(request.args.get('next') or url_for('home'))
+            return redirect(request.args.get('next') or MARCA['home_url'])
     return render_template('cadastrar.html', erro=erro,
                            categorias=listar_categorias(),
                            carrinho=carrinho_ler())
@@ -5529,7 +5543,7 @@ def trocar_senha():
 @app.route('/sair')
 def sair():
     session.pop('cliente_id', None)
-    return redirect(url_for('home'))
+    return redirect(MARCA['home_url'])
 
 
 @app.route('/api/wishlist/toggle', methods=['POST'])

@@ -11,7 +11,7 @@
       <b>🚚 Entrega local {{ marca.endereco.cidade }}: R$ 10 fixo</b>
       <div style="font-size:12px;opacity:.9">Toledo e outras regiões: frete calculado pelo Melhor Envio no checkout</div>
     </div>
-    <a href="/" style="background:#fff;color:{{ marca.cor_primaria }};padding:8px 16px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none">+ Adicionar mais</a>
+    <a href="{{ marca.home_url }}" style="background:#fff;color:{{ marca.cor_primaria }};padding:8px 16px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none">+ Adicionar mais</a>
   </div>
   {% endif %}
 
@@ -19,7 +19,7 @@
     <div style="background:#fff;padding:60px;border-radius:18px;text-align:center">
       <div style="font-size:60px;margin-bottom:14px">🛒</div>
       <p style="color:var(--mut);margin-bottom:20px">Seu carrinho está vazio.</p>
-      <a href="/" class="btn btn-amarelo">Continuar comprando</a>
+      <a href="{{ marca.home_url }}" class="btn btn-amarelo">Continuar comprando</a>
     </div>
   {% else %}
     <div style="background:#fff;border-radius:18px;overflow:hidden">
@@ -48,7 +48,7 @@
       {% endfor %}
 
       <div style="padding:24px;background:#F8FAFC;display:flex;justify-content:space-between;align-items:center">
-        <a href="/" style="color:var(--azul);font-weight:600">← Continuar comprando</a>
+        <a href="{{ marca.home_url }}" style="color:var(--azul);font-weight:600">← Continuar comprando</a>
         <div style="text-align:right">
           <div style="font-size:13px;color:var(--mut)">Subtotal ({{ qtd_total|int }} {{ 'item' if qtd_total|int == 1 else 'itens' }})</div>
           <div style="font-size:32px;font-weight:900;color:var(--verde);line-height:1">{{ rs(subtotal) }}</div>
