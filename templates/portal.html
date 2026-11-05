@@ -12,59 +12,128 @@
 <meta property="og:description" content="{{ marca.nome_curto }} e {{ marca.portal_parceiro.nome }} — escolha a loja.">
 <meta property="og:image" content="{{ SITE_URL }}{{ marca.logo }}">
 <style>
-  :root { --tinta:#1f2937; --mut:#6b7280; --fundo:#f4f5f7; --linha:#e5e7eb; }
+  :root { --tinta:#17202e; --mut:#5f6b7a; --fundo:#f3f4f1; --linha:#e7e8e4; }
   * { box-sizing:border-box; }
-  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--tinta); background:var(--fundo); }
-  header { text-align:center; padding:40px 16px 8px; }
-  header h1 { margin:0; font-size:30px; letter-spacing:-.5px; }
-  header p { margin:8px 0 0; color:var(--mut); font-size:16px; }
-  main { max-width:960px; margin:0 auto; padding:24px 16px 8px; display:grid; gap:20px; grid-template-columns:1fr 1fr; }
-  @media (max-width:700px) { main { grid-template-columns:1fr; } header { padding-top:28px; } header h1 { font-size:25px; } }
-  .loja { display:flex; flex-direction:column; background:#fff; border-radius:18px; overflow:hidden; text-decoration:none; color:inherit;
-          border:1px solid var(--linha); box-shadow:0 2px 10px rgba(0,0,0,.05); transition:transform .15s, box-shadow .15s; }
-  .loja:hover { transform:translateY(-3px); box-shadow:0 10px 28px rgba(0,0,0,.10); }
-  .faixa { height:8px; }
-  .logo { height:150px; display:flex; align-items:center; justify-content:center; padding:20px; border-bottom:1px solid var(--linha); }
-  .logo img { max-height:110px; max-width:85%; object-fit:contain; }
-  .corpo { padding:20px 22px 24px; display:flex; flex-direction:column; gap:10px; flex:1; }
-  .corpo h2 { margin:0; font-size:21px; }
-  .corpo p { margin:0; color:var(--mut); font-size:15px; line-height:1.45; flex:1; }
-  .btn { display:block; text-align:center; padding:14px; border-radius:12px; color:#fff; font-weight:700; font-size:16px; margin-top:6px; }
-  .info { max-width:960px; margin:12px auto 40px; padding:0 16px; text-align:center; color:var(--mut); font-size:14px; line-height:1.7; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--tinta); background:var(--fundo); -webkit-font-smoothing:antialiased; }
+  a { color:inherit; }
+
+  .topo { position:relative; text-align:center; padding:34px 16px 92px; color:#fff; overflow:hidden;
+          background:linear-gradient(135deg, {{ marca.cor_primaria_escura }} 0%, {{ marca.cor_primaria }} 55%, {{ marca.cor_primaria_clara }} 100%); }
+  .topo::after { content:""; position:absolute; inset:auto -10% -60px; height:120px; background:var(--fundo); border-radius:50% 50% 0 0; }
+  .selo { display:inline-block; background:#fff; border-radius:999px; padding:10px 22px; box-shadow:0 8px 24px rgba(0,0,0,.15); }
+  .selo img { height:62px; display:block; }
+  .topo h1 { margin:18px 0 0; font-size:30px; letter-spacing:-.5px; }
+  .topo p { margin:6px 0 0; font-size:16px; opacity:.92; }
+
+  main { position:relative; z-index:1; max-width:1000px; margin:-64px auto 0; padding:0 16px; display:grid; gap:22px; grid-template-columns:1fr 1fr; }
+  @media (max-width:760px) { main { grid-template-columns:1fr; } .topo h1 { font-size:25px; } }
+
+  .loja { background:#fff; border-radius:22px; overflow:hidden; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 10px 30px rgba(20,30,40,.08);
+          display:flex; flex-direction:column; transition:transform .18s, box-shadow .18s; }
+  .loja:hover { transform:translateY(-3px); box-shadow:0 2px 4px rgba(0,0,0,.05), 0 18px 40px rgba(20,30,40,.13); }
+  .entrar { display:block; text-decoration:none; }
+  .capa { height:190px; display:flex; align-items:center; justify-content:center; padding:48px 22px 18px; position:relative; }
+  .capa img { max-height:118px; max-width:82%; object-fit:contain; filter:drop-shadow(0 6px 14px rgba(0,0,0,.12)); }
+  .etiqueta { position:absolute; top:14px; left:14px; font-size:12px; font-weight:700; letter-spacing:.4px; text-transform:uppercase;
+              color:#fff; padding:5px 11px; border-radius:999px; }
+  .corpo { padding:4px 24px 22px; }
+  .corpo h2 { margin:0; font-size:23px; letter-spacing:-.3px; }
+  .corpo p { margin:8px 0 0; color:var(--mut); font-size:15px; line-height:1.5; }
+  .btn { display:flex; align-items:center; justify-content:center; gap:8px; margin-top:18px; padding:15px; border-radius:14px;
+         color:#fff; font-weight:700; font-size:16px; }
+  .entrar:hover .btn { filter:brightness(1.08); }
+
+  .dados { margin:0 24px 24px; padding-top:18px; border-top:1px dashed var(--linha); display:grid; gap:12px; font-size:14.5px; line-height:1.45; }
+  .linha { display:flex; gap:12px; align-items:flex-start; }
+  .ic { flex:0 0 34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center; }
+  .ic svg { width:18px; height:18px; }
+  .linha b { display:block; font-weight:600; }
+  .linha small { color:var(--mut); font-size:13px; }
+  .linha a { text-decoration:none; font-weight:600; }
+  .linha a:hover { text-decoration:underline; }
+  .acoes { display:flex; gap:8px; flex-wrap:wrap; margin-top:4px; }
+  .chip { display:inline-flex; align-items:center; gap:6px; padding:8px 13px; border-radius:999px; font-size:13.5px; font-weight:600;
+          text-decoration:none; border:1px solid var(--linha); background:#fafaf8; }
+  .chip:hover { background:#f0f1ed; }
+  .chip svg { width:15px; height:15px; }
+
+  footer { max-width:1000px; margin:30px auto 36px; padding:0 16px; text-align:center; color:var(--mut); font-size:13px; line-height:1.6; }
 </style>
 </head>
 <body>
-<header>
-  <h1>{{ marca.portal_nome }}</h1>
-  <p>Duas lojas, um só endereço. Escolha onde quer comprar:</p>
+{# ícones #}
+{% macro ic_pin() %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.6"/></svg>{% endmacro %}
+{% macro ic_relogio() %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>{% endmacro %}
+{% macro ic_fone() %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>{% endmacro %}
+{% macro ic_insta() %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor"/></svg>{% endmacro %}
+{% macro ic_mapa() %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 19-9-9 19-2-8z"/></svg>{% endmacro %}
+{% macro ic_wpp() %}<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.1l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3z"/></svg>{% endmacro %}
+
+{% macro dados(cor, end, horario, fone, fone_link, wpp, insta) %}
+<div class="dados">
+  <div class="linha">
+    <span class="ic" style="background:{{ cor }}14;color:{{ cor }}">{{ ic_pin() }}</span>
+    <div><b>{{ end.rua }}</b><small>{{ end.bairro }} — {{ end.cidade_uf }}{% if end.cep %} · CEP {{ end.cep }}{% endif %}</small>
+      {% if end.obs %}<br><small>🅿️ {{ end.obs }}</small>{% endif %}</div>
+  </div>
+  <div class="linha">
+    <span class="ic" style="background:{{ cor }}14;color:{{ cor }}">{{ ic_relogio() }}</span>
+    <div>{% for h in horario %}{{ h }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
+  </div>
+  <div class="linha">
+    <span class="ic" style="background:{{ cor }}14;color:{{ cor }}">{% if wpp %}{{ ic_wpp() }}{% else %}{{ ic_fone() }}{% endif %}</span>
+    <div><a href="{{ fone_link }}" style="color:{{ cor }}">{{ fone }}</a><br><small>{% if wpp %}WhatsApp da loja{% else %}Telefone da loja{% endif %}</small></div>
+  </div>
+  <div class="acoes">
+    <a class="chip" href="https://www.google.com/maps/search/?api=1&query={{ end.maps_q }}" target="_blank" rel="noopener">{{ ic_mapa() }} Como chegar</a>
+    {% if insta %}<a class="chip" href="https://instagram.com/{{ insta }}" target="_blank" rel="noopener">{{ ic_insta() }} @{{ insta }}</a>{% endif %}
+  </div>
+</div>
+{% endmacro %}
+
+<header class="topo">
+  <span class="selo"><img src="{{ marca.logo }}" alt="{{ marca.portal_nome }}"></span>
+  <h1>Bem-vindo ao {{ marca.portal_nome }}</h1>
+  <p>Duas lojas no centro de Cascavel. Escolha onde quer comprar:</p>
 </header>
 
 <main>
-  <a class="loja" href="/loja">
-    <div class="faixa" style="background:{{ marca.cor_primaria }}"></div>
-    <div class="logo"><img src="{{ marca.logo }}" alt="{{ marca.nome_curto }}"></div>
-    <div class="corpo">
-      <h2>{{ marca.nome_curto }}</h2>
-      <p>Utilidades domésticas, plásticos, cama, mesa e banho, decoração, festas, embalagens e presentes.</p>
-      <span class="btn" style="background:{{ marca.cor_primaria }}">Entrar na {{ marca.nome_curto }} →</span>
-    </div>
-  </a>
+  {% set e1 = marca.enderecos[0] %}
+  <section class="loja">
+    <a class="entrar" href="/loja">
+      <div class="capa" style="background:linear-gradient(160deg, {{ marca.cor_primaria }}1f, #fff 75%)">
+        <span class="etiqueta" style="background:{{ marca.cor_primaria }}">Casa e utilidades</span>
+        <img src="{{ marca.logo }}" alt="{{ marca.nome_curto }}">
+      </div>
+      <div class="corpo">
+        <h2>{{ marca.nome_curto }}</h2>
+        <p>Utilidades domésticas, plásticos, cama, mesa e banho, decoração, festas, embalagens e presentes.</p>
+        <span class="btn" style="background:linear-gradient(135deg, {{ marca.cor_primaria }}, {{ marca.cor_primaria_escura }})">Entrar na {{ marca.nome_curto }} →</span>
+      </div>
+    </a>
+    {{ dados(marca.cor_primaria, e1, marca.horario, marca.telefone_exibicao, 'tel:' ~ marca.telefone_e164, '', marca.instagram) }}
+  </section>
 
   {% set pq = marca.portal_parceiro %}
-  <a class="loja" href="{{ pq.url }}">
-    <div class="faixa" style="background:{{ pq.cor }}"></div>
-    <div class="logo"><img src="{{ pq.logo }}" alt="{{ pq.nome }}"></div>
-    <div class="corpo">
-      <h2>{{ pq.nome }}</h2>
-      <p>{{ pq.descricao }}</p>
-      <span class="btn" style="background:{{ pq.cor }}">Entrar na {{ pq.nome }} →</span>
-    </div>
-  </a>
+  <section class="loja">
+    <a class="entrar" href="{{ pq.url }}">
+      <div class="capa" style="background:linear-gradient(160deg, {{ pq.cor }}1f, #fff 75%)">
+        <span class="etiqueta" style="background:{{ pq.cor }}">Brinquedos</span>
+        <img src="{{ pq.logo }}" alt="{{ pq.nome }}">
+      </div>
+      <div class="corpo">
+        <h2>{{ pq.nome }}</h2>
+        <p>{{ pq.descricao }}</p>
+        <span class="btn" style="background:linear-gradient(135deg, {{ pq.cor }}, {{ pq.cor_escura or pq.cor }})">Entrar na {{ pq.nome }} →</span>
+      </div>
+    </a>
+    {{ dados(pq.cor, pq.endereco, pq.horario, pq.telefone_exibicao, ('https://wa.me/' ~ pq.whatsapp) if pq.whatsapp else '', pq.whatsapp, pq.instagram) }}
+  </section>
 </main>
 
-<div class="info">
-  {% for e in marca.enderecos %}📍 {{ e.linha }}<br>{% endfor %}
-  🕘 {{ marca.horario_resumo }} · 📞 {{ marca.telefone_exibicao }}
-</div>
+<footer>
+  {{ marca.portal_nome }} · Cascavel/PR<br>
+  {{ marca.nome_curto }}: {{ marca.razao_social }} · CNPJ {{ marca.cnpj }}
+</footer>
 </body>
 </html>

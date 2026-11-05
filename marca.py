@@ -203,13 +203,22 @@ def _carrega():
     m['portal'] = _env_bool('portal', False)
     m['portal_nome'] = _env('portal_nome', 'CDP Shopping')
     m['portal_descricao'] = _env('portal_descricao', m['segmento'])
-    m['portal_parceiro'] = _env_json('portal_parceiro', {
+    parceiro = {
         'nome': 'Luqui Brinquedos',
         'url': 'https://www.luquibrinquedos.com.br',
         'logo': '/static/logo.png',
         'descricao': 'Brinquedos, jogos, pelúcias, bonecas, Hot Wheels, Lego e muito mais.',
         'cor': '#1652C7',
-    })
+        'cor_escura': '#0f3c94',
+        'endereco': _ENDERECOS_LUQUI[0],
+        'horario': _HORARIO_LUQUI,
+        'telefone_exibicao': '(45) 99111-9800',
+        'whatsapp': '5545991119800',
+        'instagram': 'luquibrinquedos',
+    }
+    parceiro.update(_env_json('portal_parceiro', {}) or {})
+    parceiro['endereco'] = _monta_endereco(parceiro.get('endereco'))
+    m['portal_parceiro'] = parceiro
     m['home_url'] = '/loja' if m['portal'] else '/'
     # data-sistema do botão "Pedir ajuste" (BankPro)
     m['sistema_ajuste'] = _env('sistema_ajuste', 'Luqui Shop' if luqui else m['nome'])
