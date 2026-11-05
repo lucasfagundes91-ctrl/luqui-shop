@@ -95,6 +95,28 @@ _SQL_PAGOS = "('" + "','".join(STATUS_PAGOS) + "')"
 
 PDVPRO_URL = os.environ.get('PDVPRO_URL', 'https://pdvpro.luqsys.com.br')
 PDVPRO_API_KEY = os.environ.get('PDVPRO_API_KEY', '')
+# Recorte do catálogo por site quando dois sites vendem pela mesma loja do PDV
+# (EF Pyl: Casa dos Plásticos e Duuh!). Slugs de grupo em CSV, iguais ao PDV
+# (minúsculo, espaço e '/' viram '-', acento fica). LOJA_GRUPOS = só esses;
+# LOJA_GRUPOS_EXCLUIR = todos menos esses.
+LOJA_GRUPOS = os.environ.get('LOJA_GRUPOS', '').strip()
+LOJA_GRUPOS_EXCLUIR = os.environ.get('LOJA_GRUPOS_EXCLUIR', '').strip()
+_PATHS_CATALOGO = ('/api/integracao/produtos', '/api/integracao/mais-vendidos',
+                   '/api/integracao/categorias', '/api/integracao/filtros',
+                   '/api/integracao/promocoes')
+
+
+def _slug_grupo_pdv(nome):
+    return (nome or '').lower().replace(' ', '-').replace('/', '-')
+
+
+def _grupo_no_escopo(nome):
+    g = _slug_grupo_pdv(nome)
+    if LOJA_GRUPOS and g not in {x.strip().lower() for x in LOJA_GRUPOS.split(',')}:
+        return False
+    if LOJA_GRUPOS_EXCLUIR and g in {x.strip().lower() for x in LOJA_GRUPOS_EXCLUIR.split(',')}:
+        return False
+    return True
 
 # ─── Loja parceira (nov/2026) ────────────────────────────────────────────────
 # O site da Luqui vende brinquedo que está no estoque da Casa dos Plásticos
@@ -2176,6 +2198,12 @@ def _pdv_cache_put(key, data, n):
 
 def pdv_get(path, params=None, ttl=60):
     """Chama a API de integração do PDV Pro com cache em memória."""
+    if (LOJA_GRUPOS or LOJA_GRUPOS_EXCLUIR) and path in _PATHS_CATALOGO:
+        params = dict(params or {})
+        if LOJA_GRUPOS:
+            params['loja_grupos'] = LOJA_GRUPOS
+        if LOJA_GRUPOS_EXCLUIR:
+            params['loja_grupos_excluir'] = LOJA_GRUPOS_EXCLUIR
     key = (path, tuple(sorted((params or {}).items())))
     now = time.time()
     cached = _pdv_cache_get(key)
@@ -2266,7 +2294,12 @@ def listar_produtos(busca=None, categoria=None, limite=24, offset=0, ordem=None,
 
 def buscar_produto(produto_id):
     r = pdv_get(f'/api/integracao/produtos/{produto_id}') or {}
-    return r.get('produto')
+    prod = r.get('produto')
+    # Produto do outro site da mesma loja (ex.: presente na Casa dos Plásticos)
+    # não abre aqui — senão o link velho/busca do Google vende pelo site errado.
+    if prod and (LOJA_GRUPOS or LOJA_GRUPOS_EXCLUIR) and not _grupo_no_escopo(prod.get('grupo_nome')):
+        return None
+    return prod
 
 
 def listar_categorias():

@@ -30,7 +30,7 @@
   .fachada { display:block; width:100%; max-width:640px; margin:16px auto 10px; border-radius:16px; box-shadow:0 10px 28px rgba(0,0,0,.35); border:2px solid rgba(227,181,60,.55); position:relative; z-index:1; }
   .fatos b { font-size:17px; margin-right:2px;{% if marca.portal_destaque %} color:{{ marca.portal_destaque }};{% endif %} }
 
-  main { position:relative; z-index:1; max-width:1000px; margin:-64px auto 0; padding:0 16px; display:grid; gap:22px; grid-template-columns:1fr 1fr; }
+  main { position:relative; z-index:1; max-width:{{ 1180 if marca.portal_lojas_extras else 1000 }}px; margin:-64px auto 0; padding:0 16px; display:grid; gap:22px; grid-template-columns:repeat({{ 2 + (marca.portal_lojas_extras|length) }}, 1fr); }
   @media (max-width:760px) { main { grid-template-columns:1fr; } .topo h1 { font-size:25px; } }
 
   .loja { background:#fff; border-radius:22px; overflow:hidden; box-shadow:0 1px 2px rgba(0,0,0,.04), 0 10px 30px rgba(20,30,40,.08);
@@ -143,6 +143,23 @@
     </a>
     {{ dados(pq.cor, pq.endereco, pq.horario, pq.telefone_exibicao, ('https://wa.me/' ~ pq.whatsapp) if pq.whatsapp else '', pq.whatsapp, pq.instagram) }}
   </section>
+
+  {% for lx in marca.portal_lojas_extras %}
+  <section class="loja">
+    <a class="entrar" href="{{ lx.url }}">
+      <div class="capa" style="background:linear-gradient(160deg, {{ lx.cor }}1f, #fff 75%)">
+        {% if lx.etiqueta %}<span class="etiqueta" style="background:{{ lx.cor }}">{{ lx.etiqueta }}</span>{% endif %}
+        <img src="{{ lx.logo }}" alt="{{ lx.nome }}">
+      </div>
+      <div class="corpo">
+        <h2>{{ lx.nome }}</h2>
+        <p>{{ lx.descricao }}</p>
+        <span class="btn" style="background:linear-gradient(135deg, {{ lx.cor }}, {{ lx.cor_escura }})">Entrar na {{ lx.nome_curto or lx.nome }} →</span>
+      </div>
+    </a>
+    {% if lx.whatsapp %}{{ dados(lx.cor, lx.endereco, lx.horario, lx.telefone_exibicao, 'https://wa.me/' ~ lx.whatsapp, lx.whatsapp, lx.instagram) }}{% else %}{{ dados(lx.cor, lx.endereco, lx.horario, lx.telefone_exibicao, 'tel:' ~ marca.telefone_e164, '', lx.instagram) }}{% endif %}
+  </section>
+  {% endfor %}
 </main>
 
 <footer>

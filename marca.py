@@ -229,6 +229,23 @@ def _carrega():
     parceiro.update(_env_json('portal_parceiro', {}) or {})
     parceiro['endereco'] = _monta_endereco(parceiro.get('endereco'))
     m['portal_parceiro'] = parceiro
+    # Mais lojas no portal (ex.: Duuh! Presentes Criativos). Lista JSON no env
+    # MARCA_PORTAL_LOJAS_EXTRAS com os mesmos campos do parceiro + 'etiqueta';
+    # o que faltar herda da própria marca (mesmo prédio, mesmo telefone).
+    extras = []
+    for x in (_env_json('portal_lojas_extras', []) or []):
+        if not isinstance(x, dict) or not x.get('nome') or not x.get('url'):
+            continue
+        x = dict(x)
+        x.setdefault('cor', m['cor_primaria'])
+        x.setdefault('cor_escura', x['cor'])
+        x.setdefault('horario', m['horario'])
+        x.setdefault('telefone_exibicao', m['telefone_exibicao'])
+        x.setdefault('whatsapp', '')
+        x.setdefault('instagram', '')
+        x['endereco'] = _monta_endereco(x['endereco']) if x.get('endereco') else m['enderecos'][0]
+        extras.append(x)
+    m['portal_lojas_extras'] = extras
     m['home_url'] = '/loja' if m['portal'] else '/'
     # data-sistema do botão "Pedir ajuste" (BankPro)
     m['sistema_ajuste'] = _env('sistema_ajuste', 'Luqui Shop' if luqui else m['nome'])
