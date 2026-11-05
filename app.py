@@ -8317,8 +8317,9 @@ def _checkout_finalizar_com_parceiro(d, itens, is_retira):
     Cada loja vende, emite a nota e recebe o seu: o carrinho vira até 2
     pedidos, cada um com a SUA cobrança — itens da loja na nossa conta (PIX,
     boleto ou cartão, como sempre), itens da parceira na conta Asaas dela
-    (PIX/boleto; cartão só quando ela tiver Pagar.me). Cupom, pontos e Clube
-    valem só no pedido da loja. Entrega: retirada (TUDO na Casa dos Plásticos)
+    (PIX/boleto; cartão só quando ela tiver Pagar.me). Cupom e pontos valem
+    no carrinho inteiro e são repartidos entre os dois pedidos proporcional
+    ao subtotal de cada um. Entrega: retirada (TUDO na Casa dos Plásticos)
     ou entrega local em Cascavel. Se o cliente pagar só uma das cobranças, só
     aquele pedido anda; a outra expira como qualquer pedido não pago."""
     if not PARCEIRO_ATIVO:
@@ -8411,83 +8412,121 @@ def _checkout_finalizar_com_parceiro(d, itens, is_retira):
     desc_l = round(sub_l * pct.get(forma_l, 0) / 100, 2)
     desc_p = round(sub_p * pct[forma_p] / 100, 2)
 
-    # Cupom: só sobre os itens da loja (a parceira não paga o nosso cupom).
+    # Cupom (inclui PRIMEIRO10) e pontos do Clube: calculados sobre o carrinho
+    # INTEIRO, como sempre, e repartidos entre os dois pedidos proporcional ao
+    # subtotal de itens de cada um — a NF de cada loja sai com o desconto que
+    # coube a ela. Centavo que sobra fica no pedido da loja. Nenhum pedido fica
+    # abaixo do mínimo da cobrança: o excedente passa pro outro.
+    sub_tot = round(sub_l + sub_p, 2)
     cupom_codigo = (d.get('cupom_codigo') or '').strip().upper()
     if cupom_codigo == 'PRIMEIRO10' and not CUPOM_PRIMEIRA_COMPRA_ATIVO:
         cupom_codigo = ''
     cupom_desconto, cupom_row = 0.0, None
-    if cupom_codigo and itens_l:
+    if cupom_codigo:
         cupom_row = db_execute("""SELECT * FROM cupons WHERE UPPER(codigo)=%s AND ativo
                           AND (valido_ate IS NULL OR valido_ate >= CURRENT_DATE)
                           AND (usos_max IS NULL OR usos < usos_max)""",
                                [cupom_codigo], fetch='one')
-        if cupom_row and sub_l >= float(cupom_row['valor_min'] or 0):
+        if cupom_row and sub_tot >= float(cupom_row['valor_min'] or 0):
             if cupom_row['tipo'] == 'pct':
-                cupom_desconto = round(sub_l * float(cupom_row['valor']) / 100, 2)
+                cupom_desconto = round(sub_tot * float(cupom_row['valor']) / 100, 2)
             else:
-                cupom_desconto = min(float(cupom_row['valor']), sub_l)
+                cupom_desconto = min(float(cupom_row['valor']), sub_tot)
         else:
             cupom_row = None
     if not cupom_row:
         cupom_codigo = ''
 
-    # Pontos do Clube: só no pedido da loja (máx 25% da parte dela).
+    # Pontos: máx 25% do total após descontos PIX/cupom (carrinho inteiro).
     pontos_resgatados = desconto_pontos = 0.0
     try:
         pontos_pedidos = float(d.get('pontos_usar') or 0)
     except (TypeError, ValueError):
         pontos_pedidos = 0.0
-    if itens_l and pontos_pedidos > 0 and CLUBE_LUQUI_ATIVO:
+    if pontos_pedidos > 0 and CLUBE_LUQUI_ATIVO:
         info_pontos = pdv_consultar_pontos(d.get('cpf'))
         if info_pontos and info_pontos.get('cliente_existe'):
             vpp = float(info_pontos.get('valor_por_ponto') or 0)
             pontos_pedidos = min(pontos_pedidos, float(info_pontos.get('saldo') or 0))
             valor = round(pontos_pedidos * vpp, 2)
-            limite_max = round(max(0, sub_l + frete_l - desc_l - cupom_desconto) * 0.25, 2)
+            limite_max = round(max(0, sub_tot + frete - desc_l - desc_p - cupom_desconto) * 0.25, 2)
             if valor > limite_max:
                 valor = limite_max
                 pontos_pedidos = round(limite_max / vpp, 2) if vpp > 0 else 0
             if valor > 0:
                 pontos_resgatados, desconto_pontos = pontos_pedidos, valor
 
-    base_l = max(0, round(sub_l + frete_l - desc_l - cupom_desconto - desconto_pontos, 2))
-    parcelas = 1
-    juros_l, total_l = 0.0, base_l
-    if itens_l and forma_l == 'cartao':
-        parcelas = max(1, min(int(cfg('parcelamento_max', '12')), int(d.get('parcelas') or 1)))
-        max_sem_juros = int(cfg('parcelas_sem_juros_max', '1'))
-        juros_am = float(cfg('juros_parcelamento_am', '2.49')) / 100.0
-        if parcelas > max_sem_juros and base_l > 0 and juros_am > 0:
-            fator = (juros_am * (1 + juros_am) ** parcelas) / ((1 + juros_am) ** parcelas - 1)
-            total_l = round(round(base_l * fator, 2) * parcelas, 2)
-            juros_l = round(total_l - base_l, 2)
-    total_p = max(0, round(sub_p + frete_p - desc_p, 2))
+    min_l = valor_minimo_para(forma_l) if itens_l else 0.0
+    min_p = valor_minimo_para(forma_p)
 
-    # Mínimo por cobrança (regra de quem cobra).
-    if itens_l and total_l < valor_minimo_para(forma_l):
-        m = f'{valor_minimo_para(forma_l):.2f}'.replace('.', ',')
-        return jsonify({'erro': f"A parte da {MARCA['nome_curto']} precisa dar pelo menos "
-                                f"R$ {m} — use menos pontos ou adicione um item."}), 400
-    if total_p < valor_minimo_para(forma_p):
-        m = f'{valor_minimo_para(forma_p):.2f}'.replace('.', ',')
-        return jsonify({'erro': f"Os itens da {PARCEIRO_NOME} precisam somar pelo menos "
-                                f"R$ {m} — adicione mais um item."}), 400
+    def _centavos_baixo(v):
+        return int(round(v * 100, 6)) / 100.0
 
+    def _repartir(pontos_valor):
+        """Reparte cupom+pontos e devolve os valores de cada pedido, ou None se
+        algum pedido ficar abaixo do mínimo mesmo passando o excedente."""
+        extra = round(cupom_desconto + pontos_valor, 2)
+        if not itens_l:
+            ex_l, ex_p = 0.0, extra
+        else:
+            ex_p = _centavos_baixo(extra * sub_p / sub_tot) if sub_tot else 0.0
+            ex_l = round(extra - ex_p, 2)
+        livre_l = round(sub_l + frete_l - desc_l, 2)
+        livre_p = round(sub_p + frete_p - desc_p, 2)
+        if itens_l and livre_l - ex_l < min_l:
+            mv = min(ex_l, round(min_l - (livre_l - ex_l), 2))
+            ex_l, ex_p = round(ex_l - mv, 2), round(ex_p + mv, 2)
+        if itens_l and livre_p - ex_p < min_p:
+            mv = min(ex_p, round(min_p - (livre_p - ex_p), 2))
+            ex_l, ex_p = round(ex_l + mv, 2), round(ex_p - mv, 2)
+        base_l, base_p = round(livre_l - ex_l, 2), round(livre_p - ex_p, 2)
+        if (itens_l and base_l < min_l) or base_p < min_p or base_l < 0:
+            return None
+        # quanto de cada parte é pontos (pro relatório) e quanto é cupom
+        pts_p = _centavos_baixo(pontos_valor * ex_p / extra) if extra else 0.0
+        pts_l = round(pontos_valor - pts_p, 2)
+        r = {'ex_l': ex_l, 'ex_p': ex_p, 'pts_l': pts_l, 'pts_p': pts_p,
+             'cup_l': round(ex_l - pts_l, 2), 'cup_p': round(ex_p - pts_p, 2),
+             'parcelas': 1, 'juros_l': 0.0, 'total_l': base_l, 'total_p': base_p}
+        if itens_l and forma_l == 'cartao':
+            parcelas = max(1, min(int(cfg('parcelamento_max', '12')), int(d.get('parcelas') or 1)))
+            max_sem_juros = int(cfg('parcelas_sem_juros_max', '1'))
+            juros_am = float(cfg('juros_parcelamento_am', '2.49')) / 100.0
+            r['parcelas'] = parcelas
+            if parcelas > max_sem_juros and base_l > 0 and juros_am > 0:
+                fator = (juros_am * (1 + juros_am) ** parcelas) / ((1 + juros_am) ** parcelas - 1)
+                r['total_l'] = round(round(base_l * fator, 2) * parcelas, 2)
+                r['juros_l'] = round(r['total_l'] - base_l, 2)
+        return r
+
+    rep = _repartir(desconto_pontos)
+    if rep is None:
+        m = f'{max(min_l, min_p):.2f}'.replace('.', ',')
+        return jsonify({'erro': f"A parte de cada loja precisa dar pelo menos R$ {m} — "
+                                f"use menos pontos/cupom ou adicione um item."}), 400
+
+    def _valores(rep_, com_pontos):
+        vl = {'subtotal': sub_l, 'frete': frete_l, 'total': rep_['total_l'],
+              'desconto': round(desc_l + rep_['ex_l'], 2), 'forma': forma_l,
+              'parcelas': rep_['parcelas'], 'frete_servico': frete_servico,
+              'cupom_codigo': cupom_codigo or None, 'cupom_desconto': rep_['cup_l'],
+              'juros': rep_['juros_l'], 'desconto_pontos': rep_['pts_l']}
+        vp = {'subtotal': sub_p, 'frete': frete_p, 'total': rep_['total_p'],
+              'desconto': round(desc_p + rep_['ex_p'], 2), 'forma': forma_p,
+              'frete_servico': frete_servico, 'cupom_codigo': cupom_codigo or None,
+              'cupom_desconto': rep_['cup_p'], 'desconto_pontos': rep_['pts_p']}
+        # O resgate é UM só, no PDV da loja, ligado ao pedido principal.
+        (vl if itens_l else vp)['pontos_resgatados'] = pontos_resgatados if com_pontos else 0
+        return vl, vp
+
+    vl, vp = _valores(rep, True)
     cli = cliente_logado()
     pid_l = tok_l = None
     if itens_l:
-        pid_l, tok_l = _inserir_pedido_site(d, cli, itens_l, {
-            'subtotal': sub_l, 'frete': frete_l,
-            'desconto': desc_l + cupom_desconto + desconto_pontos, 'total': total_l,
-            'forma': forma_l, 'parcelas': parcelas, 'frete_servico': frete_servico,
-            'cupom_codigo': cupom_codigo or None, 'cupom_desconto': cupom_desconto,
-            'juros': juros_l, 'pontos_resgatados': pontos_resgatados,
-            'desconto_pontos': desconto_pontos})
-    pid_p, tok_p = _inserir_pedido_site(d, cli, itens_p, {
-        'subtotal': sub_p, 'frete': frete_p, 'desconto': desc_p, 'total': total_p,
-        'forma': forma_p, 'frete_servico': frete_servico}, vendedor='parceiro',
-        principal_id=pid_l)
-    if cupom_row:
+        pid_l, tok_l = _inserir_pedido_site(d, cli, itens_l, vl)
+    pid_p, tok_p = _inserir_pedido_site(d, cli, itens_p, vp, vendedor='parceiro',
+                                        principal_id=pid_l)
+    if cupom_row:   # cupom conta uma vez, mesmo valendo nos dois pedidos
         db_execute("UPDATE cupons SET usos=usos+1 WHERE id=%s", [cupom_row['id']])
 
     if cli:
@@ -8518,6 +8557,26 @@ def _checkout_finalizar_com_parceiro(d, itens, is_retira):
     except Exception as e:
         log.error("antifraude vizinhos: %s", e)
 
+    # Pontos: UM resgate no PDV da loja, ligado ao pedido principal, ANTES das
+    # cobranças. Falhou → nenhum dos dois pedidos leva o desconto de pontos.
+    if pontos_resgatados > 0:
+        principal = pid_l or pid_p
+        ok_pts, msg_pts = pdv_resgatar_pontos(d['cpf'], pontos_resgatados, principal)
+        if not ok_pts:
+            log.error(f"Pedido {principal}: falha resgatar pontos ({msg_pts}) — "
+                      f"desfazendo o desconto nos dois pedidos")
+            rep = _repartir(0.0)
+            vl, vp = _valores(rep, False)
+            for _pid, v in ((pid_l, vl), (pid_p, vp)):
+                if _pid:
+                    db_execute("""UPDATE pedidos SET pontos_resgatados=%s, desconto_pontos=%s,
+                                  cupom_desconto=%s, desconto=%s, total=%s, juros_valor=%s
+                                  WHERE id=%s""",
+                               [v.get('pontos_resgatados', 0), v['desconto_pontos'],
+                                v['cupom_desconto'], v['desconto'], v['total'],
+                                v.get('juros', 0), _pid])
+    total_l, total_p = rep['total_l'], rep['total_p']
+
     # Cobrança da parceira PRIMEIRO: se a conta dela falhar, nada foi cobrado.
     desc_p_txt = f"{PARCEIRO_NOME} — Pedido #{pid_p} (site {MARCA['nome']})"
     if not _asaas_cobrar_pedido(pid_p, d, forma_p, total_p, desc_p_txt,
@@ -8528,14 +8587,6 @@ def _checkout_finalizar_com_parceiro(d, itens, is_retira):
                                 'Tente novamente ou peça pelo WhatsApp.'}), 502
 
     if pid_l:
-        if pontos_resgatados > 0:
-            ok_pts, msg_pts = pdv_resgatar_pontos(d['cpf'], pontos_resgatados, pid_l)
-            if not ok_pts:
-                log.error(f"Pedido {pid_l}: falha resgatar pontos ({msg_pts}) — desfazendo desconto")
-                db_execute("""UPDATE pedidos SET pontos_resgatados=0, desconto_pontos=0,
-                              desconto=desconto-%s, total=total+%s WHERE id=%s""",
-                           [desconto_pontos, desconto_pontos, pid_l])
-                total_l += desconto_pontos
         if forma_l == 'cartao':
             customer_id = asaas_criar_customer(d['nome'], d['email'], d['cpf'], d['telefone'])
             if not customer_id:
