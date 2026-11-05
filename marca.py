@@ -210,6 +210,8 @@ def _carrega():
     m['portal_logo'] = _env('portal_logo', m['logo'])
     m['portal_descricao'] = _env('portal_descricao', m['segmento'])
     m['portal_sobre'] = _env('portal_sobre', '')
+    m['portal_topo'] = _env('portal_topo', '')
+    m['portal_destaque'] = _env('portal_destaque', '')
     parceiro = {
         'nome': 'Luqui Brinquedos',
         'url': 'https://www.luquibrinquedos.com.br',

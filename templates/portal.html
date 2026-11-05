@@ -18,7 +18,7 @@
   a { color:inherit; }
 
   .topo { position:relative; text-align:center; padding:34px 16px 92px; color:#fff; overflow:hidden;
-          background:linear-gradient(135deg, {{ marca.cor_primaria_escura }} 0%, {{ marca.cor_primaria }} 55%, {{ marca.cor_primaria_clara }} 100%); }
+          background:{{ marca.portal_topo or ('linear-gradient(135deg, ' ~ marca.cor_primaria_escura ~ ' 0%, ' ~ marca.cor_primaria ~ ' 55%, ' ~ marca.cor_primaria_clara ~ ' 100%)') }}; }
   .topo::after { content:""; position:absolute; inset:auto -10% -60px; height:120px; background:var(--fundo); border-radius:50% 50% 0 0; }
   .selo { display:inline-block; background:#fff; border-radius:999px; padding:10px 22px; box-shadow:0 8px 24px rgba(0,0,0,.15); }
   .selo img { height:62px; display:block; }
@@ -27,7 +27,7 @@
   .topo p.sobre { max-width:640px; margin:10px auto 0; line-height:1.45; position:relative; z-index:1; }
   .fatos { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin:14px auto 4px; max-width:640px; position:relative; z-index:1; }
   .fatos span { background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.3); border-radius:999px; padding:6px 13px; font-size:14px; }
-  .fatos b { font-size:17px; margin-right:2px; }
+  .fatos b { font-size:17px; margin-right:2px;{% if marca.portal_destaque %} color:{{ marca.portal_destaque }};{% endif %} }
 
   main { position:relative; z-index:1; max-width:1000px; margin:-64px auto 0; padding:0 16px; display:grid; gap:22px; grid-template-columns:1fr 1fr; }
   @media (max-width:760px) { main { grid-template-columns:1fr; } .topo h1 { font-size:25px; } }
